@@ -1939,6 +1939,81 @@ const Guia = () => {
 
 
 
+
+const GraficoMRR = ({ mrrEvolucao, assinantes }) => {
+  const [mesSel, setMesSel] = useState(null);
+  const maxMrr = Math.max(...mrrEvolucao.map(m=>m.mrr), 1);
+  const barW = Math.max(32, Math.min(60, Math.floor(560/mrrEvolucao.length)));
+  const mesDetalhes = mesSel ? assinantes.filter(a=>{
+    if (!a.dataInicioAssinatura||!a.valorMensal) return false;
+    const inicio = new Date(a.dataInicioAssinatura+"T12:00:00");
+    const [y,mo] = mesSel.split("-").map(Number);
+    const dMes = new Date(y,mo-1,1);
+    if (inicio > dMes) return false;
+    if ((a.cancelado||a.falhaRenovacao)&&(a.dataCancelamento||a.dataFalhaRenovacao)) {
+      const cancel = new Date((a.dataCancelamento||a.dataFalhaRenovacao)+"T12:00:00");
+      if (cancel < dMes) return false;
+    }
+    return true;
+  }) : [];
+  return (
+    <div>
+      <div style={{overflowX:"auto"}}>
+        <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:"max-content",paddingTop:28,paddingBottom:8}}>
+          {mrrEvolucao.map((m,i)=>{
+            const pct=m.mrr/maxMrr;
+            const isLast=i===mrrEvolucao.length-1;
+            const isSel=mesSel===m.mesKey;
+            const prev=i>0?mrrEvolucao[i-1].mrr:m.mrr;
+            const cresceu=m.mrr>=prev;
+            const barColor=isSel?C.purple:isLast?C.teal:cresceu?C.green:C.coral;
+            return (
+              <div key={m.mesKey} onClick={()=>setMesSel(isSel?null:m.mesKey)}
+                style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,width:barW,cursor:"pointer",position:"relative"}}>
+                {(m.novos>0||m.canc>0)&&(
+                  <div style={{position:"absolute",top:-22,display:"flex",gap:2,zIndex:1}}>
+                    {m.novos>0&&<span style={{fontSize:7,color:C.greenD,background:C.greenL,padding:"1px 3px",borderRadius:3}}>+{m.novos}</span>}
+                    {m.canc>0&&<span style={{fontSize:7,color:C.coralD,background:C.coralL,padding:"1px 3px",borderRadius:3}}>-{m.canc}</span>}
+                  </div>
+                )}
+                <div style={{fontSize:9,fontWeight:500,color:isSel?C.purpleD:isLast?C.tealD:"var(--color-text-tertiary)",textAlign:"center",marginBottom:2}}>
+                  {m.mrr>0?"R$"+m.mrr:"—"}
+                </div>
+                <div style={{width:"80%",height:Math.max(4,Math.round(pct*110)),background:barColor,borderRadius:"4px 4px 0 0",transition:"height 0.3s",border:isSel?"2px solid "+C.purpleD:"none"}}/>
+                <div style={{fontSize:9,color:isSel?C.purpleD:"var(--color-text-tertiary)",textAlign:"center",textTransform:"capitalize",fontWeight:isSel?500:400}}>{m.mesLabel}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:12,marginTop:4,fontSize:10,color:"var(--color-text-tertiary)"}}>
+          <span style={{color:C.greenD}}>+N novos</span>
+          <span style={{color:C.coralD}}>-N cancelamentos</span>
+          <span style={{color:C.teal}}>● mes atual</span>
+          <span style={{color:C.purple}}>■ selecionado</span>
+          <span>Clique na barra para ver detalhes</span>
+        </div>
+      </div>
+      {mesSel&&(
+        <div style={{marginTop:12,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",border:"0.5px solid "+C.purple}}>
+          <div style={{fontSize:11,fontWeight:500,color:C.purpleD,marginBottom:8}}>
+            Assinantes ativos em {mrrEvolucao.find(m=>m.mesKey===mesSel)?.mesLabel} ({mesDetalhes.length})
+          </div>
+          {mesDetalhes.length===0
+            ?<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Nenhum assinante com valor cadastrado neste mes.</div>
+            :mesDetalhes.map(a=>(
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                <div style={{flex:1,fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>{a.nome}</div>
+                <div style={{fontSize:11,color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</div>
+                <div style={{fontSize:12,fontWeight:500,color:C.tealD}}>R${a.valorMensal}/mes</div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+};
+
 const TabelaAssinantes = ({ assinantes, onAbrir }) => {
   const [sortCol, setSortCol] = useState("cicloAtual");
   const [sortDir, setSortDir] = useState("desc");
@@ -2172,78 +2247,7 @@ const LTV = ({ onAbrir }) => {
       {mrrEvolucao.length > 1 && (
         <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
           <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>Evolucao do MRR</div>
-          {(()=>{
-            const [mesSel, setMesSel] = useState(null);
-            const maxMrr = Math.max(...mrrEvolucao.map(m=>m.mrr), 1);
-            const barW = Math.max(32, Math.min(60, Math.floor(560/mrrEvolucao.length)));
-            const mesDetalhes = mesSel ? assinantes.filter(a=>{
-              if (!a.dataInicioAssinatura||!a.valorMensal) return false;
-              const inicio = new Date(a.dataInicioAssinatura+"T12:00:00");
-              const [y,mo] = mesSel.split("-").map(Number);
-              const dMes = new Date(y,mo-1,1);
-              if (inicio > dMes) return false;
-              if ((a.cancelado||a.falhaRenovacao)&&a.dataCancelamento) {
-                const cancel = new Date((a.dataCancelamento||a.dataFalhaRenovacao)+"T12:00:00");
-                if (cancel < dMes) return false;
-              }
-              return true;
-            }) : [];
-            return (
-              <div>
-                <div style={{overflowX:"auto"}}>
-                  <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:"max-content",paddingTop:28,paddingBottom:8}}>
-                    {mrrEvolucao.map((m,i)=>{
-                      const pct=m.mrr/maxMrr;
-                      const isLast=i===mrrEvolucao.length-1;
-                      const isSel=mesSel===m.mesKey;
-                      const prev=i>0?mrrEvolucao[i-1].mrr:m.mrr;
-                      const cresceu=m.mrr>=prev;
-                      const barColor=isSel?C.purple:isLast?C.teal:cresceu?C.green:C.coral;
-                      return (
-                        <div key={m.mesKey} onClick={()=>setMesSel(isSel?null:m.mesKey)}
-                          style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,width:barW,cursor:"pointer",position:"relative"}}>
-                          {(m.novos>0||m.canc>0)&&(
-                            <div style={{position:"absolute",top:-22,display:"flex",gap:2,zIndex:1}}>
-                              {m.novos>0&&<span style={{fontSize:7,color:C.greenD,background:C.greenL,padding:"1px 3px",borderRadius:3,whiteSpace:"nowrap"}}>+{m.novos}</span>}
-                              {m.canc>0&&<span style={{fontSize:7,color:C.coralD,background:C.coralL,padding:"1px 3px",borderRadius:3,whiteSpace:"nowrap"}}>-{m.canc}</span>}
-                            </div>
-                          )}
-                          <div style={{fontSize:9,fontWeight:500,color:isSel?C.purpleD:isLast?C.tealD:"var(--color-text-tertiary)",textAlign:"center",marginBottom:2}}>
-                            {m.mrr>0?"R$"+m.mrr:"—"}
-                          </div>
-                          <div style={{width:"80%",height:Math.max(4,Math.round(pct*110)),background:barColor,borderRadius:"4px 4px 0 0",transition:"height 0.3s",border:isSel?"2px solid "+C.purpleD:"none"}}/>
-                          <div style={{fontSize:9,color:isSel?C.purpleD:"var(--color-text-tertiary)",textAlign:"center",textTransform:"capitalize",fontWeight:isSel?500:400}}>{m.mesLabel}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{display:"flex",gap:12,marginTop:4,fontSize:10,color:"var(--color-text-tertiary)"}}>
-                    <span style={{color:C.greenD}}>+N novos</span>
-                    <span style={{color:C.coralD}}>-N cancelamentos</span>
-                    <span style={{color:C.teal}}>● mes atual</span>
-                    <span style={{color:C.purple}}>■ selecionado</span>
-                    <span>Clique na barra para ver detalhes</span>
-                  </div>
-                </div>
-                {mesSel&&(
-                  <div style={{marginTop:12,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",border:"0.5px solid "+C.purple}}>
-                    <div style={{fontSize:11,fontWeight:500,color:C.purpleD,marginBottom:8}}>
-                      Assinantes ativos em {mrrEvolucao.find(m=>m.mesKey===mesSel)?.mesLabel} ({mesDetalhes.length})
-                    </div>
-                    {mesDetalhes.length===0?<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Nenhum assinante com valor cadastrado neste mes.</div>:
-                      mesDetalhes.map(a=>(
-                        <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
-                          <div style={{flex:1,fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>{a.nome}</div>
-                          <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{a.tipoAssinatura||"—"}</div>
-                          <div style={{fontSize:12,fontWeight:500,color:C.tealD}}>R${a.valorMensal}/mes</div>
-                        </div>
-                      ))
-                    }
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          <GraficoMRR mrrEvolucao={mrrEvolucao} assinantes={assinantes}/>
         </div>
       )}
 
