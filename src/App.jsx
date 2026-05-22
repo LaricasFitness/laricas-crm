@@ -216,7 +216,9 @@ const TriagemForm = ({ onSalvo, lista }) => {
         <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Data do último {p===1&&<span style={{ fontWeight:400,fontSize:10 }}>(= 1°)</span>}</div><input style={inp({opacity:p===1?0.5:1})} type="date" value={p===1?dp:du} onChange={e=>{if(p>1){setDu(e.target.value);setRes(null);}}} disabled={p===1} /></div>
       </div>
       <div style={{ marginBottom:16 }}><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Localização</div><div style={{ display:"flex",gap:8 }}>{[{v:false,l:"SP capital / grande SP"},{v:true,l:"Fora de SP"}].map(op=>(<button key={String(op.v)} onClick={()=>{setFora(op.v);setRes(null);}} style={{ flex:1,padding:"9px 12px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:fora===op.v?C.tealL:"var(--color-background-secondary)",color:fora===op.v?C.tealD:"var(--color-text-secondary)",border:"0.5px solid "+(fora===op.v?C.teal:"var(--color-border-tertiary)") }}>{op.l}</button>))}</div></div>
-      <button onClick={calcular} disabled={!pronto} style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:pronto?"pointer":"default",background:pronto?C.teal:"var(--color-background-secondary)",color:pronto?"#fff":"var(--color-text-tertiary)",border:"none",marginBottom:20 }}>Gerar sequência →</button>
+      <button onClick={res ? salvar : calcular} disabled={(!pronto&&!res)||salvo} style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:(pronto||res)&&!salvo?"pointer":"default",background:salvo?C.green:res||pronto?C.teal:"var(--color-background-secondary)",color:salvo||res||pronto?"#fff":"var(--color-text-tertiary)",border:"none",marginBottom:20 }}>
+        {salvo?"✓ Salvo no CRM!":res?"Adicionar ao CRM →":"Calcular perfil →"}
+      </button>
       {res&&(
         <div>
           <div style={{ display:"grid",gridTemplateColumns:p===1?"1fr 1fr":"1fr 1fr 1fr",gap:8,marginBottom:12 }}>
@@ -227,11 +229,7 @@ const TriagemForm = ({ onSalvo, lista }) => {
           <ProbBar prob={res.prob}/>
           <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.06em" }}>Sequência — {res.seq.length} etapas</div>
           <Steps steps={res.seq} cur={0}/>
-          <div style={{ marginTop:14,padding:"14px 16px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)" }}>
-            <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:4 }}>Adicionar ao CRM</div>
-            {!nome.trim()&&<div style={{ fontSize:12,color:C.coralD,background:C.coralL,padding:"6px 10px",borderRadius:6,marginBottom:8 }}>Preencha o nome para habilitar.</div>}
-            <button onClick={salvar} disabled={!nome.trim()||salvo} style={{ width:"100%",padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:nome.trim()&&!salvo?"pointer":"default",background:salvo?C.green:nome.trim()?C.teal:"var(--color-background-primary)",color:nome.trim()||salvo?"#fff":"var(--color-text-tertiary)",border:"none" }}>{salvo?"✓ Salvo no CRM!":"Adicionar ao CRM →"}</button>
-          </div>
+
         </div>
       )}
     </div>
@@ -659,22 +657,46 @@ const Kanban = ({ onAbrir }) => {
   );
 };
 
+
+const cepToFora = (cep) => {
+  const c = (cep||"").replace(/\D/g,"");
+  if (!c) return null;
+  return !c.startsWith("0");
+};
+
+const parseShopifyDate = (str) => {
+  if (!str) return "";
+  const s = str.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) {
+    const [d,m,y] = s.split("/");
+    return y+"-"+m.padStart(2,"0")+"-"+d.padStart(2,"0");
+  }
+  return "";
+};
+
 const ImportarLista = ({ onSalvo }) => {
   const [txt,setTxt]=useState(""); const [prev,setPrev]=useState([]); const [imp,setImp]=useState(false);
   const [ok,setOk]=useState(null); const [erro,setErro]=useState("");
   const parse = (raw) => {
-    const linhas=raw.split("\n").map(l=>l.trim()).filter(l=>l.length>0);
+    const linhas = raw.split("\n").map(l=>l.trim()).filter(l=>l.length>0);
     const cls=[]; const errs=[];
-    linhas.forEach((linha,i)=>{
-      const sep=linha.includes(";")?";":",";
-      const pts=linha.split(sep).map(p=>p.trim());
-      if(pts.length<4){errs.push("Linha "+(i+1)+": mínimo Customer ID, Nome, Telefone, Pedidos");return;}
-      const [customerId,nome,tel,gastoStr,pedStr,...listPts]=pts;
-      const ped=parseInt(pedStr); const gasto=parseFloat((gastoStr||"0").replace(",","."))||0;
-      const lista=listPts.join(",").trim();
-      if(!nome){errs.push("Linha "+(i+1)+": nome vazio");return;}
-      if(isNaN(ped)||ped<1){errs.push("Linha "+(i+1)+": pedidos inválido");return;}
-      cls.push({customerId:customerId||"",nome,tel:tel||"",ped,gasto,lista});
+    // Skip header row if first line looks like a header
+    const start = /customer|nome|id/i.test(linhas[0]||"") ? 1 : 0;
+    linhas.slice(start).forEach((linha,i)=>{
+      const sep = linha.includes(";") ? ";" : ",";
+      const pts = linha.split(sep).map(p=>p.trim());
+      if(pts.length<4){errs.push("Linha "+(i+1+start)+": minimo 4 colunas");return;}
+      const [customerId, nome, tel, gastoStr, pedStr, dp6, du7, cep8, ...listPts] = pts;
+      const ped = parseInt(pedStr);
+      const gasto = parseFloat((gastoStr||"0").replace(",","."))||0;
+      const dp = parseShopifyDate(dp6||"");
+      const du = parseShopifyDate(du7||"");
+      const fora = cepToFora(cep8||"");
+      const lista = listPts.join(",").trim();
+      if(!nome){errs.push("Linha "+(i+1+start)+": nome vazio");return;}
+      if(isNaN(ped)||ped<1){errs.push("Linha "+(i+1+start)+": pedidos invalido");return;}
+      cls.push({customerId:customerId||"",nome,tel:tel||"",ped,gasto,dp,du,fora,cep:cep8||"",lista});
     });
     return {cls,errs};
   };
@@ -711,18 +733,30 @@ const ImportarLista = ({ onSalvo }) => {
 
         const novos = prev
           .filter(cl => !cl.customerId || !customerIdsExist.has(String(cl.customerId).trim()))
-          .map(cl => ({
-            id:"c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
-            etapa:"lead", dataCriacao:new Date().toLocaleDateString("pt-BR"),
-            notas:"", proximaAcao:"", dataProximoContato:"",
-            lista:cl.lista, customerId:cl.customerId, nome:cl.nome,
-            telefone:cl.tel, p:cl.ped, gasto:cl.gasto, fora:null,
-            dataPrimeiro:"", dataUltimo:"", objetivo:"",
-            objetivoLabel:"⚠ Preencher datas",
-            objetivoCor:C.purple, objetivoCorD:C.purpleD,
-            prob:0, probLabel:"Pendente", probCor:C.purple,
-            seq:[], stepAtual:0, cicloMedio:0, datasPreenchidas:false
-          }));
+          .map(cl => {
+            const temDados = !!(cl.dp && cl.fora !== null && cl.ped >= 1);
+            const tr = temDados ? runTriagem(cl.ped, cl.dp, cl.ped===1?cl.dp:(cl.du||cl.dp), cl.fora, cl.gasto||0) : null;
+            return {
+              id:"c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
+              etapa:"lead", dataCriacao:new Date().toLocaleDateString("pt-BR"),
+              notas:"", proximaAcao:"", dataProximoContato:"",
+              lista:cl.lista, customerId:cl.customerId, nome:cl.nome,
+              telefone:cl.tel, p:cl.ped, gasto:cl.gasto,
+              fora:cl.fora, cep:cl.cep||"",
+              dataPrimeiro:cl.dp||"", dataUltimo:cl.du||cl.dp||"",
+              datasPreenchidas:temDados,
+              objetivo:tr?tr.obj:"",
+              objetivoLabel:tr?tr.label:"⚠ Preencher datas para calcular",
+              objetivoCor:tr?tr.cor:C.purple,
+              objetivoCorD:tr?tr.corD:C.purpleD,
+              objetivoAlerta:tr?tr.alerta:"",
+              prob:tr?tr.prob.pct:0,
+              probLabel:tr?tr.prob.label:"Pendente",
+              probCor:tr?tr.prob.cor:C.purple,
+              seq:tr?tr.seq:[], stepAtual:0,
+              cicloMedio:tr?tr.ciclo:0,
+            };
+          });
 
         if (novos.length === 0) {
           setErro("Todos os clientes já existem no CRM (mesmo Customer ID).");
@@ -737,11 +771,14 @@ const ImportarLista = ({ onSalvo }) => {
         await dbBulkSave(novos);
         setProg({ atual: novos.length, total: novos.length, inicio });
 
-        const msg = pulados > 0
-          ? "✓ " + novos.length + " importados · " + pulados + " ignorados (ID duplicado)"
-          : "✓ " + novos.length + " leads importados com sucesso!";
+        const comTriagem = novos.filter(c=>c.datasPreenchidas).length;
+        const semTriagem = novos.length - comTriagem;
+        const msg = (pulados > 0 ? pulados + " ignorados (ID duplic.) · " : "")
+          + novos.length + " importados"
+          + (comTriagem > 0 ? " · " + comTriagem + " com triagem completa" : "")
+          + (semTriagem > 0 ? " · " + semTriagem + " aguardando datas" : "");
 
-        setImp(false); setOk(msg); setProg(null);
+        setImp(false); setOk("✓ " + msg); setProg(null);
         setTimeout(()=>{ setTxt(""); setPrev([]); setOk(null); setErro(""); onSalvo&&onSalvo(); }, 2500);
 
       } catch(e) {
@@ -786,8 +823,14 @@ const ImportarLista = ({ onSalvo }) => {
       </div>
       <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 16px",marginBottom:16 }}>
         <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8 }}>Formato aceito</div>
-        <div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.8,fontFamily:"monospace" }}>Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Lista<br/><span style={{ color:C.tealD }}>1234, Maria Silva, 11 99999-1111, 380, 4, Páscoa Falta Uma</span><br/><span style={{ color:C.tealD }}>5678, André Santos, 11 98888-2222, 290, 3</span></div>
-        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginTop:8 }}>Separador: vírgula ou ponto-e-vírgula · Telefone e Lista opcionais · Gasto em R$ sem símbolo</div>
+        <div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.8,fontFamily:"monospace" }}>
+          Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Último Pedido, CEP<br/>
+          <span style={{ color:C.tealD }}>1234, Maria Silva, 11 99999-1111, 380, 4, 2025-11-18, 2026-03-10, 04547-130</span><br/>
+          <span style={{ color:"var(--color-text-tertiary)" }}>// Formato Shopify — triagem calculada automaticamente pelo CEP e datas</span>
+        </div>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginTop:8 }}>
+          CEPs iniciados em 0 = SP/Grande SP · Demais = Fora de SP · Datas: AAAA-MM-DD ou DD/MM/AAAA · Colunas 6,7,8 opcionais
+        </div>
       </div>
       <label style={{ display:"flex",alignItems:"center",gap:10,padding:"12px 16px",marginBottom:12,background:"var(--color-background-secondary)",borderRadius:10,border:"1.5px dashed "+C.purple,cursor:"pointer" }}>
         <span style={{ fontSize:24 }}>📄</span>
@@ -806,8 +849,21 @@ const ImportarLista = ({ onSalvo }) => {
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8 }}>Preview — {prev.length} cliente{prev.length!==1?"s":""}</div>
           <div style={{ border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,overflow:"hidden" }}>
-            <div style={{ display:"grid",gridTemplateColumns:"80px 1.5fr 1fr 60px 70px 1fr",gap:8,padding:"7px 12px",background:"var(--color-background-secondary)",fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em" }}><span>ID</span><span>Nome</span><span>Telefone</span><span>Ped.</span><span>Gasto</span><span>Lista</span></div>
-            {prev.map((cl,i)=>(<div key={i} style={{ display:"grid",gridTemplateColumns:"80px 1.5fr 1fr 60px 70px 1fr",gap:8,padding:"7px 12px",borderTop:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",alignItems:"center" }}><span style={{ color:"var(--color-text-tertiary)",fontSize:11 }}>{cl.customerId||"—"}</span><span style={{ fontWeight:500 }}>{cl.nome}</span><span style={{ color:"var(--color-text-secondary)" }}>{cl.tel||"—"}</span><span style={{ color:"var(--color-text-secondary)" }}>{cl.ped}</span><span style={{ color:"var(--color-text-secondary)" }}>R${cl.gasto||"—"}</span><span style={{ fontSize:11,color:C.purpleD,background:C.purpleL,padding:"2px 6px",borderRadius:10 }}>{cl.lista||"—"}</span></div>))}
+            <div style={{ display:"grid",gridTemplateColumns:"70px 1.2fr 90px 40px 70px 80px 80px 80px",gap:6,padding:"7px 10px",background:"var(--color-background-secondary)",fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em" }}><span>ID</span><span>Nome</span><span>Telefone</span><span>Ped.</span><span>Gasto</span><span>1° Pedido</span><span>Ult. Pedido</span><span>Local</span></div>
+            {prev.map((cl,i)=>{
+              const localLabel = cl.fora===null?"?":(cl.fora?"Fora SP":"SP");
+              const localCor = cl.fora===null?"var(--color-text-tertiary)":cl.fora?C.amberD:C.tealD;
+              return (<div key={i} style={{ display:"grid",gridTemplateColumns:"70px 1.2fr 90px 40px 70px 80px 80px 80px",gap:6,padding:"7px 10px",borderTop:"0.5px solid var(--color-border-tertiary)",fontSize:11,color:"var(--color-text-primary)",alignItems:"center" }}>
+                <span style={{ color:"var(--color-text-tertiary)" }}>{cl.customerId||"—"}</span>
+                <span style={{ fontWeight:500 }}>{cl.nome}</span>
+                <span style={{ color:"var(--color-text-secondary)" }}>{cl.tel||"—"}</span>
+                <span style={{ color:"var(--color-text-secondary)" }}>{cl.ped}</span>
+                <span style={{ color:"var(--color-text-secondary)" }}>R${cl.gasto||"—"}</span>
+                <span style={{ color:"var(--color-text-tertiary)",fontSize:10 }}>{cl.dp||"—"}</span>
+                <span style={{ color:"var(--color-text-tertiary)",fontSize:10 }}>{cl.du||"—"}</span>
+                <span style={{ fontSize:10,fontWeight:500,color:localCor }}>{localLabel}</span>
+              </div>);
+            })}
           </div>
         </div>
       )}
@@ -1104,8 +1160,6 @@ export default function App() {
         <T label="📋 Kanban" active={tab==="kanban"} color={C.green} onClick={()=>{setClienteId(null);setTab("kanban");}}/>
         <T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
-        <T label="🐣 Páscoa — Falta Uma" active={tab==="pfalta"} color={C.amber} onClick={()=>setTab("pfalta")}/>
-        <T label="🐣 Páscoa — Reativação" active={tab==="preativ"} color={C.teal} onClick={()=>setTab("preativ")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
@@ -1113,8 +1167,6 @@ export default function App() {
       {tab==="kanban"&&(clienteId?<Perfil key={clienteId} clienteId={clienteId} onVoltar={()=>{setClienteId(null);setRefresh(r=>r+1);}}/>:<Kanban key={refresh} onAbrir={setClienteId}/>)}
       {tab==="import"&&<ImportarLista onSalvo={onSalvo}/>}
       {tab==="triagem"&&<TriagemForm onSalvo={onSalvo}/>}
-      {tab==="pfalta"&&<PascoaTab tipo="falta_uma" onSalvo={onSalvo}/>}
-      {tab==="preativ"&&<PascoaTab tipo="reativacao" onSalvo={onSalvo}/>}
       {tab==="historico"&&<Historico/>}
       {tab==="backup"&&<Backup onRestore={onRestore}/>}
       {tab==="config"&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
