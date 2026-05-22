@@ -53,7 +53,18 @@ const sb = async (path, opts={}) => {
   return t ? JSON.parse(t) : null;
 };
 
-const dbGetAll  = async () => { const r = await sb("/clientes?select=dados&order=atualizado_em.desc"); return (r||[]).map(x=>x.dados).filter(Boolean); };
+const dbGetAll  = async () => {
+  const PAGE = 1000;
+  let all = [], offset = 0;
+  while (true) {
+    const r = await sb("/clientes?select=dados&order=atualizado_em.desc&limit="+PAGE+"&offset="+offset);
+    const pg = (r||[]).map(x=>x.dados).filter(Boolean);
+    all = [...all, ...pg];
+    if (pg.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+};
 const dbGetAtivos = async () => { 
   // Load only non-closed leads for kanban performance
   const r = await sb("/clientes?select=dados&dados->>etapa=neq.encerrado&dados->>etapa=neq.convertido&order=atualizado_em.desc");
@@ -371,14 +382,14 @@ const Dashboard = ({ clientes, conversoes }) => {
   const faltam = Math.max(0, meta - clubMes);
   const pct = meta > 0 ? Math.min(100, Math.round(clubMes/meta*100)) : 0;
 
-  // Taxa de conversao: club / total leads no CRM
-  // Logica: se taxa alta → precisa de menos leads. Se taxa baixa → precisa de mais.
-  const totalLeads = clientes.length;
+  // Taxa de conversao: club / total que passou pelo Primeiro Contato
+  // "Se eu falar com X pessoas, Y% viram club"
+  const jaContatados = clientes.filter(c=>c.etapa!=="lead").length;
   const totalClubHist = conversoes.filter(c=>c.resultado==="club").length;
-  const taxa = totalLeads > 0 ? totalClubHist/totalLeads : 0;
+  const taxa = jaContatados > 0 ? totalClubHist/jaContatados : 0;
   const taxaPct = Math.round(taxa*100);
 
-  // Leads ativos (nao encerrados, nao convertidos)
+  // Leads necessarios para bater a meta no ritmo atual
   const leadsAtivos = clientes.filter(c=>c.etapa!=="encerrado"&&c.etapa!=="convertido").length;
   const leadsNecessarios = taxa > 0 ? Math.ceil(faltam/taxa) : "—";
 
@@ -421,7 +432,7 @@ const Dashboard = ({ clientes, conversoes }) => {
         <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.purple}}>
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Taxa conversao Club</div>
           <div style={{fontSize:20,fontWeight:500,color:C.purpleD}}>{taxaPct}%</div>
-          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{totalClubHist} club / {totalLeads} leads no CRM</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{totalClubHist} club / {jaContatados} contatados</div>
         </div>
         <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.amber}}>
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Leads necessarios p/ meta</div>
@@ -538,6 +549,7 @@ const Historico = () => {
 
 const Kanban = ({ onAbrir }) => {
   const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true); const [conversoes,setConversoes]=useState([]);
+  const [pages,setPages]=useState({}); // {etapaId_grupo: pageIndex}
   const [busca,setBusca]=useState("");
   const [abertos,setAbertos]=useState({});
   const toggleGrupo=(etapaId,grupo)=>{ const k=etapaId+"_"+grupo; setAbertos(a=>({...a,[k]:!a[k]})); };
@@ -564,11 +576,14 @@ const Kanban = ({ onAbrir }) => {
 
   const porEtapa=(id)=>{
     const grupo=filtrar(clientes.filter(c=>c.etapa===id));
-    const vencidos=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje).sort((a,b)=>a.dataProximoContato>b.dataProximoContato?1:-1);
-    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort((a,b)=>b.prob-a.prob);
-    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort((a,b)=>b.prob-a.prob);
-    const depois=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato>amanha).sort((a,b)=>a.dataProximoContato>b.dataProximoContato?1:-1);
-    const semData=grupo.filter(c=>!c.dataProximoContato).sort((a,b)=>b.prob-a.prob);
+    // Sort: urgency first (date), then probability within same date
+    const byProbThenDate = (a,b) => b.prob - a.prob;
+    const byDateThenProb = (a,b) => a.dataProximoContato > b.dataProximoContato ? 1 : a.dataProximoContato < b.dataProximoContato ? -1 : b.prob - a.prob;
+    const vencidos=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje).sort(byDateThenProb);
+    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byProbThenDate);
+    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort(byProbThenDate);
+    const depois=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato>amanha).sort(byDateThenProb);
+    const semData=grupo.filter(c=>!c.dataProximoContato).sort(byProbThenDate);
     return {vencidos,deHoje,deAmanha,depois,semData,total:grupo.length};
   };
 
@@ -590,28 +605,52 @@ const Kanban = ({ onAbrir }) => {
     );
   };
 
-  const GrupoFixo=({label,cor,items})=>{
-    if(items.length===0) return null;
+  const PER_PAGE = 20;
+  const getPage = (key) => pages[key]||0;
+  const setPage = (key,p) => setPages(prev=>({...prev,[key]:p}));
+
+  const PaginaCards = ({items, pageKey}) => {
+    const pg = getPage(pageKey);
+    const totalPages = Math.ceil(items.length/PER_PAGE);
+    const slice = items.slice(pg*PER_PAGE, (pg+1)*PER_PAGE);
     return (
-      <div style={{ marginBottom:6 }}>
-        <div style={{ fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",color:cor,padding:"3px 4px",marginBottom:4 }}>{label} · {items.length}</div>
-        {items.map(cl=><Card key={cl.id} cl={cl}/>)}
+      <div>
+        {slice.map(cl=><Card key={cl.id} cl={cl}/>)}
+        {totalPages > 1 && (
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 2px",marginTop:2 }}>
+            <button onClick={()=>setPage(pageKey,pg-1)} disabled={pg===0}
+              style={{ fontSize:11,padding:"3px 8px",borderRadius:6,border:"0.5px solid var(--color-border-tertiary)",background:"none",cursor:pg===0?"default":"pointer",opacity:pg===0?0.3:1 }}>←</button>
+            <span style={{ fontSize:10,color:"var(--color-text-tertiary)" }}>{pg*PER_PAGE+1}–{Math.min((pg+1)*PER_PAGE,items.length)} de {items.length}</span>
+            <button onClick={()=>setPage(pageKey,pg+1)} disabled={pg>=totalPages-1}
+              style={{ fontSize:11,padding:"3px 8px",borderRadius:6,border:"0.5px solid var(--color-border-tertiary)",background:"none",cursor:pg>=totalPages-1?"default":"pointer",opacity:pg>=totalPages-1?0.3:1 }}>→</button>
+          </div>
+        )}
       </div>
     );
   };
 
-  const MAX_CARDS = 50;
+  const GrupoFixo=({label,cor,items,pageKey})=>{
+    if(items.length===0) return null;
+    return (
+      <div style={{ marginBottom:6 }}>
+        <div style={{ fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",color:cor,padding:"3px 4px",marginBottom:4 }}>{label} · {items.length}</div>
+        <PaginaCards items={items} pageKey={pageKey}/>
+      </div>
+    );
+  };
+
 
   const GrupoSanfona=({etapaId,grupo,label,cor,items})=>{
     if(items.length===0) return null;
     const aberto=isAberto(etapaId,grupo);
+    const pageKey=etapaId+"_"+grupo;
     return (
       <div style={{ marginBottom:4 }}>
         <button onClick={()=>toggleGrupo(etapaId,grupo)} style={{ width:"100%",display:"flex",alignItems:"center",gap:6,padding:"4px 4px",background:"none",border:"none",cursor:"pointer",borderRadius:6 }}>
           <span style={{ fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",color:cor,flex:1,textAlign:"left" }}>{label} · {items.length}</span>
           <span style={{ fontSize:10,color:"var(--color-text-tertiary)" }}>{aberto?"▲":"▼"}</span>
         </button>
-        {aberto&&<div style={{ marginTop:4 }}>{items.map(cl=><Card key={cl.id} cl={cl}/>)}</div>}
+        {aberto&&<div style={{ marginTop:4 }}><PaginaCards items={items} pageKey={pageKey}/></div>}
       </div>
     );
   };
@@ -648,8 +687,8 @@ const Kanban = ({ onAbrir }) => {
                   <span style={{ fontSize:11,background:etapa.cor,color:"#fff",padding:"1px 7px",borderRadius:20 }}>{total}</span>
                 </div>
                 <div style={{ border:"0.5px solid "+etapa.cor,borderTop:"none",borderRadius:"0 0 10px 10px",padding:8,minHeight:80,background:"var(--color-background-primary)" }}>
-                  <GrupoFixo label="⚠ Vencido" cor={C.coralD} items={vencidos}/>
-                  <GrupoFixo label="⚡ Hoje" cor={C.amberD} items={deHoje}/>
+                  <GrupoFixo label="⚠ Vencido" cor={C.coralD} items={vencidos} pageKey={etapa.id+"_vencido"}/>
+                  <GrupoFixo label="⚡ Hoje" cor={C.amberD} items={deHoje} pageKey={etapa.id+"_hoje"}/>
                   {vencidos.length===0&&deHoje.length===0&&deAmanha.length===0&&depois.length===0&&semData.length===0&&(
                     <div style={{ fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center",padding:"16px 0" }}>Vazio</div>
                   )}
@@ -668,8 +707,11 @@ const Kanban = ({ onAbrir }) => {
 
 
 const cepToFora = (cep) => {
-  const c = (cep||"").replace(/\D/g,"");
-  if (!c) return null;
+  // Excel may strip leading zero from SP CEPs (01xxx → 1xxx as number)
+  // Pad to 8 digits to restore leading zero
+  const raw = String(cep||"").replace(/\D/g,"");
+  if (!raw) return null;
+  const c = raw.padStart(8,"0");
   return !c.startsWith("0");
 };
 
@@ -751,16 +793,33 @@ const ImportarLista = ({ onSalvo }) => {
       try {
         setProg({ atual: 0, total: prev.length, inicio });
 
-        // Checar duplicatas — 1 leitura no Supabase
+        // Carregar existentes para checar duplicatas
         const existentes = await dbGetAll();
-        const customerIdsExist = new Set(existentes.map(c=>c.customerId).filter(Boolean).map(String));
+        const existentesPorId = {};
+        existentes.forEach(c => { if (c.customerId) existentesPorId[String(c.customerId).trim()] = c; });
 
-        const novos = prev
-          .filter(cl => !cl.customerId || !customerIdsExist.has(String(cl.customerId).trim()))
-          .map(cl => {
+        const novos = [];
+        const paraAtualizarLista = []; // clientes existentes que ganham nova lista
+
+        prev.forEach(cl => {
+          const cid = cl.customerId ? String(cl.customerId).trim() : null;
+          const existente = cid ? existentesPorId[cid] : null;
+
+          if (existente) {
+            // Já existe — acrescentar lista se for nova e diferente
+            if (cl.lista && cl.lista.trim()) {
+              const listaAtual = existente.lista || "";
+              const listas = listaAtual.split(" · ").map(l=>l.trim()).filter(Boolean);
+              if (!listas.includes(cl.lista.trim())) {
+                const novaLista = listaAtual ? listaAtual + " · " + cl.lista.trim() : cl.lista.trim();
+                paraAtualizarLista.push({...existente, lista: novaLista});
+              }
+            }
+          } else {
+            // Novo cliente — criar com triagem
             const temDados = !!(cl.dp && cl.fora !== null && cl.ped >= 1);
             const tr = temDados ? runTriagem(cl.ped, cl.dp, cl.ped===1?cl.dp:(cl.du||cl.dp), cl.fora, cl.gasto||0) : null;
-            return {
+            novos.push({
               id:"c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
               etapa:"lead", dataCriacao:new Date().toLocaleDateString("pt-BR"),
               notas:"", proximaAcao:"", dataProximoContato:"",
@@ -779,35 +838,45 @@ const ImportarLista = ({ onSalvo }) => {
               probCor:tr?tr.prob.cor:C.purple,
               seq:tr?tr.seq:[], stepAtual:0,
               cicloMedio:tr?tr.ciclo:0,
-            };
-          });
+            });
+          }
+        });
 
-        if (novos.length === 0) {
-          setErro("Todos os clientes já existem no CRM (mesmo Customer ID).");
+        if (novos.length === 0 && paraAtualizarLista.length === 0) {
+          setErro("Todos os clientes já existem e nenhuma lista nova foi encontrada.");
           setImp(false); setProg(null);
           return;
         }
 
-        const pulados = prev.length - novos.length;
-        setProg({ atual: Math.floor(novos.length * 0.5), total: novos.length, inicio });
+        const totalOps = novos.length + paraAtualizarLista.length;
+        setProg({ atual: Math.floor(totalOps * 0.1), total: totalOps, inicio });
 
-        // Bulk insert em lotes de 200 para evitar payload gigante
+        // Inserir novos em lotes de 200
         const LOTE_SIZE = 200;
         let salvos = 0;
         for (let i = 0; i < novos.length; i += LOTE_SIZE) {
-          const lote = novos.slice(i, i + LOTE_SIZE);
-          await dbBulkSave(lote);
-          salvos += lote.length;
-          setProg({ atual: Math.floor(novos.length * 0.1) + Math.floor(salvos/novos.length * 0.85 * novos.length), total: novos.length, inicio });
+          await dbBulkSave(novos.slice(i, i + LOTE_SIZE));
+          salvos += Math.min(LOTE_SIZE, novos.length - i);
+          setProg({ atual: Math.floor(salvos/totalOps*85)+5, total: totalOps, inicio });
         }
-        setProg({ atual: novos.length, total: novos.length, inicio });
+
+        // Atualizar lista dos existentes em lotes de 200
+        for (let i = 0; i < paraAtualizarLista.length; i += LOTE_SIZE) {
+          await dbBulkSave(paraAtualizarLista.slice(i, i + LOTE_SIZE));
+          salvos += Math.min(LOTE_SIZE, paraAtualizarLista.length - i);
+          setProg({ atual: Math.floor(salvos/totalOps*85)+5, total: totalOps, inicio });
+        }
+
+        setProg({ atual: totalOps, total: totalOps, inicio });
 
         const comTriagem = novos.filter(c=>c.datasPreenchidas).length;
         const semTriagem = novos.length - comTriagem;
-        const msg = (pulados > 0 ? pulados + " ignorados (ID duplic.) · " : "")
-          + novos.length + " importados"
-          + (comTriagem > 0 ? " · " + comTriagem + " com triagem completa" : "")
-          + (semTriagem > 0 ? " · " + semTriagem + " aguardando datas" : "");
+        const partes = [];
+        if (novos.length > 0) partes.push(novos.length + " novos importados");
+        if (comTriagem > 0) partes.push(comTriagem + " com triagem completa");
+        if (semTriagem > 0) partes.push(semTriagem + " aguardando datas");
+        if (paraAtualizarLista.length > 0) partes.push(paraAtualizarLista.length + " listas atualizadas");
+        const msg = partes.join(" · ");
 
         setImp(false); setOk("✓ " + msg); setProg(null);
         setTimeout(()=>{ setTxt(""); setPrev([]); setOk(null); setErro(""); onSalvo&&onSalvo(); }, 2500);
@@ -829,7 +898,16 @@ const ImportarLista = ({ onSalvo }) => {
         try {
           const wb = XLSX.read(ev.target.result, { type:"array" });
           const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+          // raw:true keeps numbers (including Excel dates as serials)
+          // but we need to force CEP column (index 7) as string to preserve leading zero
+          const rawRows = XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
+          const rows = rawRows.map(row => row.map((cell, ci) => {
+            // CEP column (index 7): if number with 7-8 digits, treat as CEP string
+            if (ci === 7 && typeof cell === "number" && cell > 9999 && cell < 100000000) {
+              return String(Math.round(cell)).padStart(8,"0");
+            }
+            return cell;
+          }));
           // Skip header row if first cell looks like a label (not a number/ID)
           const startRow = isNaN(rows[0]&&rows[0][0]) && typeof rows[0][0] === "string" && rows[0][0].toLowerCase().includes("id") ? 1 : 0;
           const txt = rows.slice(startRow).map(r => r.join(",")).join("\n");
