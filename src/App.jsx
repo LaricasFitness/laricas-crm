@@ -313,7 +313,20 @@ const Perfil = ({ clienteId, onVoltar }) => {
       )}
       <div style={{ padding:"14px 16px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)" }}>
         <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:10 }}>Encerrar atendimento</div>
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>{[{label:"✓ Club",etapa:"convertido",cor:C.green},{label:"✓ Avulso",etapa:"convertido",cor:C.amber},{label:"✗ Não converteu",etapa:"encerrado",cor:C.coral}].map(op=>(<button key={op.label} onClick={()=>mover(op.etapa)} style={{ padding:"8px 6px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:op.cor+"22",color:op.cor,border:"0.5px solid "+op.cor,lineHeight:1.3 }}>{op.label}</button>))}</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>{[
+          {label:"✓ Club",resultado:"club",etapa:"convertido",cor:C.green},
+          {label:"✓ Avulso",resultado:"avulso",etapa:"convertido",cor:C.amber},
+          {label:"✗ Nao converteu",resultado:"nao_converteu",etapa:"encerrado",cor:C.coral}
+        ].map(op=>{
+          const handleEncerrar = async () => {
+            setSalvando(true);
+            await save({etapa:op.etapa});
+            await dbSaveConversao(c, op.resultado);
+            setSalvando(false);
+            onVoltar();
+          };
+          return (<button key={op.label} onClick={handleEncerrar} disabled={salvando} style={{ padding:"8px 6px",borderRadius:8,fontSize:11,fontWeight:500,cursor:salvando?"default":"pointer",background:op.cor+"22",color:op.cor,border:"0.5px solid "+op.cor,lineHeight:1.3,opacity:salvando?0.6:1 }}>{salvando?"...":op.label}</button>);
+        })}</div>
       </div>
     </div>
   );
