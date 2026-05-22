@@ -1112,8 +1112,8 @@ const Kanban = ({ onAbrir }) => {
     const grupo=filtrar(clientes.filter(c=>c.etapa===id));
     // Sort by priority score (objective + stage + probability)
     // Experiencia: sort by next billing date ascending (closest first)
-    const byPrio = (a,b) => {
-      if (etapaId === "experiencia") {
+    const byPrio = (etId) => (a,b) => {
+      if (etId === "experiencia") {
         const assinA = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
         const assinB = calcAssinatura(b.tipoAssinatura, b.dataInicioAssinatura);
         const dA = assinA ? assinA.proximaCobrancaISO : "9999";
@@ -1124,10 +1124,10 @@ const Kanban = ({ onAbrir }) => {
     };
     const byDateThenPrio = (a,b) => a.dataProximoContato > b.dataProximoContato ? 1 : a.dataProximoContato < b.dataProximoContato ? -1 : prioScore(b) - prioScore(a);
     const vencidos=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje).sort(byDateThenPrio);
-    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byPrio);
-    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort(byPrio);
+    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byPrio(etapaId));
+    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort(byPrio(etapaId));
     const depois=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato>amanha).sort(byDateThenPrio);
-    const semData=grupo.filter(c=>!c.dataProximoContato).sort(byPrio);
+    const semData=grupo.filter(c=>!c.dataProximoContato).sort(byPrio(etapaId));
     return {vencidos,deHoje,deAmanha,depois,semData,total:grupo.length};
   };
 
