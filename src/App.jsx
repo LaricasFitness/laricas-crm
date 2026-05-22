@@ -16,6 +16,7 @@ const ETAPAS = [
   {id:"em_conversa",label:"Em Conversa",emoji:"💬",cor:C.teal,corL:C.tealL,corD:C.tealD},
   {id:"proposta_feita",label:"Proposta Feita",emoji:"📋",cor:C.amber,corL:C.amberL,corD:C.amberD},
   {id:"convertido",label:"Convertido",emoji:"🏆",cor:C.green,corL:C.greenL,corD:C.greenD},
+  {id:"experiencia",label:"Experiencia",emoji:"⭐",cor:C.purple,corL:C.purpleL,corD:C.purpleD},
   {id:"encerrado",label:"Encerrado",emoji:"✗",cor:"#888",corL:"#f5f5f5",corD:"#555"},
 ];
 
@@ -586,8 +587,6 @@ const Historico = () => {
     dbGetConversoes().then(data=>{ setConv(data); setLoading(false); });
   }, []);
 
-  const [assinantes, setAssinantes] = useState([]);
-  useEffect(() => { dbGetAssinantes().then(setAssinantes); }, []);
   if (loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Carregando historico...</div>;
   if (conv.length===0) return (
     <div style={{textAlign:"center",padding:"48px 24px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px dashed var(--color-border-tertiary)"}}>
@@ -634,54 +633,6 @@ const Historico = () => {
           </div>
         ))}
       </div>
-
-      {/* LTV Global do Club */}
-      {assinantes.length > 0 && (() => {
-        const ativos = assinantes.filter(a=>!a.cancelado);
-        const cancelados = assinantes.filter(a=>a.cancelado);
-        const comValor = ativos.filter(a=>a.valorMensal>0);
-        const ltvRealizadoAtivos = comValor.reduce((acc,a) => {
-          const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
-          return acc + (a.valorMensal||0) * (assin?assin.cicloAtual:0) + (a.gasto||0);
-        }, 0);
-        const ltvCancelados = cancelados.filter(a=>a.valorMensal>0).reduce((acc,a) => {
-          const ciclos = calcCiclosCancelado(a.dataInicioAssinatura, a.dataCancelamento);
-          return acc + (a.valorMensal||0) * ciclos + (a.gasto||0);
-        }, 0);
-        const ltvPagoTotal = ltvRealizadoAtivos + ltvCancelados;
-        const ltvProjetadoTotal = comValor.reduce((acc,a) => {
-          const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
-          const vm = a.valorMensal||0;
-          const ciclosRestantes = assin ? assin.ciclosTotais - assin.cicloNoPeriodo : 0;
-          return acc + vm * (assin?assin.cicloAtual:0) + vm * ciclosRestantes + (a.gasto||0);
-        }, 0);
-        const mrr = comValor.reduce((acc,a) => acc + (a.valorMensal||0), 0);
-        const semValor = ativos.length - comValor.length;
-        return (
-          <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
-              LTV Global do Club — {ativos.length} ativos {cancelados.length>0&&<span style={{color:C.coralD,marginLeft:4}}>· {cancelados.length} cancelados</span>} {semValor>0&&<span style={{color:C.amber,marginLeft:4}}>· {semValor} sem valor</span>}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
-                <div style={{fontSize:22,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{comValor.length} ativos × media R${comValor.length>0?(mrr/comValor.length).toFixed(0):0}</div>
-              </div>
-              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.green}}>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV atual (realizado)</div>
-                <div style={{fontSize:22,fontWeight:500,color:C.greenD}}>R${ltvPagoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>historico + club pago ate hoje</div>
-              </div>
-              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV projetado (periodo)</div>
-                <div style={{fontSize:22,fontWeight:500,color:C.purpleD}}>R${ltvProjetadoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>incluindo ciclos restantes do plano</div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Tabela por mes */}
       <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
@@ -1649,6 +1600,112 @@ const Guia = () => {
   );
 };
 
+
+const LTV = () => {
+  const [assinantes, setAssinantes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    dbGetAssinantes().then(a => { setAssinantes(a); setLoading(false); });
+  }, []);
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Carregando...</div>;
+
+  if (assinantes.length === 0) return (
+    <div style={{textAlign:"center",padding:"48px 24px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px dashed var(--color-border-tertiary)"}}>
+      <div style={{fontSize:32,marginBottom:12}}>💰</div>
+      <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:6}}>Sem assinantes ainda</div>
+      <div style={{fontSize:13,color:"var(--color-text-secondary)"}}>Mova clientes para a etapa ⭐ Experiencia para calcular o LTV.</div>
+    </div>
+  );
+
+  const ativos = assinantes.filter(a=>!a.cancelado);
+  const cancelados = assinantes.filter(a=>a.cancelado);
+  const comValor = ativos.filter(a=>a.valorMensal>0);
+  const ltvRealizadoAtivos = comValor.reduce((acc,a) => {
+    const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
+    return acc + (a.valorMensal||0) * (assin?assin.cicloAtual:0) + (a.gasto||0);
+  }, 0);
+  const ltvCancelados = cancelados.filter(a=>a.valorMensal>0).reduce((acc,a) => {
+    const ciclos = calcCiclosCancelado(a.dataInicioAssinatura, a.dataCancelamento);
+    return acc + (a.valorMensal||0) * ciclos + (a.gasto||0);
+  }, 0);
+  const ltvPagoTotal = ltvRealizadoAtivos + ltvCancelados;
+  const ltvProjetadoTotal = comValor.reduce((acc,a) => {
+    const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
+    const vm = a.valorMensal||0;
+    const ciclosRestantes = assin ? assin.ciclosTotais - assin.cicloNoPeriodo : 0;
+    return acc + vm * (assin?assin.cicloAtual:0) + vm * ciclosRestantes + (a.gasto||0);
+  }, 0);
+  const mrr = comValor.reduce((acc,a) => acc + (a.valorMensal||0), 0);
+  const semValor = ativos.length - comValor.length;
+
+  return (
+    <div>
+      <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
+          LTV Global do Club — {ativos.length} ativos
+          {cancelados.length>0&&<span style={{color:C.coralD,marginLeft:6}}>· {cancelados.length} cancelados</span>}
+          {semValor>0&&<span style={{color:C.amber,marginLeft:6}}>· {semValor} sem valor cadastrado</span>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
+            <div style={{fontSize:24,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{comValor.length} assinantes · media R${comValor.length>0?(mrr/comValor.length).toFixed(0):0}/mes</div>
+          </div>
+          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.green}}>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV realizado</div>
+            <div style={{fontSize:24,fontWeight:500,color:C.greenD}}>R${ltvPagoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>ativos + cancelados</div>
+          </div>
+          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV projetado</div>
+            <div style={{fontSize:24,fontWeight:500,color:C.purpleD}}>R${ltvProjetadoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>ativos ate fim do plano</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
+        <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Assinantes individuais</div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"var(--color-background-primary)"}}>
+                {["Nome","Plano","Ciclo","Valor/mes","LTV atual","LTV projetado","Status"].map(h=>(
+                  <th key={h} style={{padding:"7px 10px",textAlign:h==="Nome"?"left":"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {assinantes.sort((a,b)=>(a.cancelado?1:0)-(b.cancelado?1:0)).map(a=>{
+                const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
+                const vm = parseFloat(a.valorMensal)||0;
+                const ciclosPagos = a.cancelado ? calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento) : (assin?assin.cicloAtual:0);
+                const ltvAtual = vm*ciclosPagos+(a.gasto||0);
+                const ciclosRest = a.cancelado?0:(assin?assin.ciclosTotais-assin.cicloNoPeriodo:0);
+                const ltvProj = ltvAtual+vm*ciclosRest;
+                return (
+                  <tr key={a.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",opacity:a.cancelado?0.6:1}}>
+                    <td style={{padding:"7px 10px",fontWeight:500,color:"var(--color-text-primary)"}}>{a.nome}</td>
+                    <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</td>
+                    <td style={{padding:"7px 10px",textAlign:"center",color:C.purpleD,fontWeight:500}}>{assin?assin.cicloNoPeriodo+"/"+assin.ciclosTotais:"—"}</td>
+                    <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)"}}>{vm>0?"R$"+vm.toFixed(0):"—"}</td>
+                    <td style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:C.greenD}}>{vm>0?"R$"+ltvAtual.toFixed(0):"—"}</td>
+                    <td style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:C.purpleD}}>{vm>0&&!a.cancelado?"R$"+ltvProj.toFixed(0):a.cancelado?"Cancelado":"—"}</td>
+                    <td style={{padding:"7px 10px",textAlign:"center"}}><span style={{fontSize:10,fontWeight:500,background:a.cancelado?C.coralL:C.greenL,color:a.cancelado?C.coralD:C.greenD,padding:"2px 8px",borderRadius:20}}>{a.cancelado?"Cancelado":"Ativa"}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [tab,setTab]=useState("kanban");
   const [clienteId,setClienteId]=useState(null);
@@ -1676,6 +1733,7 @@ export default function App() {
         <T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
+        <T label="💰 LTV" active={tab==="ltv"} color={C.green} onClick={()=>setTab("ltv")}/>
         <T label="📖 Guia" active={tab==="guia"} color={C.teal} onClick={()=>setTab("guia")}/>
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
@@ -1684,6 +1742,7 @@ export default function App() {
       {tab==="import"&&<ImportarLista onSalvo={onSalvo}/>}
       {tab==="triagem"&&<TriagemForm onSalvo={onSalvo}/>}
       {tab==="historico"&&<Historico/>}
+      {tab==="ltv"&&<LTV/>}
       {tab==="guia"&&<Guia/>}
       {tab==="backup"&&<Backup onRestore={onRestore}/>}
       {tab==="config"&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
