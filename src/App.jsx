@@ -673,10 +673,25 @@ const cepToFora = (cep) => {
   return !c.startsWith("0");
 };
 
+const excelDateToISO = (val) => {
+  const n = parseInt(val);
+  if (isNaN(n) || n < 40000 || n > 60000) return "";
+  // Excel epoch: Jan 1 1900 = 1, with leap year bug (day 60 = Feb 29 1900, doesn't exist)
+  const ms = (n - 25569) * 86400000;
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+};
+
 const parseShopifyDate = (str) => {
-  if (!str) return "";
-  const s = str.trim();
+  if (!str && str !== 0) return "";
+  const s = String(str).trim();
+  if (!s) return "";
+  // Excel serial number
+  if (/^\d{4,6}$/.test(s)) return excelDateToISO(s);
+  // ISO format
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+  // BR format DD/MM/AAAA
   if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) {
     const [d,m,y] = s.split("/");
     return y+"-"+m.padStart(2,"0")+"-"+d.padStart(2,"0");
