@@ -681,9 +681,9 @@ const Perfil = ({ clienteId, onVoltar }) => {
               <div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8 }}>
                   <div style={{ background:C.purpleL,borderRadius:8,padding:"10px 12px" }}>
-                    <div style={{ fontSize:10,color:C.purpleD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>Ciclo atual</div>
-                    <div style={{ fontSize:22,fontWeight:500,color:C.purpleD }}>{assin.cicloNoPeriodo}°<span style={{ fontSize:12,fontWeight:400 }}> / {assin.ciclosTotais}</span></div>
-                    <div style={{ fontSize:10,color:C.purpleD,marginTop:2 }}>mes {assin.cicloAtual} total</div>
+                    <div style={{ fontSize:10,color:C.purpleD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>Ciclo total</div>
+                    <div style={{ fontSize:22,fontWeight:500,color:C.purpleD }}>{assin.cicloAtual}°<span style={{ fontSize:11,fontWeight:400,color:C.purple }}> mes</span></div>
+                    <div style={{ fontSize:10,color:C.purpleD,marginTop:2 }}>{assin.periodoAtual}° renovacao · mes {assin.cicloNoPeriodo}/{assin.ciclosTotais} do periodo</div>
                   </div>
                   <div style={{ background:corCobranca+"18",borderRadius:8,padding:"10px 12px",border:"0.5px solid "+corCobranca }}>
                     <div style={{ fontSize:10,color:corCobranca,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>Proxima cobranca</div>
@@ -722,6 +722,28 @@ const Perfil = ({ clienteId, onVoltar }) => {
                     )}
                   </div>
                 </div>
+                {!c.cancelado&&(
+                  <div style={{ marginTop:8,padding:"10px 12px",background:c.falhaRenovacao?C.amberL:"var(--color-background-secondary)",borderRadius:8,border:"0.5px solid "+(c.falhaRenovacao?C.amber:"var(--color-border-tertiary)") }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:11,fontWeight:500,color:c.falhaRenovacao?C.amberD:"var(--color-text-primary)",marginBottom:2 }}>{c.falhaRenovacao?"⚠ Falha na renovacao":"Marcar falha na renovacao"}</div>
+                        {c.falhaRenovacao&&<div style={{ fontSize:11,color:C.amberD }}>Registrada em {c.dataFalhaRenovacao||"—"} · Nao contabilizado no MRR</div>}
+                      </div>
+                      {!c.falhaRenovacao&&(
+                        <button onClick={()=>save({falhaRenovacao:true,dataFalhaRenovacao:new Date().toLocaleDateString("pt-BR")})}
+                          style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.amber,color:"#fff",border:"none" }}>
+                          Registrar falha
+                        </button>
+                      )}
+                      {c.falhaRenovacao&&(
+                        <button onClick={()=>save({falhaRenovacao:false,dataFalhaRenovacao:""})}
+                          style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:"none",color:C.tealD,border:"0.5px solid "+C.teal }}>
+                          Resolver
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {!c.tipoAssinatura&&<div style={{ fontSize:12,color:"var(--color-text-tertiary)",textAlign:"center",padding:"8px 0" }}>Selecione o tipo de assinatura para ver os calculos automaticos.</div>}
@@ -845,6 +867,8 @@ const Dashboard = ({ clientes, conversoes }) => {
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{typeof leadsNecessarios==="number"&&focoClubAtivos>=leadsNecessarios?"suficiente p/ meta":typeof leadsNecessarios==="number"&&faltam>0?"faltam "+(leadsNecessarios-focoClubAtivos)+" leads foco":"use filtro 🎯 Foco Club"}</div>
         </div>
       </div>
+          );
+        })()}
     </div>
   );
 };
@@ -994,11 +1018,14 @@ const calcAssinatura = (tipo, dataInicio) => {
   const diasParaCobranca = Math.ceil((proximaCobranca.getTime() - hoje.getTime()) / 86400000);
   const diasParaFim = Math.ceil((fimPeriodoAtual.getTime() - hoje.getTime()) / 86400000);
 
+  const periodoAtual = Math.ceil(cicloAtual / ciclosTotais); // qual renovacao (1=original, 2=1a renovacao...)
   return {
-    cicloAtual,
-    cicloNoPeriodo,
+    cicloAtual,        // total de meses desde o inicio
+    cicloNoPeriodo,    // mes dentro do periodo atual (1 a ciclosTotais)
     ciclosTotais,
+    periodoAtual,      // numero da renovacao atual
     proximaCobranca: fmt(proximaCobranca),
+    proximaCobrancaISO: proximaCobranca.toISOString().split("T")[0], // para ordenacao
     fimPeriodo: fmt(fimPeriodoAtual),
     diasParaCobranca,
     diasParaFim,
@@ -1086,8 +1113,17 @@ const Kanban = ({ onAbrir }) => {
   const porEtapa=(id)=>{
     const grupo=filtrar(clientes.filter(c=>c.etapa===id));
     // Sort by priority score (objective + stage + probability)
-    // Overdue always goes to top; within each group: priority score descending
-    const byPrio = (a,b) => prioScore(b) - prioScore(a);
+    // Experiencia: sort by next billing date ascending (closest first)
+    const byPrio = (a,b) => {
+      if (etapaId === "experiencia") {
+        const assinA = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
+        const assinB = calcAssinatura(b.tipoAssinatura, b.dataInicioAssinatura);
+        const dA = assinA ? assinA.proximaCobrancaISO : "9999";
+        const dB = assinB ? assinB.proximaCobrancaISO : "9999";
+        return dA > dB ? 1 : dA < dB ? -1 : 0;
+      }
+      return prioScore(b) - prioScore(a);
+    };
     const byDateThenPrio = (a,b) => a.dataProximoContato > b.dataProximoContato ? 1 : a.dataProximoContato < b.dataProximoContato ? -1 : prioScore(b) - prioScore(a);
     const vencidos=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje).sort(byDateThenPrio);
     const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byPrio);
@@ -1904,7 +1940,7 @@ const Guia = () => {
 };
 
 
-const LTV = () => {
+const LTV = ({ onAbrir }) => {
   const [assinantes, setAssinantes] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1922,7 +1958,8 @@ const LTV = () => {
     </div>
   );
 
-  const ativos = assinantes.filter(a=>!a.cancelado);
+  const ativos = assinantes.filter(a=>!a.cancelado&&!a.falhaRenovacao);
+  const comFalha = assinantes.filter(a=>a.falhaRenovacao&&!a.cancelado);
   const cancelados = assinantes.filter(a=>a.cancelado);
   const comValor = ativos.filter(a=>a.valorMensal>0);
   const ltvRealizadoAtivos = comValor.reduce((acc,a) => {
@@ -2001,9 +2038,10 @@ const LTV = () => {
     <div>
       <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
         <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
-          LTV Global do Club — {ativos.length} ativos
+          Dash Club — {ativos.length} ativos
+          {comFalha.length>0&&<span style={{color:C.amberD,marginLeft:6}}>· {comFalha.length} falha renovacao</span>}
           {cancelados.length>0&&<span style={{color:C.coralD,marginLeft:6}}>· {cancelados.length} cancelados</span>}
-          {semValor>0&&<span style={{color:C.amber,marginLeft:6}}>· {semValor} sem valor cadastrado</span>}
+          {semValor>0&&<span style={{color:C.amber,marginLeft:6}}>· {semValor} sem valor</span>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
           <div style={{background:C.purpleL,borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
@@ -2055,41 +2093,75 @@ const LTV = () => {
       {mrrEvolucao.length > 1 && (
         <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
           <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>Evolucao do MRR</div>
-          {(() => {
+          {(()=>{
+            const [mesSel, setMesSel] = useState(null);
             const maxMrr = Math.max(...mrrEvolucao.map(m=>m.mrr), 1);
-            const barW = Math.max(28, Math.min(60, Math.floor(560 / mrrEvolucao.length)));
+            const barW = Math.max(32, Math.min(60, Math.floor(560/mrrEvolucao.length)));
+            const mesDetalhes = mesSel ? assinantes.filter(a=>{
+              if (!a.dataInicioAssinatura||!a.valorMensal) return false;
+              const inicio = new Date(a.dataInicioAssinatura+"T12:00:00");
+              const [y,mo] = mesSel.split("-").map(Number);
+              const dMes = new Date(y,mo-1,1);
+              if (inicio > dMes) return false;
+              if ((a.cancelado||a.falhaRenovacao)&&a.dataCancelamento) {
+                const cancel = new Date((a.dataCancelamento||a.dataFalhaRenovacao)+"T12:00:00");
+                if (cancel < dMes) return false;
+              }
+              return true;
+            }) : [];
             return (
-              <div style={{overflowX:"auto"}}>
-                <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:"max-content",paddingBottom:8}}>
-                  {mrrEvolucao.map((m,i) => {
-                    const pct = m.mrr / maxMrr;
-                    const isLast = i === mrrEvolucao.length - 1;
-                    const prev = i > 0 ? mrrEvolucao[i-1].mrr : m.mrr;
-                    const cresceu = m.mrr >= prev;
-                    return (
-                      <div key={m.mesKey} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:barW}}>
-                        <div style={{fontSize:9,fontWeight:500,color:isLast?C.tealD:"var(--color-text-tertiary)",textAlign:"center"}}>
-                          {m.mrr>0?"R$"+m.mrr:"—"}
-                        </div>
-                        <div style={{position:"relative",width:"100%",display:"flex",flexDirection:"column",alignItems:"center"}}>
-                          <div style={{width:"80%",height:Math.max(4, Math.round(pct*120)),background:isLast?C.teal:cresceu?C.green:C.coral,borderRadius:"4px 4px 0 0",transition:"height 0.3s"}}/>
+              <div>
+                <div style={{overflowX:"auto"}}>
+                  <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:"max-content",paddingTop:28,paddingBottom:8}}>
+                    {mrrEvolucao.map((m,i)=>{
+                      const pct=m.mrr/maxMrr;
+                      const isLast=i===mrrEvolucao.length-1;
+                      const isSel=mesSel===m.mesKey;
+                      const prev=i>0?mrrEvolucao[i-1].mrr:m.mrr;
+                      const cresceu=m.mrr>=prev;
+                      const barColor=isSel?C.purple:isLast?C.teal:cresceu?C.green:C.coral;
+                      return (
+                        <div key={m.mesKey} onClick={()=>setMesSel(isSel?null:m.mesKey)}
+                          style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,width:barW,cursor:"pointer",position:"relative"}}>
                           {(m.novos>0||m.canc>0)&&(
-                            <div style={{position:"absolute",top:-14,display:"flex",gap:2}}>
-                              {m.novos>0&&<span style={{fontSize:8,color:C.greenD,background:C.greenL,padding:"0 3px",borderRadius:3}}>+{m.novos}</span>}
-                              {m.canc>0&&<span style={{fontSize:8,color:C.coralD,background:C.coralL,padding:"0 3px",borderRadius:3}}>-{m.canc}</span>}
+                            <div style={{position:"absolute",top:-22,display:"flex",gap:2,zIndex:1}}>
+                              {m.novos>0&&<span style={{fontSize:7,color:C.greenD,background:C.greenL,padding:"1px 3px",borderRadius:3,whiteSpace:"nowrap"}}>+{m.novos}</span>}
+                              {m.canc>0&&<span style={{fontSize:7,color:C.coralD,background:C.coralL,padding:"1px 3px",borderRadius:3,whiteSpace:"nowrap"}}>-{m.canc}</span>}
                             </div>
                           )}
+                          <div style={{fontSize:9,fontWeight:500,color:isSel?C.purpleD:isLast?C.tealD:"var(--color-text-tertiary)",textAlign:"center",marginBottom:2}}>
+                            {m.mrr>0?"R$"+m.mrr:"—"}
+                          </div>
+                          <div style={{width:"80%",height:Math.max(4,Math.round(pct*110)),background:barColor,borderRadius:"4px 4px 0 0",transition:"height 0.3s",border:isSel?"2px solid "+C.purpleD:"none"}}/>
+                          <div style={{fontSize:9,color:isSel?C.purpleD:"var(--color-text-tertiary)",textAlign:"center",textTransform:"capitalize",fontWeight:isSel?500:400}}>{m.mesLabel}</div>
                         </div>
-                        <div style={{fontSize:9,color:"var(--color-text-tertiary)",textAlign:"center",textTransform:"capitalize"}}>{m.mesLabel}</div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                  <div style={{display:"flex",gap:12,marginTop:4,fontSize:10,color:"var(--color-text-tertiary)"}}>
+                    <span style={{color:C.greenD}}>+N novos</span>
+                    <span style={{color:C.coralD}}>-N cancelamentos</span>
+                    <span style={{color:C.teal}}>● mes atual</span>
+                    <span style={{color:C.purple}}>■ selecionado</span>
+                    <span>Clique na barra para ver detalhes</span>
+                  </div>
                 </div>
-                <div style={{display:"flex",gap:12,marginTop:4,fontSize:10,color:"var(--color-text-tertiary)"}}>
-                  <span style={{color:C.greenD}}>+N novos assinantes</span>
-                  <span style={{color:C.coralD}}>-N cancelamentos</span>
-                  <span style={{color:C.teal}}>● mes atual</span>
-                </div>
+                {mesSel&&(
+                  <div style={{marginTop:12,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",border:"0.5px solid "+C.purple}}>
+                    <div style={{fontSize:11,fontWeight:500,color:C.purpleD,marginBottom:8}}>
+                      Assinantes ativos em {mrrEvolucao.find(m=>m.mesKey===mesSel)?.mesLabel} ({mesDetalhes.length})
+                    </div>
+                    {mesDetalhes.length===0?<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Nenhum assinante com valor cadastrado neste mes.</div>:
+                      mesDetalhes.map(a=>(
+                        <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                          <div style={{flex:1,fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>{a.nome}</div>
+                          <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>{a.tipoAssinatura||"—"}</div>
+                          <div style={{fontSize:12,fontWeight:500,color:C.tealD}}>R${a.valorMensal}/mes</div>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -2097,6 +2169,32 @@ const LTV = () => {
       )}
 
       <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
+        {(()=>{
+          const [sortCol, setSortCol] = useState("cicloAtual");
+          const [sortDir, setSortDir] = useState("desc");
+          const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else {setSortCol(col);setSortDir("desc");} };
+          const Th = ({col,label}) => (
+            <th onClick={()=>toggleSort(col)} style={{padding:"7px 10px",textAlign:col==="nome"?"left":"center",fontWeight:500,color:sortCol===col?C.teal:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em",cursor:"pointer",userSelect:"none",whiteSpace:"nowrap"}}>
+              {label} {sortCol===col?(sortDir==="asc"?"↑":"↓"):""}
+            </th>
+          );
+          const sorted = [...assinantes].sort((a,b)=>{
+            let vA,vB;
+            if(sortCol==="nome"){vA=a.nome||"";vB=b.nome||""; return sortDir==="asc"?vA.localeCompare(vB):vB.localeCompare(vA);}
+            const assinA=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+            const assinB=calcAssinatura(b.tipoAssinatura,b.dataInicioAssinatura);
+            if(sortCol==="cicloAtual"){vA=assinA?assinA.cicloAtual:0;vB=assinB?assinB.cicloAtual:0;}
+            else if(sortCol==="valorMensal"){vA=a.valorMensal||0;vB=b.valorMensal||0;}
+            else if(sortCol==="ltvAtual"){
+              const cA=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assinA?assinA.cicloAtual:0);
+              const cB=b.cancelado?calcCiclosCancelado(b.dataInicioAssinatura,b.dataCancelamento):(assinB?assinB.cicloAtual:0);
+              vA=(a.valorMensal||0)*cA+(a.gasto||0);vB=(b.valorMensal||0)*cB+(b.gasto||0);
+            }
+            else if(sortCol==="diasCobranca"){vA=assinA?assinA.diasParaCobranca:999;vB=assinB?assinB.diasParaCobranca:999;}
+            else{vA=0;vB=0;}
+            return sortDir==="asc"?vA-vB:vB-vA;
+          });
+          return (
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
           <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",flex:1}}>Assinantes individuais</div>
           <div style={{display:"flex",gap:8}}>
@@ -2120,13 +2218,18 @@ const LTV = () => {
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
             <thead>
               <tr style={{background:"var(--color-background-primary)"}}>
-                {["Nome","Plano","Ciclo","Valor/mes","LTV atual","LTV projetado","Status"].map(h=>(
-                  <th key={h} style={{padding:"7px 10px",textAlign:h==="Nome"?"left":"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>{h}</th>
-                ))}
+                  <Th col="nome" label="Nome"/>
+                  <Th col="plano" label="Plano"/>
+                  <Th col="cicloAtual" label="Ciclo total"/>
+                  <Th col="valorMensal" label="R$/mes"/>
+                  <Th col="ltvAtual" label="LTV atual"/>
+                  <Th col="ltvAtual" label="LTV projetado"/>
+                  <Th col="diasCobranca" label="Prox. cobr."/>
+                  <th style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Status</th>
               </tr>
             </thead>
             <tbody>
-              {assinantes.sort((a,b)=>(a.cancelado?1:0)-(b.cancelado?1:0)).map(a=>{
+              {sorted.map(a=>{
                 const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
                 const vm = parseFloat(a.valorMensal)||0;
                 const ciclosPagos = a.cancelado ? calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento) : (assin?assin.cicloAtual:0);
@@ -2135,7 +2238,7 @@ const LTV = () => {
                 const ltvProj = ltvAtual+vm*ciclosRest;
                 return (
                   <tr key={a.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",opacity:a.cancelado?0.6:1}}>
-                    <td style={{padding:"7px 10px",fontWeight:500,color:"var(--color-text-primary)"}}>{a.nome}</td>
+                    <td style={{padding:"7px 10px"}}><button onClick={()=>onAbrir&&onAbrir(a.id)} style={{background:"none",border:"none",cursor:onAbrir?"pointer":"default",fontWeight:500,color:onAbrir?C.teal:"var(--color-text-primary)",fontSize:12,padding:0,textAlign:"left"}}>{a.nome}</button></td>
                     <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</td>
                     <td style={{padding:"7px 10px",textAlign:"center",color:C.purpleD,fontWeight:500}}>{assin?assin.cicloNoPeriodo+"/"+assin.ciclosTotais:"—"}</td>
                     <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)"}}>{vm>0?"R$"+vm.toFixed(0):"—"}</td>
@@ -2289,7 +2392,7 @@ export default function App() {
         </div>
       )}
       {tab==="historico"&&<Historico/>}
-      {tab==="dashclub"&&<LTV/>}
+      {tab==="dashclub"&&<LTV onAbrir={(id)=>{abrirClienteGlobal(id);setTab("kanban");}}/>}
       {tab==="guia"&&<Guia/>}
       {tab==="backup"&&<Backup onRestore={onRestore}/>}
       {tab==="config"&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
