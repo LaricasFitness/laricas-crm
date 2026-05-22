@@ -547,9 +547,23 @@ const Historico = () => {
 };
 
 
+
+const prioScore = (c) => {
+  // Stage bonus
+  const stageBonus = {em_conversa:1000, proposta_feita:1000, primeiro_contato:200, lead:0, convertido:0, encerrado:0}[c.etapa] || 0;
+  // Objective bonus
+  const objBonus = {falta_uma:500, club:400, habit_rebuild:150, reativacao:200}[c.objetivo] || 0;
+  // Ciclo adjustment: club with ciclo <= 60 gets full bonus, > 60 gets reduced
+  const cicloAdj = (c.objetivo === "club" && c.cicloMedio > 60) ? -100 : 0;
+  // Probability
+  const prob = c.prob || 0;
+  return stageBonus + objBonus + cicloAdj + prob;
+};
+
 const Kanban = ({ onAbrir }) => {
   const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true); const [conversoes,setConversoes]=useState([]);
   const [pages,setPages]=useState({}); // {etapaId_grupo: pageIndex}
+  const [filtroHoje,setFiltroHoje]=useState(false);
   const [busca,setBusca]=useState("");
   const [abertos,setAbertos]=useState({});
   const toggleGrupo=(etapaId,grupo)=>{ const k=etapaId+"_"+grupo; setAbertos(a=>({...a,[k]:!a[k]})); };
@@ -569,21 +583,24 @@ const Kanban = ({ onAbrir }) => {
   const amanha=new Date(Date.now()+86400000).toISOString().split("T")[0];
 
   const filtrar=(lista)=>{
-    if(!busca.trim()) return lista;
+    let r = lista;
+    if(filtroHoje) r = r.filter(c=>c.dataProximoContato===hoje);
+    if(!busca.trim()) return r;
     const q=busca.toLowerCase();
-    return lista.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q));
+    return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q));
   };
 
   const porEtapa=(id)=>{
     const grupo=filtrar(clientes.filter(c=>c.etapa===id));
-    // Sort: urgency first (date), then probability within same date
-    const byProbThenDate = (a,b) => b.prob - a.prob;
-    const byDateThenProb = (a,b) => a.dataProximoContato > b.dataProximoContato ? 1 : a.dataProximoContato < b.dataProximoContato ? -1 : b.prob - a.prob;
-    const vencidos=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje).sort(byDateThenProb);
-    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byProbThenDate);
-    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort(byProbThenDate);
-    const depois=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato>amanha).sort(byDateThenProb);
-    const semData=grupo.filter(c=>!c.dataProximoContato).sort(byProbThenDate);
+    // Sort by priority score (objective + stage + probability)
+    // Overdue always goes to top; within each group: priority score descending
+    const byPrio = (a,b) => prioScore(b) - prioScore(a);
+    const byDateThenPrio = (a,b) => a.dataProximoContato > b.dataProximoContato ? 1 : a.dataProximoContato < b.dataProximoContato ? -1 : prioScore(b) - prioScore(a);
+    const vencidos=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje).sort(byDateThenPrio);
+    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byPrio);
+    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort(byPrio);
+    const depois=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato>amanha).sort(byDateThenPrio);
+    const semData=grupo.filter(c=>!c.dataProximoContato).sort(byPrio);
     return {vencidos,deHoje,deAmanha,depois,semData,total:grupo.length};
   };
 
@@ -673,6 +690,9 @@ const Kanban = ({ onAbrir }) => {
           <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por nome, ID ou telefone..." style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
         </div>
         <div style={{ fontSize:13,color:"var(--color-text-tertiary)",whiteSpace:"nowrap" }}>{clientes.length} clientes</div>
+        <button onClick={()=>setFiltroHoje(f=>!f)} style={{ padding:"5px 14px",borderRadius:8,fontSize:12,fontWeight:500,background:filtroHoje?C.amber:"var(--color-background-secondary)",border:"0.5px solid "+(filtroHoje?C.amber:"var(--color-border-tertiary)"),color:filtroHoje?C.amberD:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>
+          {filtroHoje?"⚡ Hoje ×":"⚡ Ver hoje"}
+        </button>
         <button onClick={carregar} style={{ padding:"5px 12px",borderRadius:8,fontSize:12,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>↺</button>
       </div>
       <div style={{ overflowX:"auto",paddingBottom:8 }}>
@@ -1244,6 +1264,111 @@ const ConfigSupabase = ({ onSalvo }) => {
   );
 };
 
+
+const Guia = () => {
+  const Section = ({title, children}) => (
+    <div style={{ marginBottom:24 }}>
+      <div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:10,paddingBottom:6,borderBottom:"0.5px solid var(--color-border-tertiary)" }}>{title}</div>
+      {children}
+    </div>
+  );
+  const Item = ({label, value}) => (
+    <div style={{ display:"flex",gap:12,marginBottom:8,fontSize:13 }}>
+      <div style={{ minWidth:180,fontWeight:500,color:"var(--color-text-primary)",flexShrink:0 }}>{label}</div>
+      <div style={{ color:"var(--color-text-secondary)",lineHeight:1.5 }}>{value}</div>
+    </div>
+  );
+  const Block = ({title,cor,children}) => (
+    <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginBottom:10,borderLeft:"3px solid "+cor }}>
+      <div style={{ fontSize:12,fontWeight:500,color:cor,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em" }}>{title}</div>
+      {children}
+    </div>
+  );
+  return (
+    <div style={{ maxWidth:700 }}>
+      <div style={{ background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:10,padding:"14px 16px",marginBottom:24 }}>
+        <div style={{ fontSize:14,fontWeight:500,color:C.tealD,marginBottom:4 }}>Guia de uso — Laricas CRM</div>
+        <div style={{ fontSize:12,color:C.tealD,lineHeight:1.6 }}>Este guia documenta as premissas, logicas e regras do sistema para garantir consistencia entre os operadores.</div>
+      </div>
+
+      <Section title="🎯 Objetivos de conversao">
+        <Block title="Reativacao → 2a compra" cor={C.teal}>
+          <Item label="Quando" value="Cliente com 1 pedido, ou com 2 pedidos e ciclo > 60 dias"/>
+          <Item label="Objetivo" value="Gerar a proxima compra — nao oferecer Club ainda"/>
+          <Item label="Abordagem" value="Curadoria personalizada com base no produto comprado. Sugerir o proximo sabor."/>
+          <Item label="Cupom" value="VOLTA10 — valido 5 dias. Nunca sem prazo."/>
+        </Block>
+        <Block title="Falta Uma → 3a compra (aha moment)" cor={C.amber}>
+          <Item label="Quando" value="2 pedidos com ciclo ≤ 60 dias"/>
+          <Item label="Objetivo" value="Gerar a 3a compra — e so entao oferecer Club"/>
+          <Item label="Abordagem" value="Curadoria dos dois produtos ja comprados + sugestao do terceiro. Nao revelar intencao de venda ainda."/>
+          <Item label="Prioridade" value="Maxima — janela fecha se ciclo passar de 90 dias sem contato"/>
+        </Block>
+        <Block title="Club — habito formado" cor={C.green}>
+          <Item label="Quando" value="3+ pedidos com ciclo ≤ 90 dias"/>
+          <Item label="Objetivo" value="Converter para assinatura Club"/>
+          <Item label="Angulos" value="3o pedido: emocional (qual foi o favorito?). 4-6o: financeiro (calculo de economia). 7o+: surpresa (ainda nao tem o Club?)."/>
+          <Item label="Calculo" value="Mostrar total gasto + frete acumulado vs preco do Club. Numeros reais do Shopify."/>
+          <Item label="Preco" value="Desconto de 20% so em reuniao presencial — nunca no WhatsApp."/>
+        </Block>
+        <Block title="Reconstruir habito → Club so depois" cor={C.coral}>
+          <Item label="Quando" value="3+ pedidos com ciclo > 90 dias"/>
+          <Item label="Objetivo" value="Reativar a compra — Club so apos nova compra"/>
+          <Item label="Atencao" value="Nao oferecer Club neste fluxo. Foco em gerar a proxima compra primeiro."/>
+        </Block>
+      </Section>
+
+      <Section title="📊 Probabilidade de conversao">
+        <Item label="Alta (≥ 40%)" value="Falta Uma com ciclo curto, ou cliente com muitos pedidos e ciclo regular"/>
+        <Item label="Media (25–39%)" value="Club com ciclo longo, ou reativacao quente (< 30 dias)"/>
+        <Item label="Baixa (< 25%)" value="Reativacao fria, ou ciclo muito longo"/>
+        <Item label="Modificadores positivos" value="Fora de SP (+20%) — frete pesa mais na decisao pelo Club. Gasto total alto (+35%)."/>
+        <Item label="Modificadores negativos" value="Fora da janela de 30 dias (-28%). Gasto total baixo (-15%)."/>
+        <Item label="Teto" value="Maxima de 72% — nenhum lead e certeza de conversao."/>
+      </Section>
+
+      <Section title="📋 Prioridade no Kanban">
+        <Item label="1° Em Conversa / Proposta Feita" value="Conversa ja iniciada — risco de esfriar. Prioridade maxima."/>
+        <Item label="2° Falta Uma" value="Janela curta. Cada dia sem contato reduz chance."/>
+        <Item label="3° Club habito" value="Candidata natural — abordagem tranquila mas eficiente."/>
+        <Item label="4° Data vencida" value="Compromisso do operador que nao foi cumprido."/>
+        <Item label="5° Alta probabilidade" value="Modelo indica boa chance independente do objetivo."/>
+        <Item label="6° Reativacao / Reconstruir" value="Menor ROI de tempo. Trabalhar depois das prioridades acima."/>
+        <Item label="Filtro Hoje" value="Botao ⚡ Ver hoje — exibe apenas clientes com data de contato = hoje, com a ordenacao de prioridade acima."/>
+      </Section>
+
+      <Section title="💬 Regras de abordagem">
+        <Item label="Primeiro contato" value="Mover para 'Primeiro Contato' so apos enviar a primeira mensagem."/>
+        <Item label="Cupom VOLTA10" value="Sempre com prazo de 5 dias. Nunca oferecer sem prazo."/>
+        <Item label="Preco do Club" value="Usar preco cheio no WhatsApp. Desconto de 20% so como fechamento em reuniao."/>
+        <Item label="Frase de impacto" value="Pacientes satisfeitos esquecem. Pacientes encantados indicam."/>
+        <Item label="Sequencia" value="T1 abertura → T2 curadoria ou calculo → T3 objecoes → T4 fechamento. Nunca pular etapas."/>
+        <Item label="Club apos compra" value="So oferecer Club apos a 3a compra (aha moment). Excecao: cliente com 7+ pedidos pode receber abordagem em qualquer etapa."/>
+      </Section>
+
+      <Section title="📥 Importacao de listas">
+        <Item label="Formato" value="Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Ultimo Pedido, CEP, Lista"/>
+        <Item label="CEP" value="Iniciados em 0 (01xxx–09xxx) = SP / Grande SP. Demais = Fora de SP."/>
+        <Item label="Datas" value="Aceita AAAA-MM-DD, DD/MM/AAAA ou serial do Excel."/>
+        <Item label="Duplicata" value="Cliente com mesmo Customer ID: lista e acrescentada no perfil. Dados existentes nao sao alterados."/>
+        <Item label="Triagem automatica" value="Se tiver datas + CEP, o sistema calcula ciclo, objetivo e gera sequencia automaticamente."/>
+      </Section>
+
+      <Section title="💾 Backup e versoes">
+        <Item label="Dados" value="Exportar JSON antes de qualquer importacao grande (aba Backup → Exportar backup JSON)."/>
+        <Item label="Codigo" value="Vercel guarda historico de todos os deploys. Em caso de problema, ir em Deployments → 3 pontinhos → Promote to Production."/>
+        <Item label="Restaurar dados" value="Aba Backup → Restaurar backup → selecionar o arquivo JSON exportado."/>
+      </Section>
+
+      <Section title="🎯 Metas Club 2026">
+        {[["Maio","20"],["Junho","36"],["Julho","36"],["Agosto","36"],["Setembro","71"],["Outubro","36"],["Novembro","71"],["Dezembro","20"]].map(([m,v])=>(
+          <Item key={m} label={m+" 2026"} value={v+" novos assinantes Club"}/>
+        ))}
+      </Section>
+    </div>
+  );
+};
+
 export default function App() {
   const [tab,setTab]=useState("kanban");
   const [clienteId,setClienteId]=useState(null);
@@ -1271,6 +1396,7 @@ export default function App() {
         <T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
+        <T label="📖 Guia" active={tab==="guia"} color={C.teal} onClick={()=>setTab("guia")}/>
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
       </div>
@@ -1278,6 +1404,7 @@ export default function App() {
       {tab==="import"&&<ImportarLista onSalvo={onSalvo}/>}
       {tab==="triagem"&&<TriagemForm onSalvo={onSalvo}/>}
       {tab==="historico"&&<Historico/>}
+      {tab==="guia"&&<Guia/>}
       {tab==="backup"&&<Backup onRestore={onRestore}/>}
       {tab==="config"&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
     </div>
