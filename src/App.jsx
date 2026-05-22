@@ -2247,9 +2247,9 @@ const LTV = ({ onAbrir }) => {
         </div>
       )}
 
-      <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
-        <TabelaAssinantes assinantes={assinantes} onAbrir={onAbrir}/>
-        
+      <TabelaAssinantes assinantes={assinantes} onAbrir={onAbrir}/>
+
+    </div>
   );
 };
 
