@@ -269,7 +269,21 @@ const Perfil = ({ clienteId, onVoltar }) => {
   const [c,setC]=useState(null); const [confirmDel,setConfirmDel]=useState(false); const [salvando,setSalvando]=useState(false); const [toast,setToast]=useState("");
   useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(cl); }); }, [clienteId]);
   const save = async (updates) => { const novo={...c,...updates}; setC(novo); try { await dbSave(novo); } catch(e) {} };
-  const mover = async (etapaId) => { setSalvando(true); await save({etapa:etapaId}); setSalvando(false); };
+  const mover = async (etapaId) => {
+    setSalvando(true);
+    const hist = (c.historicoEtapas || []).slice(-9); // keep last 9, adding current = 10
+    hist.push({ etapa: c.etapa, data: new Date().toLocaleDateString("pt-BR"), hora: new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) });
+    await save({ etapa: etapaId, historicoEtapas: hist });
+    setSalvando(false);
+  };
+  const desfazer = async () => {
+    const hist = [...(c.historicoEtapas || [])];
+    if (hist.length === 0) return;
+    const anterior = hist.pop();
+    setSalvando(true);
+    await save({ etapa: anterior.etapa, historicoEtapas: hist });
+    setSalvando(false);
+  };
   const avancar = () => save({stepAtual:Math.min(c.stepAtual+1,c.seq.length-1)});
   const deletar = async () => { if(!confirmDel){setConfirmDel(true);setTimeout(()=>setConfirmDel(false),3000);return;} try { await dbDelete(clienteId); } catch(e) {} onVoltar(); };
   const calcularCiclo = async (dp2, du2, fora2) => {
@@ -289,6 +303,12 @@ const Perfil = ({ clienteId, onVoltar }) => {
       <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:16 }}>
         <button onClick={onVoltar} style={{ background:"none",border:"none",color:C.teal,fontSize:13,fontWeight:500,cursor:"pointer",padding:0 }}>← Kanban</button>
         <div style={{ flex:1 }}><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2 }}>{c.customerId?("ID "+c.customerId+" · "):""}{c.nome}</div><div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)",lineHeight:1.3 }}>{c.proximaAcao||"— sem próxima ação"}</div></div>
+        {c.historicoEtapas&&c.historicoEtapas.length>0&&(
+          <button onClick={desfazer} disabled={salvando} title={"Voltar para: "+ETAPAS.find(e=>e.id===(c.historicoEtapas[c.historicoEtapas.length-1]||{}).etapa)?.label}
+            style={{ background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:6,padding:"4px 10px",fontSize:11,color:C.amberD,cursor:salvando?"default":"pointer",fontWeight:500 }}>
+            ↩ Desfazer
+          </button>
+        )}
         <button onClick={deletar} style={{ background:confirmDel?C.coralL:"none",border:"0.5px solid "+(confirmDel?C.coral:"var(--color-border-tertiary)"),borderRadius:6,padding:"4px 10px",fontSize:11,color:confirmDel?C.coralD:"var(--color-text-tertiary)",cursor:"pointer" }}>{confirmDel?"Confirmar?":"Remover"}</button>
       </div>
       {semSeq&&(
@@ -779,10 +799,7 @@ const Kanban = ({ onAbrir }) => {
     setLoading(true);
     try {
       const [todos, conv] = await Promise.all([dbGetAll(), dbGetConversoes()]);
-      // Mostrar todos exceto encerrados com mais de 90 dias
-      const cutoff = new Date(Date.now() - 90*86400000).toISOString();
-      const visiveis = todos.filter(c => c.etapa !== "encerrado" || (c.atualizado_em||"") > cutoff);
-      setClientes(visiveis); setConversoes(conv);
+      setClientes(todos); setConversoes(conv);
     } catch(e) { setClientes([]); setConversoes([]); }
     setLoading(false);
   }, []);
