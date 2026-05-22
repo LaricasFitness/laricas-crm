@@ -76,6 +76,16 @@ const dbSave    = async (c)  => { await sb("/clientes", {method:"POST", body:{id
 const dbBulkSave= async (cs) => { if(!cs.length)return; await sb("/clientes", {method:"POST", body:cs.map(c=>({id:c.id,dados:c,atualizado_em:new Date().toISOString()})), pref:"resolution=merge-duplicates"}); };
 const dbDelete  = async (id) => { await sb("/clientes?id=eq."+id, {method:"DELETE"}); };
 const dbTest    = async ()   => { await sb("/clientes?limit=1"); return true; };
+const dbGetAssinantes = async () => {
+  try {
+    const r = await sb("/clientes?select=dados&dados->>etapa=eq.experiencia");
+    return (r||[]).map(x=>x.dados).filter(Boolean);
+  } catch(e) {
+    // Fallback: get all and filter
+    try { const all = await dbGetAll(); return all.filter(c=>c.etapa==="experiencia"); }
+    catch(e2) { return []; }
+  }
+};
 const dbGetConversoes = async () => {
   try { return await sb("/conversoes?select=resultado,registrado_em,ciclo_medio,pedidos,prob_estimada&order=registrado_em.desc") || []; }
   catch(e) { return []; }
@@ -332,6 +342,122 @@ const Perfil = ({ clienteId, onVoltar }) => {
         </div>
       )}
       {toast&&<div style={{ position:"fixed",top:24,left:"50%",transform:"translateX(-50%)",background:C.green,color:"#fff",padding:"10px 24px",borderRadius:30,fontSize:14,fontWeight:500,zIndex:999,boxShadow:"0 4px 20px rgba(0,0,0,0.15)" }}>{toast}</div>}
+      {c.etapa==="experiencia"&&(()=>{
+        const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura);
+        const corCobranca = assin ? (assin.diasParaCobranca<=7?C.coral:assin.diasParaCobranca<=15?C.amber:C.green) : "var(--color-text-tertiary)";
+        const corFim = assin ? (assin.diasParaFim<=30?C.coral:assin.diasParaFim<=60?C.amber:C.teal) : "var(--color-text-tertiary)";
+        return (
+          <div style={{ background:"var(--color-background-primary)",border:"0.5px solid "+C.purple,borderLeft:"3px solid "+C.purple,borderRadius:12,padding:"16px",marginBottom:12 }}>
+            <div style={{ fontSize:13,fontWeight:500,color:C.purpleD,marginBottom:12 }}>⭐ Assinatura Club</div>
+            <div style={{ marginBottom:10 }}>
+              <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Tipo de assinatura</div>
+              <div style={{ display:"flex",gap:8 }}>
+                {TIPOS_ASSINATURA.map(t=>(
+                  <button key={t.id} onClick={()=>save({tipoAssinatura:t.id})}
+                    style={{ flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:c.tipoAssinatura===t.id?C.purple:"var(--color-background-secondary)",color:c.tipoAssinatura===t.id?"#fff":"var(--color-text-secondary)",border:"0.5px solid "+(c.tipoAssinatura===t.id?C.purple:"var(--color-border-tertiary)") }}>
+                    {t.label}<br/><span style={{ fontSize:10,fontWeight:400 }}>{t.ciclosTotais} meses</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
+              <div>
+                <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Data de inicio da assinatura</div>
+                <input type="date" value={c.dataInicioAssinatura||""} onChange={e=>save({dataInicioAssinatura:e.target.value})}
+                  style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
+              </div>
+              <div>
+                <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Valor mensal R$</div>
+                <input type="number" min="0" step="0.01" placeholder="Ex: 89.90" value={c.valorMensal||""} onChange={e=>save({valorMensal:parseFloat(e.target.value)||0})}
+                  style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
+              </div>
+            </div>
+            {assin&&(()=>{
+              const vm = parseFloat(c.valorMensal)||0;
+              const ciclosPagos = c.cancelado ? calcCiclosCancelado(c.dataInicioAssinatura, c.dataCancelamento) : assin.cicloAtual;
+              const ltvPago = vm * ciclosPagos;
+              const ciclosRestantes = c.cancelado ? 0 : assin.ciclosTotais - assin.cicloNoPeriodo;
+              const ltvProjetado = ltvPago + vm * ciclosRestantes;
+              const ltvTotal = ltvPago + (c.gasto||0);
+              const ltvTotalProjetado = ltvProjetado + (c.gasto||0);
+              return (vm > 0 && (
+                <div style={{ background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
+                  <div style={{ fontSize:11,fontWeight:500,color:C.tealD,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10 }}>LTV do cliente</div>
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8 }}>
+                    <div style={{ background:"#fff",borderRadius:8,padding:"8px 10px" }}>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Pre-assinatura</div>
+                      <div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)" }}>R${(c.gasto||0).toFixed(0)}</div>
+                    </div>
+                    <div style={{ background:"#fff",borderRadius:8,padding:"8px 10px" }}>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Club pago</div>
+                      <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvPago.toFixed(0)}</div>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginTop:1 }}>{assin.cicloAtual}x R${vm}</div>
+                    </div>
+                    <div style={{ background:"#fff",borderRadius:8,padding:"8px 10px" }}>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>LTV atual</div>
+                      <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvTotal.toFixed(0)}</div>
+                    </div>
+                    <div style={{ background:C.tealL,borderRadius:8,padding:"8px 10px",border:"0.5px solid "+C.teal }}>
+                      <div style={{ fontSize:9,color:C.tealD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>LTV projetado</div>
+                      <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvTotalProjetado.toFixed(0)}</div>
+                      <div style={{ fontSize:9,color:C.tealD,marginTop:1 }}>+{ciclosRestantes}x R${vm}</div>
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+            {assin&&(
+              <div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8 }}>
+                  <div style={{ background:C.purpleL,borderRadius:8,padding:"10px 12px" }}>
+                    <div style={{ fontSize:10,color:C.purpleD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>Ciclo atual</div>
+                    <div style={{ fontSize:22,fontWeight:500,color:C.purpleD }}>{assin.cicloNoPeriodo}°<span style={{ fontSize:12,fontWeight:400 }}> / {assin.ciclosTotais}</span></div>
+                    <div style={{ fontSize:10,color:C.purpleD,marginTop:2 }}>mes {assin.cicloAtual} total</div>
+                  </div>
+                  <div style={{ background:corCobranca+"18",borderRadius:8,padding:"10px 12px",border:"0.5px solid "+corCobranca }}>
+                    <div style={{ fontSize:10,color:corCobranca,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>Proxima cobranca</div>
+                    <div style={{ fontSize:13,fontWeight:500,color:corCobranca }}>{assin.proximaCobranca}</div>
+                    <div style={{ fontSize:10,color:corCobranca,marginTop:2 }}>em {assin.diasParaCobranca} dias</div>
+                  </div>
+                  <div style={{ background:corFim+"18",borderRadius:8,padding:"10px 12px",border:"0.5px solid "+corFim }}>
+                    <div style={{ fontSize:10,color:corFim,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>Fim da fidelidade</div>
+                    <div style={{ fontSize:13,fontWeight:500,color:corFim }}>{assin.fimPeriodo}</div>
+                    <div style={{ fontSize:10,color:corFim,marginTop:2 }}>em {assin.diasParaFim} dias</div>
+                  </div>
+                  <div style={{ background:"var(--color-background-secondary)",borderRadius:8,padding:"10px 12px" }}>
+                    <div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Status</div>
+                    <div style={{ fontSize:12,fontWeight:500,color:c.cancelado?C.coralD:assin.ativa?C.greenD:"var(--color-text-tertiary)" }}>{c.cancelado?"Cancelado":assin.ativa?"Ativa":"Aguardando"}</div>
+                  </div>
+                </div>
+                {!c.cancelado&&assin.diasParaFim<=30&&<div style={{ background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.coralD,fontWeight:500 }}>⚠ Fidelidade encerra em {assin.diasParaFim} dias — hora de trabalhar a renovacao!</div>}
+                <div style={{ marginTop:10,padding:"10px 12px",background:c.cancelado?C.coralL:"var(--color-background-secondary)",borderRadius:8,border:"0.5px solid "+(c.cancelado?C.coral:"var(--color-border-tertiary)") }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:11,fontWeight:500,color:c.cancelado?C.coralD:"var(--color-text-primary)",marginBottom:2 }}>{c.cancelado?"✗ Assinatura cancelada":"Marcar como cancelada"}</div>
+                      {c.cancelado&&<div style={{ fontSize:11,color:C.coralD }}>Data: {c.dataCancelamento||"—"} · LTV congelado em R${(calcCiclosCancelado(c.dataInicioAssinatura,c.dataCancelamento)*(parseFloat(c.valorMensal)||0)+(c.gasto||0)).toFixed(0)}</div>}
+                    </div>
+                    {!c.cancelado&&(
+                      <button onClick={()=>{
+                        const hoje2=new Date().toISOString().split("T")[0];
+                        save({cancelado:true,dataCancelamento:hoje2});
+                      }} style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.coral,color:"#fff",border:"none" }}>
+                        Registrar cancelamento
+                      </button>
+                    )}
+                    {c.cancelado&&(
+                      <button onClick={()=>save({cancelado:false,dataCancelamento:""})} style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:"none",color:C.tealD,border:"0.5px solid "+C.teal }}>
+                        Reativar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {!c.tipoAssinatura&&<div style={{ fontSize:12,color:"var(--color-text-tertiary)",textAlign:"center",padding:"8px 0" }}>Selecione o tipo de assinatura para ver os calculos automaticos.</div>}
+          </div>
+        );
+      })()}
+
       <div style={{ padding:"14px 16px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)" }}>
         <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:10 }}>Encerrar atendimento</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>{[
@@ -460,6 +586,8 @@ const Historico = () => {
     dbGetConversoes().then(data=>{ setConv(data); setLoading(false); });
   }, []);
 
+  const [assinantes, setAssinantes] = useState([]);
+  useEffect(() => { dbGetAssinantes().then(setAssinantes); }, []);
   if (loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Carregando historico...</div>;
   if (conv.length===0) return (
     <div style={{textAlign:"center",padding:"48px 24px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px dashed var(--color-border-tertiary)"}}>
@@ -507,6 +635,54 @@ const Historico = () => {
         ))}
       </div>
 
+      {/* LTV Global do Club */}
+      {assinantes.length > 0 && (() => {
+        const ativos = assinantes.filter(a=>!a.cancelado);
+        const cancelados = assinantes.filter(a=>a.cancelado);
+        const comValor = ativos.filter(a=>a.valorMensal>0);
+        const ltvRealizadoAtivos = comValor.reduce((acc,a) => {
+          const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
+          return acc + (a.valorMensal||0) * (assin?assin.cicloAtual:0) + (a.gasto||0);
+        }, 0);
+        const ltvCancelados = cancelados.filter(a=>a.valorMensal>0).reduce((acc,a) => {
+          const ciclos = calcCiclosCancelado(a.dataInicioAssinatura, a.dataCancelamento);
+          return acc + (a.valorMensal||0) * ciclos + (a.gasto||0);
+        }, 0);
+        const ltvPagoTotal = ltvRealizadoAtivos + ltvCancelados;
+        const ltvProjetadoTotal = comValor.reduce((acc,a) => {
+          const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
+          const vm = a.valorMensal||0;
+          const ciclosRestantes = assin ? assin.ciclosTotais - assin.cicloNoPeriodo : 0;
+          return acc + vm * (assin?assin.cicloAtual:0) + vm * ciclosRestantes + (a.gasto||0);
+        }, 0);
+        const mrr = comValor.reduce((acc,a) => acc + (a.valorMensal||0), 0);
+        const semValor = ativos.length - comValor.length;
+        return (
+          <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
+              LTV Global do Club — {ativos.length} ativos {cancelados.length>0&&<span style={{color:C.coralD,marginLeft:4}}>· {cancelados.length} cancelados</span>} {semValor>0&&<span style={{color:C.amber,marginLeft:4}}>· {semValor} sem valor</span>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
+                <div style={{fontSize:22,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{comValor.length} ativos × media R${comValor.length>0?(mrr/comValor.length).toFixed(0):0}</div>
+              </div>
+              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.green}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV atual (realizado)</div>
+                <div style={{fontSize:22,fontWeight:500,color:C.greenD}}>R${ltvPagoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>historico + club pago ate hoje</div>
+              </div>
+              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV projetado (periodo)</div>
+                <div style={{fontSize:22,fontWeight:500,color:C.purpleD}}>R${ltvProjetadoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>incluindo ciclos restantes do plano</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Tabela por mes */}
       <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
         <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Historico por mes</div>
@@ -551,6 +727,78 @@ const Historico = () => {
 
 
 
+
+const TIPOS_ASSINATURA = [
+  {id:"trimestral", label:"Trimestral", ciclosTotais:3},
+  {id:"semestral",  label:"Semestral",  ciclosTotais:6},
+  {id:"anual",      label:"Anual",      ciclosTotais:12},
+];
+
+const addMeses = (data, meses) => {
+  const d = new Date(data);
+  d.setMonth(d.getMonth() + meses);
+  return d;
+};
+
+const calcAssinatura = (tipo, dataInicio) => {
+  if (!tipo || !dataInicio) return null;
+  const t = TIPOS_ASSINATURA.find(t=>t.id===tipo);
+  if (!t) return null;
+  const inicio = new Date(dataInicio + "T12:00:00");
+  const hoje = new Date();
+
+  // Ciclo mensal atual (1-indexed)
+  // Quantos meses completos se passaram desde o inicio
+  let cicloAtual = 0;
+  let proxData = new Date(inicio);
+  while (proxData <= hoje) {
+    cicloAtual++;
+    proxData = addMeses(inicio, cicloAtual);
+  }
+  cicloAtual = Math.max(1, cicloAtual);
+
+  // Proxima cobranca mensal
+  const proximaCobranca = addMeses(inicio, cicloAtual);
+
+  // Fim do periodo de fidelidade atual
+  // Quantos periodos completos ja se passaram
+  const ciclosTotais = t.ciclosTotais;
+  const periodosCompletos = Math.floor((cicloAtual - 1) / ciclosTotais);
+  const fimPeriodoAtual = addMeses(inicio, (periodosCompletos + 1) * ciclosTotais);
+
+  // Ciclo dentro do periodo (ex: mes 2 de 12 no anual)
+  const cicloNoPeriodo = ((cicloAtual - 1) % ciclosTotais) + 1;
+
+  const fmt = (d) => d.toLocaleDateString("pt-BR");
+  const diasParaCobranca = Math.ceil((proximaCobranca.getTime() - hoje.getTime()) / 86400000);
+  const diasParaFim = Math.ceil((fimPeriodoAtual.getTime() - hoje.getTime()) / 86400000);
+
+  return {
+    cicloAtual,
+    cicloNoPeriodo,
+    ciclosTotais,
+    proximaCobranca: fmt(proximaCobranca),
+    fimPeriodo: fmt(fimPeriodoAtual),
+    diasParaCobranca,
+    diasParaFim,
+    ativa: hoje >= inicio,
+  };
+};
+
+const calcCiclosCancelado = (dataInicio, dataCancelamento) => {
+  // Quantos ciclos mensais foram cobrados ate o cancelamento
+  if (!dataInicio || !dataCancelamento) return 0;
+  const inicio = new Date(dataInicio + "T12:00:00");
+  const cancel = new Date(dataCancelamento + "T12:00:00");
+  let ciclos = 0;
+  let prox = new Date(inicio);
+  while (prox <= cancel) {
+    ciclos++;
+    prox = addMeses(inicio, ciclos);
+  }
+  return Math.max(0, ciclos - 1);
+};
+
 const prioScore = (c) => {
   // Stage bonus
   const stageBonus = {em_conversa:1000, proposta_feita:1000, primeiro_contato:200, lead:0, convertido:0, encerrado:0}[c.etapa] || 0;
@@ -568,6 +816,8 @@ const Kanban = ({ onAbrir }) => {
   const [pages,setPages]=useState({}); // {etapaId_grupo: pageIndex}
   const [filtroHoje,setFiltroHoje]=useState(false);
   const [filtroClub,setFiltroClub]=useState(false);
+  const [draggedId,setDraggedId]=useState(null);
+  const [dragOverEtapa,setDragOverEtapa]=useState(null);
   const [busca,setBusca]=useState("");
   const [abertos,setAbertos]=useState({});
   const toggleGrupo=(etapaId,grupo)=>{ const k=etapaId+"_"+grupo; setAbertos(a=>({...a,[k]:!a[k]})); };
@@ -582,6 +832,16 @@ const Kanban = ({ onAbrir }) => {
     setLoading(false);
   }, []);
   useEffect(()=>{carregar();},[carregar]);
+
+  const handleDrop = async (etapaId) => {
+    if (!draggedId || draggedId === etapaId) { setDraggedId(null); setDragOverEtapa(null); return; }
+    const cl = clientes.find(c=>c.id===draggedId);
+    if (!cl || cl.etapa === etapaId) { setDraggedId(null); setDragOverEtapa(null); return; }
+    const atualizado = {...cl, etapa:etapaId};
+    setClientes(prev=>prev.map(c=>c.id===draggedId?atualizado:c));
+    setDraggedId(null); setDragOverEtapa(null);
+    try { await dbSave(atualizado); } catch(e) {}
+  };
 
   const hoje=new Date().toISOString().split("T")[0];
   const amanha=new Date(Date.now()+86400000).toISOString().split("T")[0];
@@ -614,7 +874,12 @@ const Kanban = ({ onAbrir }) => {
     const u=cl.dataProximoContato===hoje;
     const am=cl.dataProximoContato===amanha;
     return (
-      <button onClick={()=>onAbrir(cl.id)} style={{ width:"100%",textAlign:"left",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+cl.probCor,borderRadius:8,padding:"10px",marginBottom:6,cursor:"pointer" }}>
+      <button
+        onClick={()=>{ if(!draggedId) onAbrir(cl.id); }}
+        draggable={true}
+        onDragStart={(e)=>{ e.dataTransfer.effectAllowed="move"; setDraggedId(cl.id); }}
+        onDragEnd={()=>{ setDraggedId(null); setDragOverEtapa(null); }}
+        style={{ width:"100%",textAlign:"left",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+cl.probCor,borderRadius:8,padding:"10px",marginBottom:6,cursor:draggedId===cl.id?"grabbing":"grab",opacity:draggedId===cl.id?0.4:1,transition:"opacity 0.15s" }}>
         <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{cl.customerId?"#"+cl.customerId+" · ":""}{cl.nome}</div>
         <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{cl.proximaAcao||"—"}</div>
         <div style={{ display:"flex",alignItems:"center",gap:4,marginBottom:cl.dataProximoContato?4:0 }}>
@@ -717,7 +982,11 @@ const Kanban = ({ onAbrir }) => {
                   <span style={{ fontSize:12,fontWeight:500,color:etapa.corD,flex:1 }}>{etapa.label}</span>
                   <span style={{ fontSize:11,background:etapa.cor,color:"#fff",padding:"1px 7px",borderRadius:20 }}>{total}</span>
                 </div>
-                <div style={{ border:"0.5px solid "+etapa.cor,borderTop:"none",borderRadius:"0 0 10px 10px",padding:8,minHeight:80,background:"var(--color-background-primary)" }}>
+                <div
+                  onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect="move"; setDragOverEtapa(etapa.id); }}
+                  onDragLeave={(e)=>{ if(!e.currentTarget.contains(e.relatedTarget)) setDragOverEtapa(null); }}
+                  onDrop={(e)=>{ e.preventDefault(); handleDrop(etapa.id); }}
+                  style={{ border:"0.5px solid "+etapa.cor,borderTop:"none",borderRadius:"0 0 10px 10px",padding:8,minHeight:80,background:dragOverEtapa===etapa.id?etapa.corL+"cc":"var(--color-background-primary)",transition:"background 0.15s",outline:dragOverEtapa===etapa.id?"2px dashed "+etapa.cor:"none",outlineOffset:-2 }}>
                   <GrupoFixo label="⚠ Vencido" cor={C.coralD} items={vencidos} pageKey={etapa.id+"_vencido"}/>
                   <GrupoFixo label="⚡ Hoje" cor={C.amberD} items={deHoje} pageKey={etapa.id+"_hoje"}/>
                   {vencidos.length===0&&deHoje.length===0&&deAmanha.length===0&&depois.length===0&&semData.length===0&&(
