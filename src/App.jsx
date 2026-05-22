@@ -58,6 +58,21 @@ const dbSave    = async (c)  => { await sb("/clientes", {method:"POST", body:{id
 const dbBulkSave= async (cs) => { if(!cs.length)return; await sb("/clientes", {method:"POST", body:cs.map(c=>({id:c.id,dados:c,atualizado_em:new Date().toISOString()})), pref:"resolution=merge-duplicates"}); };
 const dbDelete  = async (id) => { await sb("/clientes?id=eq."+id, {method:"DELETE"}); };
 const dbTest    = async ()   => { await sb("/clientes?limit=1"); return true; };
+const dbSaveConversao = async (cliente, resultado) => {
+  const c = {
+    id: "conv_" + Date.now(),
+    cliente_id: cliente.id,
+    resultado,
+    objetivo: cliente.objetivo||"",
+    ciclo_medio: cliente.cicloMedio||0,
+    pedidos: cliente.p||0,
+    gasto_total: cliente.gasto||0,
+    fora_sp: cliente.fora||false,
+    prob_estimada: cliente.prob||0,
+    lista: cliente.lista||"",
+  };
+  try { await sb("/conversoes", {method:"POST", body:c, pref:"resolution=merge-duplicates"}); } catch(e) {}
+};
 
 const buildSeq = (obj, ciclo, p, fora, foraDaJanela, diasUnico) => {
   const steps = [];
@@ -261,7 +276,7 @@ const Perfil = ({ clienteId, onVoltar }) => {
         <div style={{ fontSize:14,fontWeight:500,color:etapa.corD,marginBottom:etapa.id==="lead"?6:10 }}>{etapa.emoji} {etapa.label}</div>
         {etapa.id==="lead"&&<div style={{ fontSize:12,color:etapa.corD,background:C.purpleL,borderRadius:6,padding:"5px 8px",marginBottom:10,lineHeight:1.4 }}>Mova para <strong>Primeiro Contato</strong> após enviar a primeira mensagem.</div>}
         <div style={{ fontSize:11,color:etapa.corD,marginBottom:6 }}>Mover para:</div>
-        <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{ETAPAS.filter(e=>e.id!==c.etapa).map(e=>(<button key={e.id} onClick={()=>mover(e.id)} style={{ padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:500,cursor:"pointer",background:e.corL,color:e.corD,border:"0.5px solid "+e.cor }}>{e.emoji} {e.label}</button>))}</div>
+        <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{ETAPAS.filter(e=>e.id!==c.etapa).map(e=>(<button key={e.id} onClick={async()=>{ await mover(e.id); }} style={{ padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:500,cursor:salvando?"default":"pointer",background:e.corL,color:e.corD,border:"0.5px solid "+e.cor,opacity:salvando?0.6:1 }}>{salvando?"...":e.emoji+" "+e.label}</button>))}</div>
       </div>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12 }}>
         <M label="Objetivo" value={c.objetivoLabel} cor={c.objetivoCorD}/>
