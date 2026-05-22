@@ -867,8 +867,6 @@ const Dashboard = ({ clientes, conversoes }) => {
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{typeof leadsNecessarios==="number"&&focoClubAtivos>=leadsNecessarios?"suficiente p/ meta":typeof leadsNecessarios==="number"&&faltam>0?"faltam "+(leadsNecessarios-focoClubAtivos)+" leads foco":"use filtro 🎯 Foco Club"}</div>
         </div>
       </div>
-          );
-        })()}
     </div>
   );
 };
@@ -1940,6 +1938,87 @@ const Guia = () => {
 };
 
 
+
+const TabelaAssinantes = ({ assinantes, onAbrir }) => {
+  const [sortCol, setSortCol] = useState("cicloAtual");
+  const [sortDir, setSortDir] = useState("desc");
+  const toggleSort = (col) => {
+    if (sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
+    else { setSortCol(col); setSortDir("desc"); }
+  };
+  const Th = ({col,label}) => (
+    <th onClick={()=>toggleSort(col)} style={{padding:"7px 10px",textAlign:col==="nome"?"left":"center",fontWeight:500,color:sortCol===col?C.teal:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em",cursor:"pointer",userSelect:"none",whiteSpace:"nowrap"}}>
+      {label}{sortCol===col?(sortDir==="asc"?" ↑":" ↓"):""}
+    </th>
+  );
+  const sorted = [...assinantes].sort((a,b)=>{
+    let vA,vB;
+    if(sortCol==="nome"){vA=a.nome||"";vB=b.nome||"";return sortDir==="asc"?vA.localeCompare(vB):vB.localeCompare(vA);}
+    const assinA=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+    const assinB=calcAssinatura(b.tipoAssinatura,b.dataInicioAssinatura);
+    if(sortCol==="cicloAtual"){vA=assinA?assinA.cicloAtual:0;vB=assinB?assinB.cicloAtual:0;}
+    else if(sortCol==="valorMensal"){vA=parseFloat(a.valorMensal)||0;vB=parseFloat(b.valorMensal)||0;}
+    else if(sortCol==="ltvAtual"){
+      const cA=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assinA?assinA.cicloAtual:0);
+      const cB=b.cancelado?calcCiclosCancelado(b.dataInicioAssinatura,b.dataCancelamento):(assinB?assinB.cicloAtual:0);
+      vA=(parseFloat(a.valorMensal)||0)*cA+(a.gasto||0);vB=(parseFloat(b.valorMensal)||0)*cB+(b.gasto||0);
+    }
+    else if(sortCol==="diasCobranca"){vA=assinA?assinA.diasParaCobranca:9999;vB=assinB?assinB.diasParaCobranca:9999;}
+    else{vA=0;vB=0;}
+    return sortDir==="asc"?vA-vB:vB-vA;
+  });
+  return (
+    <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
+      <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Assinantes individuais ({assinantes.length})</div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead>
+            <tr style={{background:"var(--color-background-primary)"}}>
+              <Th col="nome" label="Nome"/>
+              <Th col="plano" label="Plano"/>
+              <Th col="cicloAtual" label="Ciclo total"/>
+              <Th col="valorMensal" label="R$/mes"/>
+              <Th col="ltvAtual" label="LTV atual"/>
+              <Th col="diasCobranca" label="Prox. cobr."/>
+              <th style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(a=>{
+              const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+              const vm=parseFloat(a.valorMensal)||0;
+              const ciclosPagos=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assin?assin.cicloAtual:0);
+              const ltvAtual=vm*ciclosPagos+(a.gasto||0);
+              const ciclosRest=a.cancelado?0:(assin?assin.ciclosTotais-assin.cicloNoPeriodo:0);
+              const ltvProj=ltvAtual+vm*ciclosRest;
+              const statusLabel=a.cancelado?"Cancelado":a.falhaRenovacao?"Falha renovacao":"Ativa";
+              const statusCor=a.cancelado?C.coralD:a.falhaRenovacao?C.amberD:C.greenD;
+              const statusBg=a.cancelado?C.coralL:a.falhaRenovacao?C.amberL:C.greenL;
+              return (
+                <tr key={a.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",opacity:(a.cancelado||a.falhaRenovacao)?0.7:1}}>
+                  <td style={{padding:"7px 10px"}}>
+                    <button onClick={()=>onAbrir&&onAbrir(a.id)} style={{background:"none",border:"none",cursor:onAbrir?"pointer":"default",fontWeight:500,color:onAbrir?C.teal:"var(--color-text-primary)",fontSize:12,padding:0,textAlign:"left"}}>
+                      {a.nome}
+                    </button>
+                  </td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:C.purpleD,fontWeight:500}}>
+                    {assin?<span>{assin.cicloAtual}°<span style={{fontSize:10,color:C.purple,fontWeight:400}}> ({assin.cicloNoPeriodo}/{assin.ciclosTotais})</span></span>:"—"}
+                  </td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)"}}>{vm>0?"R$"+vm.toFixed(0):"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:C.greenD}}>{vm>0?"R$"+ltvAtual.toFixed(0):"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:assin&&assin.diasParaCobranca<=7?C.coralD:assin&&assin.diasParaCobranca<=15?C.amberD:"var(--color-text-secondary)"}}>{assin&&!a.cancelado?assin.proximaCobranca:"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center"}}><span style={{fontSize:10,fontWeight:500,background:statusBg,color:statusCor,padding:"2px 8px",borderRadius:20}}>{statusLabel}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const LTV = ({ onAbrir }) => {
   const [assinantes, setAssinantes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2169,90 +2248,8 @@ const LTV = ({ onAbrir }) => {
       )}
 
       <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
-        {(()=>{
-          const [sortCol, setSortCol] = useState("cicloAtual");
-          const [sortDir, setSortDir] = useState("desc");
-          const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else {setSortCol(col);setSortDir("desc");} };
-          const Th = ({col,label}) => (
-            <th onClick={()=>toggleSort(col)} style={{padding:"7px 10px",textAlign:col==="nome"?"left":"center",fontWeight:500,color:sortCol===col?C.teal:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em",cursor:"pointer",userSelect:"none",whiteSpace:"nowrap"}}>
-              {label} {sortCol===col?(sortDir==="asc"?"↑":"↓"):""}
-            </th>
-          );
-          const sorted = [...assinantes].sort((a,b)=>{
-            let vA,vB;
-            if(sortCol==="nome"){vA=a.nome||"";vB=b.nome||""; return sortDir==="asc"?vA.localeCompare(vB):vB.localeCompare(vA);}
-            const assinA=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
-            const assinB=calcAssinatura(b.tipoAssinatura,b.dataInicioAssinatura);
-            if(sortCol==="cicloAtual"){vA=assinA?assinA.cicloAtual:0;vB=assinB?assinB.cicloAtual:0;}
-            else if(sortCol==="valorMensal"){vA=a.valorMensal||0;vB=b.valorMensal||0;}
-            else if(sortCol==="ltvAtual"){
-              const cA=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assinA?assinA.cicloAtual:0);
-              const cB=b.cancelado?calcCiclosCancelado(b.dataInicioAssinatura,b.dataCancelamento):(assinB?assinB.cicloAtual:0);
-              vA=(a.valorMensal||0)*cA+(a.gasto||0);vB=(b.valorMensal||0)*cB+(b.gasto||0);
-            }
-            else if(sortCol==="diasCobranca"){vA=assinA?assinA.diasParaCobranca:999;vB=assinB?assinB.diasParaCobranca:999;}
-            else{vA=0;vB=0;}
-            return sortDir==="asc"?vA-vB:vB-vA;
-          });
-          return (
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",flex:1}}>Assinantes individuais</div>
-          <div style={{display:"flex",gap:8}}>
-            {["trimestral","semestral","anual"].map(tipo=>{
-              const grupo = comValor.filter(a=>a.tipoAssinatura===tipo);
-              if(grupo.length===0) return null;
-              const mediaVM = Math.round(grupo.reduce((acc,a)=>acc+(a.valorMensal||0),0)/grupo.length);
-              const mediaLTV = Math.round(grupo.reduce((acc,a)=>{
-                const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
-                return acc+(a.valorMensal||0)*(assin?assin.ciclosTotais:0)+(a.gasto||0);
-              },0)/grupo.length);
-              return (<div key={tipo} style={{background:"var(--color-background-primary)",borderRadius:8,padding:"6px 10px",textAlign:"center"}}>
-                <div style={{fontSize:9,color:"var(--color-text-tertiary)",textTransform:"capitalize",marginBottom:2}}>{tipo} ({grupo.length})</div>
-                <div style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>R${mediaVM}/mes</div>
-                <div style={{fontSize:10,color:C.purpleD}}>LTV ~R${mediaLTV}</div>
-              </div>);
-            })}
-          </div>
-        </div>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead>
-              <tr style={{background:"var(--color-background-primary)"}}>
-                  <Th col="nome" label="Nome"/>
-                  <Th col="plano" label="Plano"/>
-                  <Th col="cicloAtual" label="Ciclo total"/>
-                  <Th col="valorMensal" label="R$/mes"/>
-                  <Th col="ltvAtual" label="LTV atual"/>
-                  <Th col="ltvAtual" label="LTV projetado"/>
-                  <Th col="diasCobranca" label="Prox. cobr."/>
-                  <th style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map(a=>{
-                const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
-                const vm = parseFloat(a.valorMensal)||0;
-                const ciclosPagos = a.cancelado ? calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento) : (assin?assin.cicloAtual:0);
-                const ltvAtual = vm*ciclosPagos+(a.gasto||0);
-                const ciclosRest = a.cancelado?0:(assin?assin.ciclosTotais-assin.cicloNoPeriodo:0);
-                const ltvProj = ltvAtual+vm*ciclosRest;
-                return (
-                  <tr key={a.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",opacity:a.cancelado?0.6:1}}>
-                    <td style={{padding:"7px 10px"}}><button onClick={()=>onAbrir&&onAbrir(a.id)} style={{background:"none",border:"none",cursor:onAbrir?"pointer":"default",fontWeight:500,color:onAbrir?C.teal:"var(--color-text-primary)",fontSize:12,padding:0,textAlign:"left"}}>{a.nome}</button></td>
-                    <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</td>
-                    <td style={{padding:"7px 10px",textAlign:"center",color:C.purpleD,fontWeight:500}}>{assin?assin.cicloNoPeriodo+"/"+assin.ciclosTotais:"—"}</td>
-                    <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)"}}>{vm>0?"R$"+vm.toFixed(0):"—"}</td>
-                    <td style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:C.greenD}}>{vm>0?"R$"+ltvAtual.toFixed(0):"—"}</td>
-                    <td style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:C.purpleD}}>{vm>0&&!a.cancelado?"R$"+ltvProj.toFixed(0):a.cancelado?"Cancelado":"—"}</td>
-                    <td style={{padding:"7px 10px",textAlign:"center"}}><span style={{fontSize:10,fontWeight:500,background:a.cancelado?C.coralL:C.greenL,color:a.cancelado?C.coralD:C.greenD,padding:"2px 8px",borderRadius:20}}>{a.cancelado?"Cancelado":"Ativa"}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+        <TabelaAssinantes assinantes={assinantes} onAbrir={onAbrir}/>
+        
   );
 };
 
