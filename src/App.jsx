@@ -382,14 +382,17 @@ const Dashboard = ({ clientes, conversoes }) => {
   const faltam = Math.max(0, meta - clubMes);
   const pct = meta > 0 ? Math.min(100, Math.round(clubMes/meta*100)) : 0;
 
-  // Taxa de conversao: club / total que passou pelo Primeiro Contato
-  // "Se eu falar com X pessoas, Y% viram club"
-  const jaContatados = clientes.filter(c=>c.etapa!=="lead").length;
+  // Foco Club: clientes com objetivo club ou falta_uma (candidatos proximos ao club)
+  const focoClub = clientes.filter(c=>c.objetivo==="club"||c.objetivo==="falta_uma");
+  const focoClubAtivos = focoClub.filter(c=>c.etapa!=="encerrado"&&c.etapa!=="convertido").length;
+
+  // Taxa de conversao: club encerrado / total Foco Club que passou pelo Primeiro Contato
+  const focoContatados = focoClub.filter(c=>c.etapa!=="lead").length;
   const totalClubHist = conversoes.filter(c=>c.resultado==="club").length;
-  const taxa = jaContatados > 0 ? totalClubHist/jaContatados : 0;
+  const taxa = focoContatados > 0 ? totalClubHist/focoContatados : 0;
   const taxaPct = Math.round(taxa*100);
 
-  // Leads necessarios para bater a meta no ritmo atual
+  // Leads Foco Club necessarios para bater a meta
   const leadsAtivos = clientes.filter(c=>c.etapa!=="encerrado"&&c.etapa!=="convertido").length;
   const leadsNecessarios = taxa > 0 ? Math.ceil(faltam/taxa) : "—";
 
@@ -432,17 +435,17 @@ const Dashboard = ({ clientes, conversoes }) => {
         <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.purple}}>
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Taxa conversao Club</div>
           <div style={{fontSize:20,fontWeight:500,color:C.purpleD}}>{taxaPct}%</div>
-          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{totalClubHist} club / {jaContatados} contatados</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{totalClubHist} club / {focoContatados} foco club contatados</div>
         </div>
         <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.amber}}>
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Leads necessarios p/ meta</div>
           <div style={{fontSize:20,fontWeight:500,color:C.amberD}}>{faltam===0?"Meta batida":leadsNecessarios}</div>
-          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{faltam===0?"":"para converter mais "+faltam+" assinaturas"}</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{faltam===0?"":"foco club p/ converter +"+faltam}</div>
         </div>
-        <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+(leadsAtivos>=(typeof leadsNecessarios==="number"?leadsNecessarios:0)?C.green:C.coral)}}>
-          <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Leads ativos no CRM</div>
-          <div style={{fontSize:20,fontWeight:500,color:leadsAtivos>=(typeof leadsNecessarios==="number"?leadsNecessarios:0)?C.greenD:C.coralD}}>{leadsAtivos}</div>
-          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{typeof leadsNecessarios==="number"&&leadsAtivos>=leadsNecessarios?"suficiente p/ meta":typeof leadsNecessarios==="number"&&faltam>0?"faltam "+(leadsNecessarios-leadsAtivos)+" leads":"adicione mais leads"}</div>
+        <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+(focoClubAtivos>=(typeof leadsNecessarios==="number"?leadsNecessarios:0)?C.green:C.coral)}}>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Foco Club ativos</div>
+          <div style={{fontSize:20,fontWeight:500,color:focoClubAtivos>=(typeof leadsNecessarios==="number"?leadsNecessarios:0)?C.greenD:C.coralD}}>{focoClubAtivos}</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{typeof leadsNecessarios==="number"&&focoClubAtivos>=leadsNecessarios?"suficiente p/ meta":typeof leadsNecessarios==="number"&&faltam>0?"faltam "+(leadsNecessarios-focoClubAtivos)+" leads foco":"use filtro 🎯 Foco Club"}</div>
         </div>
       </div>
     </div>
@@ -564,6 +567,7 @@ const Kanban = ({ onAbrir }) => {
   const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true); const [conversoes,setConversoes]=useState([]);
   const [pages,setPages]=useState({}); // {etapaId_grupo: pageIndex}
   const [filtroHoje,setFiltroHoje]=useState(false);
+  const [filtroClub,setFiltroClub]=useState(false);
   const [busca,setBusca]=useState("");
   const [abertos,setAbertos]=useState({});
   const toggleGrupo=(etapaId,grupo)=>{ const k=etapaId+"_"+grupo; setAbertos(a=>({...a,[k]:!a[k]})); };
@@ -584,6 +588,7 @@ const Kanban = ({ onAbrir }) => {
 
   const filtrar=(lista)=>{
     let r = lista;
+    if(filtroClub) r = r.filter(c=>c.objetivo==="club"||c.objetivo==="falta_uma");
     if(filtroHoje) r = r.filter(c=>c.dataProximoContato===hoje);
     if(!busca.trim()) return r;
     const q=busca.toLowerCase();
@@ -689,9 +694,15 @@ const Kanban = ({ onAbrir }) => {
           <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none" }}>🔍</span>
           <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por nome, ID ou telefone..." style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
         </div>
-        <div style={{ fontSize:13,color:"var(--color-text-tertiary)",whiteSpace:"nowrap" }}>{clientes.length} clientes</div>
+        <div style={{ fontSize:13,color:"var(--color-text-tertiary)",whiteSpace:"nowrap" }}>
+          {clientes.length} clientes
+          {!filtroClub && (() => { const fc=clientes.filter(c=>c.objetivo==="club"||c.objetivo==="falta_uma").length; return fc>0?<span style={{ marginLeft:6,fontSize:11,background:C.greenL,color:C.greenD,padding:"1px 7px",borderRadius:20,fontWeight:500 }}>{fc} foco club</span>:null; })()}
+        </div>
+        <button onClick={()=>setFiltroClub(f=>!f)} style={{ padding:"5px 14px",borderRadius:8,fontSize:12,fontWeight:500,background:filtroClub?C.green:"var(--color-background-secondary)",border:"0.5px solid "+(filtroClub?C.green:"var(--color-border-tertiary)"),color:filtroClub?C.greenD:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>
+          {filtroClub?"🎯 Foco Club ×":"🎯 Foco Club"}
+        </button>
         <button onClick={()=>setFiltroHoje(f=>!f)} style={{ padding:"5px 14px",borderRadius:8,fontSize:12,fontWeight:500,background:filtroHoje?C.amber:"var(--color-background-secondary)",border:"0.5px solid "+(filtroHoje?C.amber:"var(--color-border-tertiary)"),color:filtroHoje?C.amberD:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>
-          {filtroHoje?"⚡ Hoje ×":"⚡ Ver hoje"}
+          {filtroHoje?"⚡ Hoje ×":"⚡ Hoje"}
         </button>
         <button onClick={carregar} style={{ padding:"5px 12px",borderRadius:8,fontSize:12,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>↺</button>
       </div>
