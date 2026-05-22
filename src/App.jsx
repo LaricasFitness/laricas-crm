@@ -235,10 +235,10 @@ const TriagemForm = ({ onSalvo, lista }) => {
 };
 
 const Perfil = ({ clienteId, onVoltar }) => {
-  const [c,setC]=useState(null); const [confirmDel,setConfirmDel]=useState(false);
+  const [c,setC]=useState(null); const [confirmDel,setConfirmDel]=useState(false); const [salvando,setSalvando]=useState(false);
   useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(cl); }); }, [clienteId]);
-  const save = (updates) => { const novo={...c,...updates}; setC(novo); sSet(clienteId,novo); };
-  const mover = (etapaId) => save({etapa:etapaId});
+  const save = async (updates) => { const novo={...c,...updates}; setC(novo); try { await dbSave(novo); } catch(e) {} };
+  const mover = async (etapaId) => { setSalvando(true); await save({etapa:etapaId}); setSalvando(false); };
   const avancar = () => save({stepAtual:Math.min(c.stepAtual+1,c.seq.length-1)});
   const deletar = async () => { if(!confirmDel){setConfirmDel(true);setTimeout(()=>setConfirmDel(false),3000);return;} try { await dbDelete(clienteId); } catch(e) {} onVoltar(); };
   const calcularCiclo = async (dp2, du2, fora2) => {
