@@ -703,7 +703,6 @@ const ImportarLista = ({ onSalvo }) => {
       const dp = parseShopifyDate(dp6||"");
       const du = parseShopifyDate(du7||"");
       const fora = cepToFora(cep8||"");
-      const lista = listPts.join(",").trim();
       if(!nome){errs.push("Linha "+(i+1+start)+": nome vazio");return;}
       if(isNaN(ped)||ped<1){errs.push("Linha "+(i+1+start)+": pedidos invalido");return;}
       cls.push({customerId:customerId||"",nome,tel:tel||"",ped,gasto,dp,du,fora,cep:cep8||"",lista});
