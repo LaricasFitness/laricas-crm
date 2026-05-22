@@ -54,6 +54,13 @@ const sb = async (path, opts={}) => {
 };
 
 const dbGetAll  = async () => { const r = await sb("/clientes?select=dados&order=atualizado_em.desc"); return (r||[]).map(x=>x.dados).filter(Boolean); };
+const dbGetAtivos = async () => { 
+  // Load only non-closed leads for kanban performance
+  const r = await sb("/clientes?select=dados&dados->>etapa=neq.encerrado&dados->>etapa=neq.convertido&order=atualizado_em.desc");
+  // Supabase jsonb filter workaround — filter client-side if needed
+  const all = (r||[]).map(x=>x.dados).filter(Boolean);
+  return all;
+};
 const dbSave    = async (c)  => { await sb("/clientes", {method:"POST", body:{id:c.id, dados:c, atualizado_em:new Date().toISOString()}, pref:"resolution=merge-duplicates"}); };
 const dbBulkSave= async (cs) => { if(!cs.length)return; await sb("/clientes", {method:"POST", body:cs.map(c=>({id:c.id,dados:c,atualizado_em:new Date().toISOString()})), pref:"resolution=merge-duplicates"}); };
 const dbDelete  = async (id) => { await sb("/clientes?id=eq."+id, {method:"DELETE"}); };
@@ -539,8 +546,8 @@ const Kanban = ({ onAbrir }) => {
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const [lista, conv] = await Promise.all([dbGetAll(), dbGetConversoes()]);
-      setClientes(lista); setConversoes(conv);
+      const [todos, conv] = await Promise.all([dbGetAll(), dbGetConversoes()]);
+      setClientes(todos); setConversoes(conv);
     } catch(e) { setClientes([]); setConversoes([]); }
     setLoading(false);
   }, []);
@@ -592,6 +599,8 @@ const Kanban = ({ onAbrir }) => {
       </div>
     );
   };
+
+  const MAX_CARDS = 50;
 
   const GrupoSanfona=({etapaId,grupo,label,cor,items})=>{
     if(items.length===0) return null;
@@ -687,7 +696,8 @@ const ImportarLista = ({ onSalvo }) => {
       const sep = linha.includes(";") ? ";" : ",";
       const pts = linha.split(sep).map(p=>p.trim());
       if(pts.length<4){errs.push("Linha "+(i+1+start)+": minimo 4 colunas");return;}
-      const [customerId, nome, tel, gastoStr, pedStr, dp6, du7, cep8, ...listPts] = pts;
+      const [customerId, nome, tel, gastoStr, pedStr, dp6, du7, cep8, lista9] = pts;
+      const lista = (lista9||"").trim();
       const ped = parseInt(pedStr);
       const gasto = parseFloat((gastoStr||"0").replace(",","."))||0;
       const dp = parseShopifyDate(dp6||"");
@@ -767,8 +777,15 @@ const ImportarLista = ({ onSalvo }) => {
         const pulados = prev.length - novos.length;
         setProg({ atual: Math.floor(novos.length * 0.5), total: novos.length, inicio });
 
-        // Bulk insert no Supabase — 1 requisição para todos
-        await dbBulkSave(novos);
+        // Bulk insert em lotes de 200 para evitar payload gigante
+        const LOTE_SIZE = 200;
+        let salvos = 0;
+        for (let i = 0; i < novos.length; i += LOTE_SIZE) {
+          const lote = novos.slice(i, i + LOTE_SIZE);
+          await dbBulkSave(lote);
+          salvos += lote.length;
+          setProg({ atual: Math.floor(novos.length * 0.1) + Math.floor(salvos/novos.length * 0.85 * novos.length), total: novos.length, inicio });
+        }
         setProg({ atual: novos.length, total: novos.length, inicio });
 
         const comTriagem = novos.filter(c=>c.datasPreenchidas).length;
@@ -824,12 +841,12 @@ const ImportarLista = ({ onSalvo }) => {
       <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 16px",marginBottom:16 }}>
         <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8 }}>Formato aceito</div>
         <div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.8,fontFamily:"monospace" }}>
-          Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Último Pedido, CEP<br/>
-          <span style={{ color:C.tealD }}>1234, Maria Silva, 11 99999-1111, 380, 4, 2025-11-18, 2026-03-10, 04547-130</span><br/>
+          Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Último Pedido, CEP, Lista<br/>
+          <span style={{ color:C.tealD }}>1234, Maria Silva, 11 99999-1111, 380, 4, 2025-11-18, 2026-03-10, 04547-130, Pascoa Falta Uma</span><br/>
           <span style={{ color:"var(--color-text-tertiary)" }}>// Formato Shopify — triagem calculada automaticamente pelo CEP e datas</span>
         </div>
         <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginTop:8 }}>
-          CEPs iniciados em 0 = SP/Grande SP · Demais = Fora de SP · Datas: AAAA-MM-DD ou DD/MM/AAAA · Colunas 6,7,8 opcionais
+          CEPs iniciados em 0 = SP/Grande SP · Demais = Fora de SP · Datas: AAAA-MM-DD ou DD/MM/AAAA · Colunas 6-9 opcionais
         </div>
       </div>
       <label style={{ display:"flex",alignItems:"center",gap:10,padding:"12px 16px",marginBottom:12,background:"var(--color-background-secondary)",borderRadius:10,border:"1.5px dashed "+C.purple,cursor:"pointer" }}>
@@ -849,11 +866,11 @@ const ImportarLista = ({ onSalvo }) => {
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8 }}>Preview — {prev.length} cliente{prev.length!==1?"s":""}</div>
           <div style={{ border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,overflow:"hidden" }}>
-            <div style={{ display:"grid",gridTemplateColumns:"70px 1.2fr 90px 40px 70px 80px 80px 80px",gap:6,padding:"7px 10px",background:"var(--color-background-secondary)",fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em" }}><span>ID</span><span>Nome</span><span>Telefone</span><span>Ped.</span><span>Gasto</span><span>1° Pedido</span><span>Ult. Pedido</span><span>Local</span></div>
+            <div style={{ display:"grid",gridTemplateColumns:"70px 1.2fr 90px 40px 70px 80px 80px 80px 1fr",gap:6,padding:"7px 10px",background:"var(--color-background-secondary)",fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em" }}><span>ID</span><span>Nome</span><span>Telefone</span><span>Ped.</span><span>Gasto</span><span>1° Pedido</span><span>Ult. Pedido</span><span>Local</span><span>Lista</span></div>
             {prev.map((cl,i)=>{
               const localLabel = cl.fora===null?"?":(cl.fora?"Fora SP":"SP");
               const localCor = cl.fora===null?"var(--color-text-tertiary)":cl.fora?C.amberD:C.tealD;
-              return (<div key={i} style={{ display:"grid",gridTemplateColumns:"70px 1.2fr 90px 40px 70px 80px 80px 80px",gap:6,padding:"7px 10px",borderTop:"0.5px solid var(--color-border-tertiary)",fontSize:11,color:"var(--color-text-primary)",alignItems:"center" }}>
+              return (<div key={i} style={{ display:"grid",gridTemplateColumns:"70px 1.2fr 90px 40px 70px 80px 80px 80px 1fr",gap:6,padding:"7px 10px",borderTop:"0.5px solid var(--color-border-tertiary)",fontSize:11,color:"var(--color-text-primary)",alignItems:"center" }}>
                 <span style={{ color:"var(--color-text-tertiary)" }}>{cl.customerId||"—"}</span>
                 <span style={{ fontWeight:500 }}>{cl.nome}</span>
                 <span style={{ color:"var(--color-text-secondary)" }}>{cl.tel||"—"}</span>
@@ -862,6 +879,7 @@ const ImportarLista = ({ onSalvo }) => {
                 <span style={{ color:"var(--color-text-tertiary)",fontSize:10 }}>{cl.dp||"—"}</span>
                 <span style={{ color:"var(--color-text-tertiary)",fontSize:10 }}>{cl.du||"—"}</span>
                 <span style={{ fontSize:10,fontWeight:500,color:localCor }}>{localLabel}</span>
+                <span style={{ fontSize:10,color:C.purpleD }}>{cl.lista||"—"}</span>
               </div>);
             })}
           </div>
