@@ -1755,7 +1755,12 @@ const LTV = () => {
           {cancelados.length>0&&<span style={{color:C.coralD,marginLeft:6}}>· {cancelados.length} cancelados</span>}
           {semValor>0&&<span style={{color:C.amber,marginLeft:6}}>· {semValor} sem valor cadastrado</span>}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
+          <div style={{background:C.purpleL,borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
+            <div style={{fontSize:10,color:C.purpleD,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500}}>Assinantes ativos</div>
+            <div style={{fontSize:28,fontWeight:500,color:C.purpleD}}>{ativos.length}</div>
+            <div style={{fontSize:10,color:C.purpleD,marginTop:2}}>{cancelados.length>0?cancelados.length+" cancelado"+(cancelados.length>1?"s":""):"nenhum cancelamento"}</div>
+          </div>
           <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
             <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
             <div style={{fontSize:24,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
@@ -1990,7 +1995,7 @@ export default function App() {
         <T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
-        <T label="💰 LTV" active={tab==="ltv"} color={C.green} onClick={()=>setTab("ltv")}/>
+        <T label="📈 Dash Club" active={tab==="dashclub"} color={C.green} onClick={()=>setTab("dashclub")}/>
         <T label="📖 Guia" active={tab==="guia"} color={C.teal} onClick={()=>setTab("guia")}/>
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
@@ -1999,7 +2004,7 @@ export default function App() {
       {tab==="import"&&<ImportarLista onSalvo={onSalvo}/>}
       {tab==="triagem"&&<TriagemForm onSalvo={onSalvo}/>}
       {tab==="historico"&&<Historico/>}
-      {tab==="ltv"&&<LTV/>}
+      {tab==="dashclub"&&<LTV/>}
       {tab==="guia"&&<Guia/>}
       {tab==="backup"&&<Backup onRestore={onRestore}/>}
       {tab==="config"&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
