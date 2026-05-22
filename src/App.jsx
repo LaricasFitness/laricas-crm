@@ -339,102 +339,199 @@ const Perfil = ({ clienteId, onVoltar }) => {
 };
 
 
-const Dashboard = ({ clientes }) => {
-  const [conv, setConv] = useState([]);
-  const [loading, setLoading] = useState(true);
+const METAS = {
+  "2026-05":20,"2026-06":36,"2026-07":36,"2026-08":36,
+  "2026-09":71,"2026-10":36,"2026-11":71,"2026-12":20,
+};
 
-  useEffect(() => {
-    dbGetConversoes().then(data => { setConv(data); setLoading(false); });
-  }, []);
+const mesKey = (d) => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+const mesLabel = (d) => d.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+
+const Dashboard = ({ clientes, conversoes }) => {
+  const hoje = new Date();
+  const mesAtual = mesKey(hoje);
+  const meta = METAS[mesAtual] || 0;
 
   // Stage counts
-  const stageCounts = ETAPAS.map(e => ({
-    ...e, count: clientes.filter(c => c.etapa === e.id).length
-  }));
+  const stageCounts = ETAPAS.map(e=>({...e, count:clientes.filter(c=>c.etapa===e.id).length}));
 
-  // Conversion totals
-  const totalClub = conv.filter(c => c.resultado === "club").length;
-  const totalAvulso = conv.filter(c => c.resultado === "avulso").length;
-  const totalNao = conv.filter(c => c.resultado === "nao_converteu").length;
-  const totalConv = totalClub + totalAvulso + totalNao;
-
-  // Monthly breakdown
-  const meses = {};
-  conv.forEach(c => {
-    const d = new Date(c.registrado_em);
-    const key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
-    const label = d.toLocaleDateString("pt-BR", {month:"short", year:"numeric"});
-    if (!meses[key]) meses[key] = {key, label, club:0, avulso:0, nao:0};
-    if (c.resultado === "club") meses[key].club++;
-    else if (c.resultado === "avulso") meses[key].avulso++;
-    else meses[key].nao++;
+  // Conversoes do mes atual
+  const convMes = conversoes.filter(c=>{
+    try { return mesKey(new Date(c.registrado_em))===mesAtual; } catch(e){ return false; }
   });
-  const mesesList = Object.values(meses).sort((a,b)=>b.key.localeCompare(a.key)).slice(0,6);
+  const clubMes = convMes.filter(c=>c.resultado==="club").length;
+  const totalEnc = conversoes.filter(c=>{
+    try { return mesKey(new Date(c.registrado_em))===mesAtual; } catch(e){ return false; }
+  }).length;
+  const faltam = Math.max(0, meta - clubMes);
+  const pct = meta > 0 ? Math.min(100, Math.round(clubMes/meta*100)) : 0;
+
+  // Taxa de conversao historica (club / total encerrados)
+  const totalEncHist = conversoes.length;
+  const totalClubHist = conversoes.filter(c=>c.resultado==="club").length;
+  const taxa = totalEncHist > 0 ? totalClubHist/totalEncHist : 0;
+
+  // Leads ativos (nao encerrados, nao convertidos)
+  const leadsAtivos = clientes.filter(c=>c.etapa!=="encerrado"&&c.etapa!=="convertido").length;
+  const leadsNecessarios = taxa > 0 ? Math.ceil(faltam/taxa) : "—";
+  const taxaPct = Math.round(taxa*100);
 
   return (
-    <div style={{ marginBottom:24 }}>
-      {/* Stage counts */}
-      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4, marginBottom:16 }}>
-        {stageCounts.map(e => (
-          <div key={e.id} style={{ flexShrink:0, background:e.count>0?e.corL:"var(--color-background-secondary)", border:"0.5px solid "+(e.count>0?e.cor:"var(--color-border-tertiary)"), borderRadius:10, padding:"10px 14px", minWidth:100, textAlign:"center" }}>
-            <div style={{ fontSize:11, color:e.count>0?e.corD:"var(--color-text-tertiary)", fontWeight:500, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>{e.emoji} {e.label}</div>
-            <div style={{ fontSize:24, fontWeight:500, color:e.count>0?e.corD:"var(--color-text-tertiary)" }}>{e.count}</div>
+    <div style={{marginBottom:20}}>
+      {/* Stage cards */}
+      <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
+        {stageCounts.map(e=>(
+          <div key={e.id} style={{flexShrink:0,background:e.count>0?e.corL:"var(--color-background-secondary)",border:"0.5px solid "+(e.count>0?e.cor:"var(--color-border-tertiary)"),borderRadius:10,padding:"8px 12px",minWidth:90,textAlign:"center"}}>
+            <div style={{fontSize:10,color:e.count>0?e.corD:"var(--color-text-tertiary)",fontWeight:500,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em"}}>{e.emoji} {e.label}</div>
+            <div style={{fontSize:22,fontWeight:500,color:e.count>0?e.corD:"var(--color-text-tertiary)"}}>{e.count}</div>
           </div>
         ))}
       </div>
 
-      {/* Conversion summary */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8, marginBottom:16 }}>
-        {[
-          {label:"Total conversoes", value:totalConv, cor:C.teal},
-          {label:"Club", value:totalClub, cor:C.green},
-          {label:"Avulso", value:totalAvulso, cor:C.amber},
-          {label:"Nao converteu", value:totalNao, cor:C.coral},
-        ].map((s,i) => (
-          <div key={i} style={{ background:"var(--color-background-secondary)", borderRadius:10, padding:"10px 14px", borderLeft:"3px solid "+s.cor }}>
-            <div style={{ fontSize:10, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>{s.label}</div>
-            <div style={{ fontSize:22, fontWeight:500, color:s.cor }}>{s.value}</div>
+      {/* Meta do mes */}
+      <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:10}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Meta Club — {mesLabel(hoje)}</div>
+            <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+              <span style={{fontSize:28,fontWeight:500,color:clubMes>=meta&&meta>0?C.green:C.teal}}>{clubMes}</span>
+              <span style={{fontSize:16,color:"var(--color-text-tertiary)"}}>/ {meta}</span>
+              {faltam>0&&<span style={{fontSize:12,color:C.coralD,background:C.coralL,padding:"2px 8px",borderRadius:20}}>faltam {faltam}</span>}
+              {clubMes>=meta&&meta>0&&<span style={{fontSize:12,color:C.greenD,background:C.greenL,padding:"2px 8px",borderRadius:20}}>Meta batida!</span>}
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* Monthly breakdown */}
-      {mesesList.length > 0 && (
-        <div style={{ background:"var(--color-background-secondary)", borderRadius:12, padding:"14px 16px" }}>
-          <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:12 }}>Conversoes por mes</div>
-          <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-              <thead>
-                <tr style={{ background:"var(--color-background-primary)" }}>
-                  {["Mes","Club","Avulso","Nao converteu","Total"].map(h => (
-                    <th key={h} style={{ padding:"6px 10px", textAlign:h==="Mes"?"left":"center", fontWeight:500, color:"var(--color-text-tertiary)", fontSize:11, borderBottom:"0.5px solid var(--color-border-tertiary)" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {mesesList.map(m => (
-                  <tr key={m.key} style={{ borderBottom:"0.5px solid var(--color-border-tertiary)" }}>
-                    <td style={{ padding:"7px 10px", fontWeight:500, color:"var(--color-text-primary)", textTransform:"capitalize" }}>{m.label}</td>
-                    <td style={{ padding:"7px 10px", textAlign:"center", color:m.club>0?C.greenD:"var(--color-text-tertiary)", fontWeight:m.club>0?500:400 }}>{m.club}</td>
-                    <td style={{ padding:"7px 10px", textAlign:"center", color:m.avulso>0?C.amberD:"var(--color-text-tertiary)", fontWeight:m.avulso>0?500:400 }}>{m.avulso}</td>
-                    <td style={{ padding:"7px 10px", textAlign:"center", color:m.nao>0?C.coralD:"var(--color-text-tertiary)", fontWeight:m.nao>0?500:400 }}>{m.nao}</td>
-                    <td style={{ padding:"7px 10px", textAlign:"center", fontWeight:500, color:"var(--color-text-primary)" }}>{m.club+m.avulso+m.nao}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2}}>Progresso</div>
+            <div style={{fontSize:20,fontWeight:500,color:pct>=100?C.green:pct>=70?C.amber:C.coral}}>{pct}%</div>
           </div>
         </div>
-      )}
-      {mesesList.length === 0 && !loading && (
-        <div style={{ fontSize:12, color:"var(--color-text-tertiary)", textAlign:"center", padding:"8px 0" }}>Nenhuma conversao registrada ainda — os resultados aparecem aqui conforme voce encerrar atendimentos.</div>
-      )}
+        <div style={{height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
+          <div style={{width:pct+"%",height:"100%",background:pct>=100?C.green:pct>=70?C.amber:C.coral,borderRadius:3,transition:"width 0.5s ease"}}/>
+        </div>
+      </div>
+
+      {/* Perspectiva de leads */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.purple}}>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Taxa conversao Club</div>
+          <div style={{fontSize:20,fontWeight:500,color:C.purpleD}}>{taxaPct}%</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{totalClubHist} club / {totalEncHist} encerrados</div>
+        </div>
+        <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.amber}}>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Leads necessarios p/ meta</div>
+          <div style={{fontSize:20,fontWeight:500,color:C.amberD}}>{faltam===0?"Meta batida":leadsNecessarios}</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{faltam===0?"":"para converter mais "+faltam+" assinaturas"}</div>
+        </div>
+        <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+(leadsAtivos>=(typeof leadsNecessarios==="number"?leadsNecessarios:0)?C.green:C.coral)}}>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Leads ativos no CRM</div>
+          <div style={{fontSize:20,fontWeight:500,color:leadsAtivos>=(typeof leadsNecessarios==="number"?leadsNecessarios:0)?C.greenD:C.coralD}}>{leadsAtivos}</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{typeof leadsNecessarios==="number"&&leadsAtivos>=leadsNecessarios?"suficiente p/ meta":typeof leadsNecessarios==="number"&&faltam>0?"faltam "+(leadsNecessarios-leadsAtivos)+" leads":"adicione mais leads"}</div>
+        </div>
+      </div>
     </div>
   );
 };
 
+const Historico = () => {
+  const [conv, setConv] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    dbGetConversoes().then(data=>{ setConv(data); setLoading(false); });
+  }, []);
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Carregando historico...</div>;
+  if (conv.length===0) return (
+    <div style={{textAlign:"center",padding:"48px 24px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px dashed var(--color-border-tertiary)"}}>
+      <div style={{fontSize:32,marginBottom:12}}>📊</div>
+      <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:6}}>Sem historico ainda</div>
+      <div style={{fontSize:13,color:"var(--color-text-secondary)"}}>Encerre atendimentos no perfil do cliente para ver o historico aqui.</div>
+    </div>
+  );
+
+  // Group by month
+  const meses = {};
+  conv.forEach(c=>{
+    try {
+      const d = new Date(c.registrado_em);
+      const key = mesKey(d);
+      const label = mesLabel(d);
+      const meta = METAS[key]||0;
+      if(!meses[key]) meses[key]={key,label,meta,club:0,avulso:0,nao:0,total:0};
+      if(c.resultado==="club") meses[key].club++;
+      else if(c.resultado==="avulso") meses[key].avulso++;
+      else meses[key].nao++;
+      meses[key].total++;
+    } catch(e){}
+  });
+
+  const lista = Object.values(meses).sort((a,b)=>b.key.localeCompare(a.key));
+  const totalClub = conv.filter(c=>c.resultado==="club").length;
+  const totalAvulso = conv.filter(c=>c.resultado==="avulso").length;
+  const totalNao = conv.filter(c=>c.resultado==="nao_converteu").length;
+
+  return (
+    <div>
+      {/* Totais gerais */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:16}}>
+        {[
+          {label:"Total",value:conv.length,cor:C.teal},
+          {label:"Club",value:totalClub,cor:C.green},
+          {label:"Avulso",value:totalAvulso,cor:C.amber},
+          {label:"Nao converteu",value:totalNao,cor:C.coral},
+        ].map((s,i)=>(
+          <div key={i} style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",borderLeft:"3px solid "+s.cor}}>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div>
+            <div style={{fontSize:22,fontWeight:500,color:s.cor}}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabela por mes */}
+      <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
+        <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Historico por mes</div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{background:"var(--color-background-primary)"}}>
+                {["Mes","Meta","Club","Avulso","Nao conv.","Total","vs Meta"].map(h=>(
+                  <th key={h} style={{padding:"7px 10px",textAlign:h==="Mes"?"left":"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map(m=>{
+                const diff = m.club - m.meta;
+                const corDiff = diff>=0?C.green:C.coral;
+                return (
+                  <tr key={m.key} style={{borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                    <td style={{padding:"8px 10px",fontWeight:500,color:"var(--color-text-primary)",textTransform:"capitalize"}}>{m.label}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:"var(--color-text-secondary)"}}>{m.meta||"—"}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:m.club>0?C.greenD:"var(--color-text-tertiary)",fontWeight:m.club>0?500:400}}>{m.club}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:m.avulso>0?C.amberD:"var(--color-text-tertiary)",fontWeight:m.avulso>0?500:400}}>{m.avulso}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:m.nao>0?C.coralD:"var(--color-text-tertiary)",fontWeight:m.nao>0?500:400}}>{m.nao}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",fontWeight:500}}>{m.total}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center"}}>
+                      {m.meta>0?(
+                        <span style={{background:corDiff+"22",color:corDiff,padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:500}}>
+                          {diff>=0?"+":""}{diff}
+                        </span>
+                      ):"—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const Kanban = ({ onAbrir }) => {
-  const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true);
+  const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true); const [conversoes,setConversoes]=useState([]);
   const [busca,setBusca]=useState("");
   const [abertos,setAbertos]=useState({});
   const toggleGrupo=(etapaId,grupo)=>{ const k=etapaId+"_"+grupo; setAbertos(a=>({...a,[k]:!a[k]})); };
@@ -442,8 +539,10 @@ const Kanban = ({ onAbrir }) => {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    try { const lista = await dbGetAll(); setClientes(lista); }
-    catch(e) { setClientes([]); }
+    try {
+      const [lista, conv] = await Promise.all([dbGetAll(), dbGetConversoes()]);
+      setClientes(lista); setConversoes(conv);
+    } catch(e) { setClientes([]); setConversoes([]); }
     setLoading(false);
   }, []);
   useEffect(()=>{carregar();},[carregar]);
@@ -520,7 +619,7 @@ const Kanban = ({ onAbrir }) => {
 
   return (
     <div>
-      <Dashboard clientes={clientes}/>
+      <Dashboard clientes={clientes} conversoes={conversoes}/>
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
         <div style={{ position:"relative",flex:1 }}>
           <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none" }}>🔍</span>
@@ -1006,6 +1105,7 @@ export default function App() {
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="🐣 Páscoa — Falta Uma" active={tab==="pfalta"} color={C.amber} onClick={()=>setTab("pfalta")}/>
         <T label="🐣 Páscoa — Reativação" active={tab==="preativ"} color={C.teal} onClick={()=>setTab("preativ")}/>
+        <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
       </div>
@@ -1014,6 +1114,7 @@ export default function App() {
       {tab==="triagem"&&<TriagemForm onSalvo={onSalvo}/>}
       {tab==="pfalta"&&<PascoaTab tipo="falta_uma" onSalvo={onSalvo}/>}
       {tab==="preativ"&&<PascoaTab tipo="reativacao" onSalvo={onSalvo}/>}
+      {tab==="historico"&&<Historico/>}
       {tab==="backup"&&<Backup onRestore={onRestore}/>}
       {tab==="config"&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
     </div>
