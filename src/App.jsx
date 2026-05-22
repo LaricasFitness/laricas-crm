@@ -1676,6 +1676,44 @@ const LTV = () => {
   const mrr = comValor.reduce((acc,a) => acc + (a.valorMensal||0), 0);
   const semValor = ativos.length - comValor.length;
 
+  // Evolucao do MRR mes a mes
+  // Para cada mes desde o primeiro assinante ate hoje,
+  // recalcula o MRR somando quem estava ativo naquele mes
+  const mrrEvolucao = (() => {
+    if (assinantes.length === 0) return [];
+    const datas = assinantes
+      .filter(a=>a.dataInicioAssinatura)
+      .map(a=>new Date(a.dataInicioAssinatura+"T12:00:00"));
+    if (datas.length === 0) return [];
+    const minData = new Date(Math.min(...datas.map(d=>d.getTime())));
+    const hoje2 = new Date();
+    const meses = [];
+    let cursor = new Date(minData.getFullYear(), minData.getMonth(), 1);
+    while (cursor <= hoje2 && meses.length < 24) {
+      const mesKey = cursor.toISOString().substring(0,7);
+      const mesLabel = cursor.toLocaleDateString("pt-BR",{month:"short",year:"2-digit"});
+      const mrr_mes = assinantes.filter(a => {
+        if (!a.dataInicioAssinatura || !a.valorMensal) return false;
+        const inicio = new Date(a.dataInicioAssinatura+"T12:00:00");
+        if (inicio > cursor) return false;
+        if (a.cancelado && a.dataCancelamento) {
+          const cancel = new Date(a.dataCancelamento+"T12:00:00");
+          const fimMes = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0);
+          if (cancel < cursor) return false;
+        }
+        return true;
+      }).reduce((acc,a) => acc + (parseFloat(a.valorMensal)||0), 0);
+      const novos = assinantes.filter(a => {
+        if (!a.dataInicioAssinatura) return false;
+        return new Date(a.dataInicioAssinatura+"T12:00:00").toISOString().substring(0,7) === mesKey;
+      }).length;
+      const canc = assinantes.filter(a => a.cancelado && a.dataCancelamento && a.dataCancelamento.substring(0,7) === mesKey).length;
+      meses.push({ mesKey, mesLabel, mrr: Math.round(mrr_mes), novos, canc });
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+    }
+    return meses;
+  })();
+
   // Churn: cancelamentos por mes
   const churnPorMes = {};
   cancelados.forEach(a => {
@@ -1739,6 +1777,50 @@ const LTV = () => {
               <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{mesesComChurn.slice(1).map(m=><span key={m} style={{marginRight:6}}>{m}: {churnPorMes[m]}</span>)}</div>
             </div>
           </div>
+        </div>
+      )}
+
+      {mrrEvolucao.length > 1 && (
+        <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>Evolucao do MRR</div>
+          {(() => {
+            const maxMrr = Math.max(...mrrEvolucao.map(m=>m.mrr), 1);
+            const barW = Math.max(28, Math.min(60, Math.floor(560 / mrrEvolucao.length)));
+            return (
+              <div style={{overflowX:"auto"}}>
+                <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:"max-content",paddingBottom:8}}>
+                  {mrrEvolucao.map((m,i) => {
+                    const pct = m.mrr / maxMrr;
+                    const isLast = i === mrrEvolucao.length - 1;
+                    const prev = i > 0 ? mrrEvolucao[i-1].mrr : m.mrr;
+                    const cresceu = m.mrr >= prev;
+                    return (
+                      <div key={m.mesKey} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:barW}}>
+                        <div style={{fontSize:9,fontWeight:500,color:isLast?C.tealD:"var(--color-text-tertiary)",textAlign:"center"}}>
+                          {m.mrr>0?"R$"+m.mrr:"—"}
+                        </div>
+                        <div style={{position:"relative",width:"100%",display:"flex",flexDirection:"column",alignItems:"center"}}>
+                          <div style={{width:"80%",height:Math.max(4, Math.round(pct*120)),background:isLast?C.teal:cresceu?C.green:C.coral,borderRadius:"4px 4px 0 0",transition:"height 0.3s"}}/>
+                          {(m.novos>0||m.canc>0)&&(
+                            <div style={{position:"absolute",top:-14,display:"flex",gap:2}}>
+                              {m.novos>0&&<span style={{fontSize:8,color:C.greenD,background:C.greenL,padding:"0 3px",borderRadius:3}}>+{m.novos}</span>}
+                              {m.canc>0&&<span style={{fontSize:8,color:C.coralD,background:C.coralL,padding:"0 3px",borderRadius:3}}>-{m.canc}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{fontSize:9,color:"var(--color-text-tertiary)",textAlign:"center",textTransform:"capitalize"}}>{m.mesLabel}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{display:"flex",gap:12,marginTop:4,fontSize:10,color:"var(--color-text-tertiary)"}}>
+                  <span style={{color:C.greenD}}>+N novos assinantes</span>
+                  <span style={{color:C.coralD}}>-N cancelamentos</span>
+                  <span style={{color:C.teal}}>● mes atual</span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
