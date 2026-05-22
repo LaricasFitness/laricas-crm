@@ -366,15 +366,16 @@ const Dashboard = ({ clientes, conversoes }) => {
   const faltam = Math.max(0, meta - clubMes);
   const pct = meta > 0 ? Math.min(100, Math.round(clubMes/meta*100)) : 0;
 
-  // Taxa de conversao historica (club / total encerrados)
-  const totalEncHist = conversoes.length;
+  // Taxa de conversao: club / total leads no CRM
+  // Logica: se taxa alta → precisa de menos leads. Se taxa baixa → precisa de mais.
+  const totalLeads = clientes.length;
   const totalClubHist = conversoes.filter(c=>c.resultado==="club").length;
-  const taxa = totalEncHist > 0 ? totalClubHist/totalEncHist : 0;
+  const taxa = totalLeads > 0 ? totalClubHist/totalLeads : 0;
+  const taxaPct = Math.round(taxa*100);
 
   // Leads ativos (nao encerrados, nao convertidos)
   const leadsAtivos = clientes.filter(c=>c.etapa!=="encerrado"&&c.etapa!=="convertido").length;
   const leadsNecessarios = taxa > 0 ? Math.ceil(faltam/taxa) : "—";
-  const taxaPct = Math.round(taxa*100);
 
   return (
     <div style={{marginBottom:20}}>
@@ -415,7 +416,7 @@ const Dashboard = ({ clientes, conversoes }) => {
         <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.purple}}>
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Taxa conversao Club</div>
           <div style={{fontSize:20,fontWeight:500,color:C.purpleD}}>{taxaPct}%</div>
-          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{totalClubHist} club / {totalEncHist} encerrados</div>
+          <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{totalClubHist} club / {totalLeads} leads no CRM</div>
         </div>
         <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",borderLeft:"3px solid "+C.amber}}>
           <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Leads necessarios p/ meta</div>
