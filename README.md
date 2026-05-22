@@ -21,3 +21,4 @@
 - URL: https://nfrchusvrswpplhlwatk.supabase.co
 - Tabela: clientes (já criada)
 - Use a Legacy anon key (eyJ...)
+
