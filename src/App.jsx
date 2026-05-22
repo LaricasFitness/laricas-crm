@@ -220,6 +220,256 @@ const ProbBar = ({ prob }) => (
   </div>
 );
 
+
+const CadastroRapido = ({ onSalvo }) => {
+  const [modo, setModo] = useState(null); // "lead" | "club"
+  const [nome, setNome] = useState("");
+  const [tel, setTel] = useState("");
+  const [lista, setLista] = useState("");
+  const [listaCustom, setListaCustom] = useState("");
+  const [fora, setFora] = useState(null);
+  // Club fields
+  const [tipoAssin, setTipoAssin] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [valorMensal, setValorMensal] = useState("");
+  const [salvo, setSalvo] = useState(false);
+
+  const listaFinal = LISTAS.includes(lista) ? lista : listaCustom;
+
+  const salvar = async () => {
+    if (!nome.trim()) return;
+    const base = {
+      id: "c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
+      dataCriacao: new Date().toLocaleDateString("pt-BR"),
+      notas: "", proximaAcao: "", dataProximoContato: "",
+      nome: nome.trim(), telefone: tel.trim(),
+      lista: listaFinal, customerId: "",
+      p: 0, gasto: 0, fora: fora||false, cep: "",
+      dataPrimeiro: "", dataUltimo: "",
+      datasPreenchidas: false,
+      objetivo: modo==="club" ? "club" : "reativacao",
+      objetivoLabel: modo==="club" ? "Assinante direto" : "Primeiro contato — sem historico ecom",
+      objetivoCor: modo==="club" ? C.purple : C.teal,
+      objetivoCorD: modo==="club" ? C.purpleD : C.tealD,
+      prob: modo==="club" ? 0 : 15,
+      probLabel: modo==="club" ? "Assinante" : "Baixa",
+      probCor: modo==="club" ? C.purple : C.coral,
+      seq: [], stepAtual: 0, cicloMedio: 0,
+      etapa: modo==="club" ? "experiencia" : "lead",
+      historicoEtapas: [],
+      ...(modo==="club" ? {
+        tipoAssinatura: tipoAssin,
+        dataInicioAssinatura: dataInicio,
+        valorMensal: parseFloat(valorMensal)||0,
+      } : {}),
+    };
+    try {
+      await dbSave(base);
+      setSalvo(true);
+      setTimeout(() => {
+        setModo(null); setNome(""); setTel(""); setLista(""); setListaCustom("");
+        setFora(null); setTipoAssin(""); setDataInicio(""); setValorMensal(""); setSalvo(false);
+        onSalvo && onSalvo();
+      }, 1500);
+    } catch(e) { alert("Erro ao salvar: " + e.message); }
+  };
+
+  const camposBase = (
+    <div>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nome <span style={{ color:C.coralD,fontSize:10 }}>*obrigatorio</span></div>
+        <input value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex: Maria Silva"
+          style={{ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:14,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
+      </div>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Telefone / WhatsApp</div>
+        <input value={tel} onChange={e=>setTel(e.target.value)} placeholder="11 9XXXX-XXXX"
+          style={{ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:14,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
+      </div>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Lista de origem (opcional)</div>
+        <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
+          {LISTAS.map(l=>(
+            <button key={l} onClick={()=>{setLista(l===lista?"":l);setListaCustom("");}}
+              style={{ padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",background:lista===l?C.purpleL:"var(--color-background-secondary)",color:lista===l?C.purpleD:"var(--color-text-secondary)",border:"0.5px solid "+(lista===l?C.purple:"var(--color-border-tertiary)") }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <input value={LISTAS.includes(lista)?"":listaCustom} onChange={e=>{setListaCustom(e.target.value);setLista("");}}
+          placeholder="Ou digite o nome da lista..." style={{ width:"100%",padding:"8px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
+      </div>
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Localizacao (opcional)</div>
+        <div style={{ display:"flex",gap:8 }}>
+          {[{v:false,l:"SP / Grande SP"},{v:true,l:"Fora de SP"}].map(op=>(
+            <button key={String(op.v)} onClick={()=>setFora(op.v)}
+              style={{ flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:fora===op.v?C.tealL:"var(--color-background-secondary)",color:fora===op.v?C.tealD:"var(--color-text-secondary)",border:"0.5px solid "+(fora===op.v?C.teal:"var(--color-border-tertiary)") }}>
+              {op.l}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ marginBottom:24 }}>
+      <div style={{ background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:8,padding:"12px 16px",marginBottom:16 }}>
+        <div style={{ fontSize:13,fontWeight:500,color:C.amberD,marginBottom:3 }}>Cadastro rapido</div>
+        <div style={{ fontSize:12,color:C.amberD,lineHeight:1.5 }}>Para clientes sem historico no ecom — indicacoes, assinantes diretos ou primeiros contatos.</div>
+      </div>
+
+      {!modo && (
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+          <button onClick={()=>setModo("lead")} style={{ padding:"16px",borderRadius:12,border:"1.5px solid "+C.teal,background:C.tealL,cursor:"pointer",textAlign:"left" }}>
+            <div style={{ fontSize:20,marginBottom:6 }}>🎯</div>
+            <div style={{ fontSize:13,fontWeight:500,color:C.tealD,marginBottom:4 }}>Novo Lead</div>
+            <div style={{ fontSize:11,color:C.tealD,lineHeight:1.5 }}>Entrou em contato mas nunca comprou. Entra como Lead sem historico de compras.</div>
+          </button>
+          <button onClick={()=>setModo("club")} style={{ padding:"16px",borderRadius:12,border:"1.5px solid "+C.purple,background:C.purpleL,cursor:"pointer",textAlign:"left" }}>
+            <div style={{ fontSize:20,marginBottom:6 }}>⭐</div>
+            <div style={{ fontSize:13,fontWeight:500,color:C.purpleD,marginBottom:4 }}>Assinante Direto</div>
+            <div style={{ fontSize:11,color:C.purpleD,lineHeight:1.5 }}>Assinou o Club sem passar pelo ecom. Entra diretamente em Experiencia.</div>
+          </button>
+        </div>
+      )}
+
+      {modo && (
+        <div>
+          <button onClick={()=>setModo(null)} style={{ background:"none",border:"none",color:C.teal,fontSize:12,fontWeight:500,cursor:"pointer",padding:0,marginBottom:14 }}>← Voltar</button>
+          <div style={{ background:modo==="club"?C.purpleL:C.tealL,border:"0.5px solid "+(modo==="club"?C.purple:C.teal),borderRadius:8,padding:"10px 14px",marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:500,color:modo==="club"?C.purpleD:C.tealD }}>{modo==="club"?"⭐ Assinante Direto — entra em Experiencia":"🎯 Novo Lead — entra como Lead"}</div>
+          </div>
+          {camposBase}
+          {modo==="club" && (
+            <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"14px",marginBottom:16,border:"0.5px solid var(--color-border-tertiary)" }}>
+              <div style={{ fontSize:12,fontWeight:500,color:"var(--color-text-primary)",marginBottom:10 }}>Dados da assinatura</div>
+              <div style={{ marginBottom:10 }}>
+                <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Tipo de assinatura</div>
+                <div style={{ display:"flex",gap:8 }}>
+                  {TIPOS_ASSINATURA.map(t=>(
+                    <button key={t.id} onClick={()=>setTipoAssin(t.id)}
+                      style={{ flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:tipoAssin===t.id?C.purple:"var(--color-background-primary)",color:tipoAssin===t.id?"#fff":"var(--color-text-secondary)",border:"0.5px solid "+(tipoAssin===t.id?C.purple:"var(--color-border-tertiary)") }}>
+                      {t.label}<br/><span style={{ fontSize:10,fontWeight:400 }}>{t.ciclosTotais} meses</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                <div>
+                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Data de inicio</div>
+                  <input type="date" value={dataInicio} onChange={e=>setDataInicio(e.target.value)}
+                    style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-primary)",outline:"none" }}/>
+                </div>
+                <div>
+                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Valor medio mensal R$</div>
+                  <input type="number" min="0" placeholder="Ex: 89.90" value={valorMensal} onChange={e=>setValorMensal(e.target.value)}
+                    style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-primary)",outline:"none" }}/>
+                </div>
+              </div>
+            </div>
+          )}
+          <button onClick={salvar} disabled={!nome.trim()||salvo}
+            style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:nome.trim()&&!salvo?"pointer":"default",background:salvo?C.green:nome.trim()?(modo==="club"?C.purple:C.teal):"var(--color-background-secondary)",color:nome.trim()||salvo?"#fff":"var(--color-text-tertiary)",border:"none" }}>
+            {salvo?"✓ Salvo!":modo==="club"?"Adicionar como Assinante Direto →":"Adicionar como Lead →"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+const NovoClienteForm = ({ onSalvo }) => {
+  const [nome, setNome] = useState("");
+  const [tel, setTel] = useState("");
+  const [origem, setOrigem] = useState("");
+  const [origemCustom, setOrigemCustom] = useState("");
+  const [obs, setObs] = useState("");
+  const [salvo, setSalvo] = useState(false);
+
+  const ORIGENS = ["Indicacao", "Instagram", "TikTok", "Evento", "Presencial", "Outra"];
+
+  const salvar = async () => {
+    if (!nome.trim()) return;
+    const origemFinal = origem === "Outra" ? origemCustom : origem;
+    const seq = buildSeq("novo_cliente", 0, 0, false, false, 0);
+    const prob = { pct: 25, label: "Media", cor: C.amber, corD: C.amberD, corL: C.amberL };
+    const c = {
+      id: "c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
+      etapa: "lead", dataCriacao: new Date().toLocaleDateString("pt-BR"),
+      notas: obs.trim(), proximaAcao: "", dataProximoContato: "",
+      lista: "Novo cliente — "+origemFinal,
+      nome: nome.trim(), telefone: tel.trim(),
+      customerId: "", p: 0, gasto: 0, fora: null,
+      dataPrimeiro: "", dataUltimo: "", datasPreenchidas: false,
+      objetivo: "novo_cliente", objetivoLabel: "Novo cliente — 1a compra",
+      objetivoCor: C.teal, objetivoCorD: C.tealD, objetivoAlerta: "",
+      prob: prob.pct, probLabel: prob.label, probCor: prob.cor,
+      seq, stepAtual: 0, cicloMedio: 0,
+    };
+    await dbSave(c);
+    setSalvo(true);
+    setTimeout(() => {
+      setNome(""); setTel(""); setOrigem(""); setOrigemCustom(""); setObs(""); setSalvo(false);
+      onSalvo && onSalvo();
+    }, 1500);
+  };
+
+  return (
+    <div style={{ background:C.tealL, border:"0.5px solid "+C.teal, borderRadius:12, padding:"16px 20px" }}>
+      <div style={{ fontSize:14, fontWeight:500, color:C.tealD, marginBottom:4 }}>Novo cliente sem historico de compra</div>
+      <div style={{ fontSize:12, color:C.tealD, marginBottom:16, lineHeight:1.5 }}>
+        Para clientes que chegaram por indicacao, redes sociais ou contato direto — sem compras no ecommerce ainda.
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+        <div>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nome <span style={{ color:C.coralD,fontSize:10 }}>*obrigatorio</span></div>
+          <input style={{ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:14,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}
+            type="text" placeholder="Ex: Maria Silva" value={nome} onChange={e=>setNome(e.target.value)}/>
+        </div>
+        <div>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Telefone / WhatsApp</div>
+          <input style={{ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:14,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}
+            type="text" placeholder="11 9XXXX-XXXX" value={tel} onChange={e=>setTel(e.target.value)}/>
+        </div>
+      </div>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Como chegou ate a Laricas</div>
+        <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:origem==="Outra"?8:0 }}>
+          {ORIGENS.map(o=>(
+            <button key={o} onClick={()=>setOrigem(o===origem?"":o)}
+              style={{ padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:500,cursor:"pointer",
+                background:origem===o?C.teal:"var(--color-background-secondary)",
+                color:origem===o?"#fff":"var(--color-text-secondary)",
+                border:"0.5px solid "+(origem===o?C.teal:"var(--color-border-tertiary)") }}>
+              {o}
+            </button>
+          ))}
+        </div>
+        {origem==="Outra"&&(
+          <input style={{ width:"100%",padding:"8px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}
+            type="text" placeholder="Como chegou?" value={origemCustom} onChange={e=>setOrigemCustom(e.target.value)}/>
+        )}
+      </div>
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:5,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Observacoes <span style={{ fontWeight:400 }}>(opcional)</span></div>
+        <textarea value={obs} onChange={e=>setObs(e.target.value)} placeholder="Contexto do contato, produto de interesse, etc..."
+          rows={2} style={{ width:"100%",padding:"8px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none",resize:"none",fontFamily:"inherit" }}/>
+      </div>
+      {!nome.trim()&&<div style={{ fontSize:12,color:C.coralD,background:C.coralL,padding:"6px 10px",borderRadius:6,marginBottom:8 }}>Preencha o nome para habilitar.</div>}
+      <button onClick={salvar} disabled={!nome.trim()||salvo}
+        style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,
+          cursor:nome.trim()&&!salvo?"pointer":"default",
+          background:salvo?C.green:nome.trim()?C.teal:"var(--color-background-secondary)",
+          color:nome.trim()||salvo?"#fff":"var(--color-text-tertiary)",border:"none" }}>
+        {salvo?"✓ Cliente adicionado ao CRM!":"Adicionar ao CRM como Lead →"}
+      </button>
+    </div>
+  );
+};
+
 const TriagemForm = ({ onSalvo, lista }) => {
   const [nome,setNome]=useState(""); const [tel,setTel]=useState(""); const [ped,setPed]=useState("");
   const [dp,setDp]=useState(""); const [du,setDu]=useState(""); const [fora,setFora]=useState(null);
@@ -1964,6 +2214,31 @@ const GlobalSearch = ({ onAbrir }) => {
   );
 };
 
+
+const TriagemTab = ({ onSalvo }) => {
+  const [modo, setModo] = useState("historico"); // "historico" | "novo"
+  return (
+    <div>
+      <div style={{ display:"flex",gap:8,marginBottom:20 }}>
+        <button onClick={()=>setModo("historico")}
+          style={{ flex:1,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",
+            background:modo==="historico"?C.teal:"var(--color-background-secondary)",
+            color:modo==="historico"?"#fff":"var(--color-text-secondary)",border:"none" }}>
+          📊 Cliente com historico Shopify
+        </button>
+        <button onClick={()=>setModo("novo")}
+          style={{ flex:1,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",
+            background:modo==="novo"?C.teal:"var(--color-background-secondary)",
+            color:modo==="novo"?"#fff":"var(--color-text-secondary)",border:"none" }}>
+          ✨ Novo cliente sem compra
+        </button>
+      </div>
+      {modo==="historico"&&<TriagemForm onSalvo={onSalvo}/>}
+      {modo==="novo"&&<NovoClienteForm onSalvo={onSalvo}/>}
+    </div>
+  );
+};
+
 export default function App() {
   const [tab,setTab]=useState("kanban");
   const [clienteId,setClienteId]=useState(null);
@@ -2002,7 +2277,17 @@ export default function App() {
       </div>
       {tab==="kanban"&&(clienteId?<Perfil key={clienteId} clienteId={clienteId} onVoltar={()=>{setClienteId(null);setRefresh(r=>r+1);}}/>:<Kanban key={refresh} onAbrir={setClienteId}/>)}
       {tab==="import"&&<ImportarLista onSalvo={onSalvo}/>}
-      {tab==="triagem"&&<TriagemForm onSalvo={onSalvo}/>}
+      {tab==="triagem"&&(
+        <div>
+          <CadastroRapido onSalvo={onSalvo}/>
+          <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:20 }}>
+            <div style={{ flex:1,height:1,background:"var(--color-border-tertiary)" }}/>
+            <span style={{ fontSize:11,color:"var(--color-text-tertiary)",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Ou triagem com historico de compras</span>
+            <div style={{ flex:1,height:1,background:"var(--color-border-tertiary)" }}/>
+          </div>
+          <TriagemForm onSalvo={onSalvo}/>
+        </div>
+      )}
       {tab==="historico"&&<Historico/>}
       {tab==="dashclub"&&<LTV/>}
       {tab==="guia"&&<Guia/>}
