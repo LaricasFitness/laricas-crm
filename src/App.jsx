@@ -1124,10 +1124,10 @@ const Kanban = ({ onAbrir }) => {
     };
     const byDateThenPrio = (a,b) => a.dataProximoContato > b.dataProximoContato ? 1 : a.dataProximoContato < b.dataProximoContato ? -1 : prioScore(b) - prioScore(a);
     const vencidos=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje).sort(byDateThenPrio);
-    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byPrio(etapaId));
-    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort(byPrio(etapaId));
+    const deHoje=grupo.filter(c=>c.dataProximoContato===hoje).sort(byPrio(id));
+    const deAmanha=grupo.filter(c=>c.dataProximoContato===amanha).sort(byPrio(id));
     const depois=grupo.filter(c=>c.dataProximoContato&&c.dataProximoContato>amanha).sort(byDateThenPrio);
-    const semData=grupo.filter(c=>!c.dataProximoContato).sort(byPrio(etapaId));
+    const semData=grupo.filter(c=>!c.dataProximoContato).sort(byPrio(id));
     return {vencidos,deHoje,deAmanha,depois,semData,total:grupo.length};
   };
 
