@@ -331,7 +331,7 @@ const Perfil = ({ clienteId, onVoltar }) => {
           <div><div style={{ fontSize:11,color:vencido?C.coralD:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Data próximo contato {vencido?"⚠ Vencida":""}</div><input type="date" value={c.dataProximoContato||""} onChange={e=>save({dataProximoContato:e.target.value})} style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid "+(vencido?C.coral:urgente?C.amber:"var(--color-border-tertiary)"),fontSize:13,color:vencido?C.coralD:urgente?C.amberD:"var(--color-text-primary)",background:vencido?C.coralL:urgente?C.amberL:"var(--color-background-secondary)",outline:"none" }}/></div>
         </div>
       </div>
-      {c.seq&&c.seq.length>0&&(
+      {c.seq&&c.seq.length>0&&c.etapa!=="experiencia"&&(
         <div style={{ background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"16px",marginBottom:12 }}>
           <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12 }}>
             <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",flex:1 }}>Sequência</div>
@@ -770,6 +770,7 @@ const Kanban = ({ onAbrir }) => {
   const [draggedId,setDraggedId]=useState(null);
   const [dragOverEtapa,setDragOverEtapa]=useState(null);
   const [busca,setBusca]=useState("");
+  const [menuAberto,setMenuAberto]=useState(null);
   const [abertos,setAbertos]=useState({});
   const toggleGrupo=(etapaId,grupo)=>{ const k=etapaId+"_"+grupo; setAbertos(a=>({...a,[k]:!a[k]})); };
   const isAberto=(etapaId,grupo)=>!!abertos[etapaId+"_"+grupo];
@@ -778,11 +779,20 @@ const Kanban = ({ onAbrir }) => {
     setLoading(true);
     try {
       const [todos, conv] = await Promise.all([dbGetAll(), dbGetConversoes()]);
-      setClientes(todos); setConversoes(conv);
+      // Mostrar todos exceto encerrados com mais de 90 dias
+      const cutoff = new Date(Date.now() - 90*86400000).toISOString();
+      const visiveis = todos.filter(c => c.etapa !== "encerrado" || (c.atualizado_em||"") > cutoff);
+      setClientes(visiveis); setConversoes(conv);
     } catch(e) { setClientes([]); setConversoes([]); }
     setLoading(false);
   }, []);
   useEffect(()=>{carregar();},[carregar]);
+
+  // Auto-refresh a cada 60 segundos
+  useEffect(()=>{
+    const timer = setInterval(()=>{ carregar(); }, 60000);
+    return ()=>clearInterval(timer);
+  },[carregar]);
 
   const handleDrop = async (etapaId) => {
     if (!draggedId || draggedId === etapaId) { setDraggedId(null); setDragOverEtapa(null); return; }
@@ -831,14 +841,40 @@ const Kanban = ({ onAbrir }) => {
         onDragStart={(e)=>{ e.dataTransfer.effectAllowed="move"; setDraggedId(cl.id); }}
         onDragEnd={()=>{ setDraggedId(null); setDragOverEtapa(null); }}
         style={{ width:"100%",textAlign:"left",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:"3px solid "+cl.probCor,borderRadius:8,padding:"10px",marginBottom:6,cursor:draggedId===cl.id?"grabbing":"grab",opacity:draggedId===cl.id?0.4:1,transition:"opacity 0.15s" }}>
-        <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{cl.customerId?"#"+cl.customerId+" · ":""}{cl.nome}</div>
-        <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{cl.proximaAcao||"—"}</div>
+        <div style={{ display:"flex",alignItems:"flex-start",gap:4 }}>
+          <div style={{ flex:1,minWidth:0 }}>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{cl.customerId?"#"+cl.customerId+" · ":""}{cl.nome}</div>
+            <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{cl.proximaAcao||"—"}</div>
+          </div>
+          <div style={{ position:"relative",flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+            <button onClick={e=>{e.stopPropagation();setMenuAberto(menuAberto===cl.id?null:cl.id);}}
+              style={{ background:"none",border:"none",cursor:"pointer",padding:"0 4px",fontSize:14,color:"var(--color-text-tertiary)",lineHeight:1 }}>⋯</button>
+            {menuAberto===cl.id&&(
+              <div style={{ position:"absolute",right:0,top:"100%",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,0.12)",zIndex:50,minWidth:160,overflow:"hidden" }}>
+                <div style={{ fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",padding:"6px 10px 4px",textTransform:"uppercase",letterSpacing:"0.06em" }}>Mover para</div>
+                {ETAPAS.filter(e=>e.id!==cl.etapa).map(e=>(
+                  <button key={e.id} onClick={async()=>{ setMenuAberto(null); const atualizado={...cl,etapa:e.id}; setClientes(prev=>prev.map(c=>c.id===cl.id?atualizado:c)); try{await dbSave(atualizado);}catch(err){} }}
+                    style={{ width:"100%",textAlign:"left",padding:"7px 10px",background:"none",border:"none",cursor:"pointer",fontSize:12,color:"var(--color-text-primary)",display:"flex",alignItems:"center",gap:6 }}>
+                    <span>{e.emoji}</span><span>{e.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
         <div style={{ display:"flex",alignItems:"center",gap:4,marginBottom:cl.dataProximoContato?4:0 }}>
           <span style={{ fontSize:11,background:cl.probCor+"22",color:cl.probCor,padding:"1px 6px",borderRadius:20,fontWeight:500 }}>{cl.prob}%</span>
           <span style={{ fontSize:10,color:"var(--color-text-tertiary)" }}>{cl.p}p · {cl.cicloMedio||"?"}d</span>
         </div>
         {cl.dataProximoContato&&<div style={{ fontSize:10,color:v?C.coralD:u||am?C.amberD:"var(--color-text-tertiary)",background:v?C.coralL:u||am?C.amberL:"transparent",padding:v||u||am?"1px 5px":0,borderRadius:4 }}>{v?"⚠ Vencida":u?"⚡ Hoje":am?"📅 Amanhã":"📅"} {!u&&!am&&new Date(cl.dataProximoContato+"T12:00:00").toLocaleDateString("pt-BR")}</div>}
         {cl.lista&&<div style={{ fontSize:10,color:C.purpleD,marginTop:3 }}>{cl.lista}</div>}
+        {cl.etapa==="experiencia"&&cl.tipoAssinatura&&cl.dataInicioAssinatura&&(()=>{
+          const assin=calcAssinatura(cl.tipoAssinatura,cl.dataInicioAssinatura);
+          if(!assin)return null;
+          const d=assin.diasParaCobranca;
+          if(d>15)return null;
+          return <div style={{ fontSize:10,fontWeight:500,color:d<=7?C.coralD:C.amberD,background:d<=7?C.coralL:C.amberL,padding:"1px 5px",borderRadius:4,marginTop:3 }}>🔔 Renovacao em {d}d</div>;
+        })()}
       </button>
     );
   };
@@ -903,7 +939,7 @@ const Kanban = ({ onAbrir }) => {
   );
 
   return (
-    <div>
+    <div onClick={()=>setMenuAberto(null)}>
       <Dashboard clientes={clientes} conversoes={conversoes}/>
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
         <div style={{ position:"relative",flex:1 }}>
@@ -1640,6 +1676,22 @@ const LTV = () => {
   const mrr = comValor.reduce((acc,a) => acc + (a.valorMensal||0), 0);
   const semValor = ativos.length - comValor.length;
 
+  // Churn: cancelamentos por mes
+  const churnPorMes = {};
+  cancelados.forEach(a => {
+    if (!a.dataCancelamento) return;
+    const key = a.dataCancelamento.substring(0,7);
+    churnPorMes[key] = (churnPorMes[key]||0) + 1;
+  });
+  const mesesComChurn = Object.keys(churnPorMes).sort().reverse().slice(0,3);
+  const churnMesAtual = churnPorMes[new Date().toISOString().substring(0,7)]||0;
+  const tempoMedioMeses = cancelados.length > 0
+    ? Math.round(cancelados.filter(a=>a.dataInicioAssinatura&&a.dataCancelamento).reduce((acc,a)=>{
+        return acc + calcCiclosCancelado(a.dataInicioAssinatura, a.dataCancelamento);
+      },0) / cancelados.filter(a=>a.dataInicioAssinatura&&a.dataCancelamento).length)
+    : 0;
+  const churnRate = ativos.length > 0 ? Math.round(cancelados.length/(ativos.length+cancelados.length)*100) : 0;
+
   return (
     <div>
       <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
@@ -1667,8 +1719,49 @@ const LTV = () => {
         </div>
       </div>
 
+      {cancelados.length > 0 && (
+        <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Cancelamentos e churn</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.coral}}>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Churn total</div>
+              <div style={{fontSize:24,fontWeight:500,color:C.coralD}}>{churnRate}%</div>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{cancelados.length} de {ativos.length+cancelados.length} assinantes</div>
+            </div>
+            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.amber}}>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Tempo medio ate cancelar</div>
+              <div style={{fontSize:24,fontWeight:500,color:C.amberD}}>{tempoMedioMeses || "—"}{tempoMedioMeses?"m":""}</div>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>meses de assinatura</div>
+            </div>
+            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cancelamentos mes atual</div>
+              <div style={{fontSize:24,fontWeight:500,color:churnMesAtual>0?C.coralD:"var(--color-text-primary)"}}>{churnMesAtual}</div>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{mesesComChurn.slice(1).map(m=><span key={m} style={{marginRight:6}}>{m}: {churnPorMes[m]}</span>)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
-        <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Assinantes individuais</div>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",flex:1}}>Assinantes individuais</div>
+          <div style={{display:"flex",gap:8}}>
+            {["trimestral","semestral","anual"].map(tipo=>{
+              const grupo = comValor.filter(a=>a.tipoAssinatura===tipo);
+              if(grupo.length===0) return null;
+              const mediaVM = Math.round(grupo.reduce((acc,a)=>acc+(a.valorMensal||0),0)/grupo.length);
+              const mediaLTV = Math.round(grupo.reduce((acc,a)=>{
+                const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+                return acc+(a.valorMensal||0)*(assin?assin.ciclosTotais:0)+(a.gasto||0);
+              },0)/grupo.length);
+              return (<div key={tipo} style={{background:"var(--color-background-primary)",borderRadius:8,padding:"6px 10px",textAlign:"center"}}>
+                <div style={{fontSize:9,color:"var(--color-text-tertiary)",textTransform:"capitalize",marginBottom:2}}>{tipo} ({grupo.length})</div>
+                <div style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>R${mediaVM}/mes</div>
+                <div style={{fontSize:10,color:C.purpleD}}>LTV ~R${mediaLTV}</div>
+              </div>);
+            })}
+          </div>
+        </div>
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
             <thead>
@@ -1706,10 +1799,72 @@ const LTV = () => {
   );
 };
 
+
+const GlobalSearch = ({ onAbrir }) => {
+  const [q, setQ] = useState("");
+  const [resultados, setResultados] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+  const [aberto, setAberto] = useState(false);
+
+  useEffect(() => {
+    if (!q.trim() || q.length < 2) { setResultados([]); return; }
+    setBuscando(true);
+    const timer = setTimeout(async () => {
+      const todos = await dbGetAll();
+      const ql = q.toLowerCase();
+      const res = todos.filter(c =>
+        (c.nome||"").toLowerCase().includes(ql) ||
+        (c.customerId||"").toLowerCase().includes(ql) ||
+        (c.telefone||"").toLowerCase().includes(ql)
+      ).slice(0, 8);
+      setResultados(res);
+      setBuscando(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  const etapaInfo = (id) => ETAPAS.find(e=>e.id===id) || ETAPAS[0];
+
+  return (
+    <div style={{ position:"relative", flex:1, maxWidth:400 }}>
+      <div style={{ position:"relative" }}>
+        <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none" }}>🔍</span>
+        <input
+          value={q} onChange={e=>{setQ(e.target.value);setAberto(true);}}
+          onFocus={()=>setAberto(true)}
+          onBlur={()=>setTimeout(()=>setAberto(false),200)}
+          placeholder="Buscar cliente em qualquer etapa..."
+          style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}
+        />
+        {buscando&&<span style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"var(--color-text-tertiary)" }}>...</span>}
+      </div>
+      {aberto&&q.length>=2&&(
+        <div style={{ position:"absolute",top:"100%",left:0,right:0,background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,boxShadow:"0 4px 20px rgba(0,0,0,0.1)",zIndex:100,marginTop:4,overflow:"hidden" }}>
+          {resultados.length===0&&!buscando&&<div style={{ padding:"12px 14px",fontSize:13,color:"var(--color-text-tertiary)" }}>Nenhum cliente encontrado</div>}
+          {resultados.map(c => {
+            const e = etapaInfo(c.etapa);
+            return (
+              <button key={c.id} onClick={()=>{onAbrir(c.id);setQ("");setAberto(false);}}
+                style={{ width:"100%",textAlign:"left",padding:"10px 14px",background:"none",border:"none",borderBottom:"0.5px solid var(--color-border-tertiary)",cursor:"pointer",display:"flex",alignItems:"center",gap:10 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)" }}>{c.nome}</div>
+                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.customerId?"#"+c.customerId+" · ":""}{c.telefone||""}</div>
+                </div>
+                <span style={{ fontSize:10,fontWeight:500,background:e.corL,color:e.corD,padding:"2px 8px",borderRadius:20,flexShrink:0 }}>{e.emoji} {e.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   const [tab,setTab]=useState("kanban");
   const [clienteId,setClienteId]=useState(null);
   const [refresh,setRefresh]=useState(0);
+  const abrirClienteGlobal = (id) => { setClienteId(id); setTab("kanban"); };
   const [cfgOk,setCfgOk]=useState(false);
   const [cfgLoad,setCfgLoad]=useState(true);
   useEffect(()=>{ loadCfg().then(cfg=>{ setCfgOk(!!(cfg.url&&cfg.key)); setCfgLoad(false); }); },[]);
@@ -1723,10 +1878,13 @@ export default function App() {
   );
   return (
     <div style={{ maxWidth:900,margin:"0 auto",padding:"0 0 40px",fontFamily:"var(--font-sans)",color:"var(--color-text-primary)" }}>
-      <div style={{ padding:"20px 0 8px" }}>
+      <div style={{ display:"flex",alignItems:"center",gap:12,padding:"20px 0 8px" }}>
+        <div style={{ flex:1 }}>
         <div style={{ fontSize:11,fontWeight:500,letterSpacing:"0.09em",textTransform:"uppercase",color:"var(--color-text-tertiary)",marginBottom:4 }}>Laricas Fitness</div>
         <div style={{ fontSize:22,fontWeight:500,lineHeight:1.3 }}>CRM de Conversão</div>
-        <div style={{ fontSize:13,color:"var(--color-text-secondary)",marginTop:4 }}>Lead → Contato → Conversa → Proposta → Convertido</div>
+          <div style={{ fontSize:13,color:"var(--color-text-secondary)",marginTop:4 }}>Lead → Contato → Conversa → Proposta → Convertido</div>
+        </div>
+        <GlobalSearch onAbrir={abrirClienteGlobal}/>
       </div>
       <div style={{ display:"flex",borderBottom:"0.5px solid var(--color-border-tertiary)",marginBottom:24,overflowX:"auto" }}>
         <T label="📋 Kanban" active={tab==="kanban"} color={C.green} onClick={()=>{setClienteId(null);setTab("kanban");}}/>
