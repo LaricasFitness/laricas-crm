@@ -1534,8 +1534,7 @@ const ImportarLista = ({ onSalvo }) => {
 
   const executarOrders = async () => {
     const inicio = Date.now();
-    {
-      try {
+    try {
         const total = pedidosPreview.length;
         setProg({ atual: 0, total, inicio });
 
