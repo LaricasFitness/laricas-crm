@@ -584,6 +584,25 @@ const Perfil = ({ clienteId, onVoltar }) => {
         <M label="Probabilidade" value={c.prob+"%"} sub={c.probLabel} cor={c.probCor}/>
         <M label="Pedidos · Ciclo" value={c.p+"p · "+(c.cicloMedio||"?")+"d"}/>
       </div>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12 }}>
+        <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px" }}>
+          <div style={{ fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Nº pedidos</div>
+          <div style={{ fontSize:20,fontWeight:500,color:"var(--color-text-primary)" }}>{c.p||0}</div>
+        </div>
+        <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px" }}>
+          <div style={{ fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Total gasto</div>
+          <div style={{ fontSize:20,fontWeight:500,color:C.tealD }}>R${(c.gasto||0).toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+        </div>
+        <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px" }}>
+          <div style={{ fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Ultimo pedido</div>
+          <div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)" }}>
+            {c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"}) : "—"}
+          </div>
+          {c.dataPrimeiro&&c.dataPrimeiro!==c.dataUltimo&&<div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginTop:2 }}>
+            1° em {new Date(c.dataPrimeiro+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"})}
+          </div>}
+        </div>
+      </div>
       <div style={{ background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,padding:"16px",marginBottom:12 }}>
         <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:12 }}>Perfil do cliente</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
