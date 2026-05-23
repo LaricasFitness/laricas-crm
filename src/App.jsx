@@ -1329,9 +1329,135 @@ const parseShopifyDate = (str) => {
   return "";
 };
 
+
+// ── SHOPIFY ORDERS CSV PARSER ─────────────────────────────────────────────────
+const parseTagsParaPedidos = (tags) => {
+  // "Novo Cliente" → 1, "Pedido 2" → 2, "Pedido > 10" → 10+
+  if (!tags) return null;
+  if (/novo cliente/i.test(tags)) return 1;
+  const m = tags.match(/pedido (\d+)/i);
+  if (m) return parseInt(m[1]);
+  if (/pedido > (\d+)/i.test(tags)) {
+    const m2 = tags.match(/pedido > (\d+)/i);
+    return m2 ? parseInt(m2[1]) + 1 : null;
+  }
+  return null;
+};
+
+const isOrdersCSV = (headers) => {
+  const h = headers.map(x=>x.toLowerCase().trim());
+  return h.includes("financial status") && h.includes("billing name") && h.includes("billing zip");
+};
+
+const parseOrdersCSVContent = (raw) => {
+  const linhas = raw.split("\n").map(l=>l.trim()).filter(l=>l.length>0);
+  if (linhas.length < 2) return { pedidos: [], erros: ["Arquivo vazio"] };
+
+  const sep = linhas[0].includes(";") ? ";" : ",";
+  
+  // Parse CSV properly handling quoted fields
+  const parseCSVLine = (line) => {
+    const result = [];
+    let cur = "";
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"' && !inQuote) { inQuote = true; }
+      else if (ch === '"' && inQuote) {
+        if (line[i+1] === '"') { cur += '"'; i++; }
+        else { inQuote = false; }
+      } else if (ch === sep && !inQuote) { result.push(cur.trim()); cur = ""; }
+      else { cur += ch; }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  const headers = parseCSVLine(linhas[0]);
+  const idx = (name) => headers.findIndex(h=>h.toLowerCase().trim()===name.toLowerCase().trim());
+
+  const iNome    = idx("Billing Name");
+  const iEmail   = idx("Email");
+  const iTotal   = idx("Total");
+  const iData    = idx("Created at");
+  const iCEP     = idx("Billing Zip");
+  const iTel     = idx("Billing Phone");
+  const iStatus  = idx("Financial Status");
+  const iTags    = idx("Tags");
+  const iName    = idx("Name");
+
+  if (iEmail < 0 || iNome < 0) {
+    return { pedidos: [], erros: ["Colunas Email ou Billing Name nao encontradas"] };
+  }
+
+  // Group rows by order number (Name column), take first row per order
+  const pedidosPorNum = {};
+  for (let i = 1; i < linhas.length; i++) {
+    const cols = parseCSVLine(linhas[i]);
+    const orderNum = iName >= 0 ? (cols[iName]||"").trim() : "";
+    const email = (cols[iEmail]||"").trim().toLowerCase();
+    const status = iStatus >= 0 ? (cols[iStatus]||"").trim() : "";
+    
+    // Only process first row of each order (has billing info) and skip cancelled/refunded
+    if (!email || !orderNum) continue;
+    if (status && status !== "paid" && status !== "partially_paid") continue;
+    if (pedidosPorNum[orderNum]) continue; // already processed this order
+    
+    const nome   = iNome >= 0 ? (cols[iNome]||"").trim() : "";
+    const total  = iTotal >= 0 ? parseFloat((cols[iTotal]||"0").replace(",",".")) || 0 : 0;
+    const data   = iData >= 0 ? parseShopifyDate(cols[iData]||"") : "";
+    const cep    = iCEP >= 0 ? (cols[iCEP]||"").replace(/\D/g,"").padStart(8,"0") : "";
+    const tel    = iTel >= 0 ? (cols[iTel]||"").trim() : "";
+    const tags   = iTags >= 0 ? (cols[iTags]||"").trim() : "";
+    const nPed   = parseTagsParaPedidos(tags);
+    const fora   = cep ? !cep.startsWith("0") : null;
+
+    if (nome && email) {
+      pedidosPorNum[orderNum] = { email, nome, tel, total, data, cep, fora, nPed, tags };
+    }
+  }
+
+  // Group by EMAIL to get per-customer stats
+  const porEmail = {};
+  Object.values(pedidosPorNum).forEach(p => {
+    const e = p.email;
+    if (!porEmail[e]) {
+      porEmail[e] = { ...p, totalGasto: 0, datas: [], pedidos: [] };
+    }
+    porEmail[e].totalGasto += p.total;
+    if (p.data) porEmail[e].datas.push(p.data);
+    porEmail[e].pedidos.push(p);
+    // Use highest nPed found for this customer
+    if (p.nPed && (!porEmail[e].nPed || p.nPed > porEmail[e].nPed)) {
+      porEmail[e].nPed = p.nPed;
+    }
+  });
+
+  const pedidos = Object.values(porEmail).map(c => {
+    const datasOrdenadas = [...c.datas].sort();
+    return {
+      email: c.email,
+      nome: c.nome,
+      tel: c.tel,
+      fora: c.fora,
+      cep: c.cep,
+      totalGasto: Math.round(c.totalGasto * 100) / 100,
+      nPedidos: c.nPed || c.pedidos.length,
+      dataUltimo: datasOrdenadas[datasOrdenadas.length - 1] || "",
+      dataPrimeiro: datasOrdenadas[0] || "",
+      numerosOrdem: Object.keys(pedidosPorNum).filter(n => pedidosPorNum[n].email === c.email),
+    };
+  });
+
+  return { pedidos, erros: [] };
+};
+
 const ImportarLista = ({ onSalvo }) => {
   const [txt,setTxt]=useState(""); const [prev,setPrev]=useState([]); const [imp,setImp]=useState(false);
   const [ok,setOk]=useState(null); const [erro,setErro]=useState("");
+  const [modoOrders,setModoOrders]=useState(false);
+  const [pedidosPreview,setPedidosPreview]=useState([]);
+  const [confirmacaoOrders,setConfirmacaoOrders]=useState(null);
   const parse = (raw) => {
     const linhas = raw.split("\n").map(l=>l.trim()).filter(l=>l.length>0);
     const cls=[]; const errs=[];
@@ -1341,8 +1467,9 @@ const ImportarLista = ({ onSalvo }) => {
       const sep = linha.includes(";") ? ";" : ",";
       const pts = linha.split(sep).map(p=>p.trim());
       if(pts.length<4){errs.push("Linha "+(i+1+start)+": minimo 4 colunas");return;}
-      const [customerId, nome, tel, gastoStr, pedStr, dp6, du7, cep8, lista9] = pts;
+      const [customerId, nome, tel, gastoStr, pedStr, dp6, du7, cep8, lista9, email10] = pts;
       const lista = (lista9||"").trim();
+      const email = (email10||"").trim().toLowerCase();
       const ped = parseInt(pedStr);
       const gasto = parseFloat((gastoStr||"0").replace(",","."))||0;
       const dp = parseShopifyDate(dp6||"");
@@ -1350,15 +1477,25 @@ const ImportarLista = ({ onSalvo }) => {
       const fora = cepToFora(cep8||"");
       if(!nome){errs.push("Linha "+(i+1+start)+": nome vazio");return;}
       if(isNaN(ped)||ped<1){errs.push("Linha "+(i+1+start)+": pedidos invalido");return;}
-      cls.push({customerId:customerId||"",nome,tel:tel||"",ped,gasto,dp,du,fora,cep:cep8||"",lista});
+      cls.push({customerId:customerId||"",nome,tel:tel||"",ped,gasto,dp,du,fora,cep:cep8||"",lista,email});
     });
     return {cls,errs};
   };
   const atualizar = (val) => {
-    setTxt(val); setOk(null); setErro("");
-    if(!val.trim()){setPrev([]);return;}
-    const {cls,errs}=parse(val); setPrev(cls);
-    if(errs.length>0) setErro(errs.join("\n"));
+    setTxt(val); setOk(null); setErro(""); setConfirmacaoOrders(null);
+    if(!val.trim()){setPrev([]);setPedidosPreview([]);setModoOrders(false);return;}
+    const primeiraLinha = val.split("\n")[0]||"";
+    const headers = primeiraLinha.split(",");
+    if(isOrdersCSV(headers)){
+      setModoOrders(true); setPrev([]);
+      const r = parseOrdersCSVContent(val);
+      setPedidosPreview(r.pedidos);
+      if(r.erros.length>0) setErro(r.erros.join("\n"));
+    } else {
+      setModoOrders(false); setPedidosPreview([]);
+      const {cls,errs}=parse(val); setPrev(cls);
+      if(errs.length>0) setErro(errs.join("\n"));
+    }
   };
   const [prog, setProg] = useState(null); // {atual, total, inicio}
 
@@ -1376,6 +1513,107 @@ const ImportarLista = ({ onSalvo }) => {
     if(prev.length===0) return;
     setImp(true);
     const inicio = Date.now();
+
+    const runOrders = async () => {
+      try {
+        const total = pedidosPreview.length;
+        setProg({ atual: 0, total, inicio });
+
+        const existentes = await dbGetAll();
+        const porEmail = {};
+        existentes.forEach(c => { if (c.email||c.telefone) porEmail[(c.email||"").toLowerCase()] = c; });
+
+        const novos = [], atualizados = [];
+
+        let pedidosIgnorados = 0;
+        pedidosPreview.forEach(p => {
+          const existente = porEmail[p.email.toLowerCase()];
+          if (existente) {
+            // Deduplication: check which orders are new
+            const jaImportados = new Set(existente.pedidosImportados||[]);
+            const novosOrdens = (p.numerosOrdem||[]).filter(n=>!jaImportados.has(n));
+            if (novosOrdens.length === 0) { pedidosIgnorados++; return; }
+
+            const fracaoNova = p.numerosOrdem?.length > 0 ? novosOrdens.length/p.numerosOrdem.length : 1;
+            const deltaGasto = p.totalGasto * fracaoNova;
+            const todosPedidos = [...Array.from(jaImportados), ...novosOrdens];
+
+            // Update: merge data, recalculate triagem
+            const novoTotal = (existente.gasto||0) + deltaGasto;
+            const novoP = Math.max(existente.p||0, p.nPedidos||0);
+            const novaDataU = p.dataUltimo > (existente.dataUltimo||"") ? p.dataUltimo : existente.dataUltimo;
+            const dp = existente.dataPrimeiro||p.dataPrimeiro||"";
+            const temDados = !!(dp && existente.fora !== null && novoP >= 1);
+            const tr = temDados ? runTriagem(novoP, dp, novaDataU||dp, existente.fora, novoTotal) : null;
+            atualizados.push({
+              ...existente,
+              gasto: novoTotal,
+              p: novoP,
+              dataUltimo: novaDataU,
+              dataPrimeiro: dp,
+              email: existente.email || p.email,
+              pedidosImportados: todosPedidos,
+              ...(tr ? {
+                objetivo: tr.obj, objetivoLabel: tr.label,
+                objetivoCor: tr.cor, objetivoCorD: tr.corD, objetivoAlerta: tr.alerta,
+                prob: tr.prob.pct, probLabel: tr.prob.label, probCor: tr.prob.cor,
+                seq: tr.seq, cicloMedio: tr.ciclo, datasPreenchidas: true,
+              } : {})
+            });
+          } else {
+            // New client
+            const temDados = !!(p.dataPrimeiro && p.fora !== null && p.nPedidos >= 1);
+            const tr = temDados ? runTriagem(p.nPedidos, p.dataPrimeiro, p.dataUltimo||p.dataPrimeiro, p.fora, p.totalGasto) : null;
+            novos.push({
+              id: "c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
+              etapa: "lead", dataCriacao: new Date().toLocaleDateString("pt-BR"),
+              notas: "", proximaAcao: "", dataProximoContato: "",
+              lista: "Pedidos Shopify", email: p.email,
+              pedidosImportados: p.numerosOrdem||[],
+              customerId: "", nome: p.nome, telefone: p.tel,
+              p: p.nPedidos||1, gasto: p.totalGasto, fora: p.fora, cep: p.cep||"",
+              dataPrimeiro: p.dataPrimeiro, dataUltimo: p.dataUltimo,
+              datasPreenchidas: temDados,
+              objetivo: tr?tr.obj:"", objetivoLabel: tr?tr.label:"⚠ Preencher datas",
+              objetivoCor: tr?tr.cor:C.purple, objetivoCorD: tr?tr.corD:C.purpleD,
+              objetivoAlerta: tr?tr.alerta:"",
+              prob: tr?tr.prob.pct:0, probLabel: tr?tr.prob.label:"Pendente", probCor: tr?tr.prob.cor:C.purple,
+              seq: tr?tr.seq:[], stepAtual:0, cicloMedio: tr?tr.ciclo:0,
+            });
+          }
+        });
+
+        setProg({ atual: Math.floor(total*0.1), total, inicio });
+
+        const LOTE = 200;
+        let salvos = 0;
+        for (let i = 0; i < novos.length; i += LOTE) {
+          await dbBulkSave(novos.slice(i, i+LOTE));
+          salvos += Math.min(LOTE, novos.length-i);
+          setProg({ atual: Math.floor(salvos/total*85)+5, total, inicio });
+        }
+        for (let i = 0; i < atualizados.length; i += LOTE) {
+          await dbBulkSave(atualizados.slice(i, i+LOTE));
+          salvos += Math.min(LOTE, atualizados.length-i);
+          setProg({ atual: Math.floor(salvos/total*85)+5, total, inicio });
+        }
+
+        setProg({ atual: total, total, inicio });
+        const msg = [
+          novos.length > 0 ? novos.length+" novos leads" : "",
+          atualizados.length > 0 ? atualizados.length+" perfis atualizados" : "",
+          novos.filter(c=>c.datasPreenchidas).length > 0 ? novos.filter(c=>c.datasPreenchidas).length+" com triagem" : "",
+          pedidosIgnorados > 0 ? pedidosIgnorados+" pedidos ja importados (ignorados)" : "",
+        ].filter(Boolean).join(" · ");
+        setOk("✓ "+msg);
+        setImp(false); setProg(null);
+        setTimeout(()=>{ setTxt(""); setPrev([]); setPedidosPreview([]); setModoOrders(false);
+          setConfirmacaoOrders(null); setOk(null); setErro(""); onSalvo&&onSalvo(); }, 2500);
+      } catch(e) {
+        setErro("Erro: "+(e.message||"tente novamente"));
+        setImp(false); setProg(null);
+      }
+    };
 
     const run = async () => {
       try {
@@ -1395,14 +1633,21 @@ const ImportarLista = ({ onSalvo }) => {
 
           if (existente) {
             // Já existe — acrescentar lista se for nova e diferente
+            let atualizado = {...existente};
+            let mudou = false;
             if (cl.lista && cl.lista.trim()) {
               const listaAtual = existente.lista || "";
               const listas = listaAtual.split(" · ").map(l=>l.trim()).filter(Boolean);
               if (!listas.includes(cl.lista.trim())) {
-                const novaLista = listaAtual ? listaAtual + " · " + cl.lista.trim() : cl.lista.trim();
-                paraAtualizarLista.push({...existente, lista: novaLista});
+                atualizado.lista = listaAtual ? listaAtual + " · " + cl.lista.trim() : cl.lista.trim();
+                mudou = true;
               }
             }
+            if (cl.email && !existente.email) {
+              atualizado.email = cl.email;
+              mudou = true;
+            }
+            if (mudou) paraAtualizarLista.push(atualizado);
           } else {
             // Novo cliente — criar com triagem
             const temDados = !!(cl.dp && cl.fora !== null && cl.ped >= 1);
@@ -1411,7 +1656,7 @@ const ImportarLista = ({ onSalvo }) => {
               id:"c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
               etapa:"lead", dataCriacao:new Date().toLocaleDateString("pt-BR"),
               notas:"", proximaAcao:"", dataProximoContato:"",
-              lista:cl.lista, customerId:cl.customerId, nome:cl.nome,
+              lista:cl.lista, customerId:cl.customerId, nome:cl.nome, email:cl.email||"",
               telefone:cl.tel, p:cl.ped, gasto:cl.gasto,
               fora:cl.fora, cep:cl.cep||"",
               dataPrimeiro:cl.dp||"", dataUltimo:cl.du||cl.dp||"",
@@ -1521,8 +1766,8 @@ const ImportarLista = ({ onSalvo }) => {
       <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 16px",marginBottom:16 }}>
         <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8 }}>Formato aceito</div>
         <div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.8,fontFamily:"monospace" }}>
-          Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Último Pedido, CEP, Lista<br/>
-          <span style={{ color:C.tealD }}>1234, Maria Silva, 11 99999-1111, 380, 4, 2025-11-18, 2026-03-10, 04547-130, Pascoa Falta Uma</span><br/>
+          Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Último Pedido, CEP, Lista, Email<br/>
+          <span style={{ color:C.tealD }}>1234, Maria Silva, 11 99999-1111, 380, 4, 2025-11-18, 2026-03-10, 04547-130, Pascoa Falta Uma, maria@email.com</span><br/>
           <span style={{ color:"var(--color-text-tertiary)" }}>// Formato Shopify — triagem calculada automaticamente pelo CEP e datas</span>
         </div>
         <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginTop:8 }}>
@@ -1542,7 +1787,45 @@ const ImportarLista = ({ onSalvo }) => {
         <textarea value={txt} onChange={e=>atualizar(e.target.value)} placeholder={"1234, Maria Silva, 11 99999-1111, 380, 4, Páscoa Falta Uma\n5678, André Santos, 11 98888-2222, 290, 3"} rows={6} style={{ width:"100%",padding:"10px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none",resize:"vertical",fontFamily:"monospace",lineHeight:1.6 }}/>
       </div>
       {erro&&<div style={{ background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:8,padding:"10px 14px",marginBottom:12 }}><div style={{ fontSize:11,fontWeight:500,color:C.coralD,marginBottom:4 }}>⚠ Linhas com erro serão ignoradas</div><div style={{ fontSize:11,color:C.coralD,whiteSpace:"pre-line",lineHeight:1.6 }}>{erro}</div></div>}
-      {prev.length>0&&(
+      {modoOrders && pedidosPreview.length > 0 && !prog && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
+            <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:8 }}>
+              📦 Formato detectado: Pedidos Shopify
+            </div>
+            <div style={{ fontSize:12,color:"var(--color-text-secondary)",marginBottom:10 }}>
+              {pedidosPreview.length} clientes únicos encontrados no arquivo
+            </div>
+            {confirmacaoOrders && (
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12 }}>
+                <div style={{ background:C.greenL,borderRadius:8,padding:"10px 12px",border:"0.5px solid "+C.green }}>
+                  <div style={{ fontSize:10,color:C.greenD,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Novos leads</div>
+                  <div style={{ fontSize:22,fontWeight:500,color:C.greenD }}>{confirmacaoOrders.novos}</div>
+                  <div style={{ fontSize:11,color:C.greenD }}>serao criados no CRM</div>
+                </div>
+                <div style={{ background:C.amberL,borderRadius:8,padding:"10px 12px",border:"0.5px solid "+C.amber }}>
+                  <div style={{ fontSize:10,color:C.amberD,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Perfis existentes</div>
+                  <div style={{ fontSize:22,fontWeight:500,color:C.amberD }}>{confirmacaoOrders.atualizados}</div>
+                  <div style={{ fontSize:11,color:C.amberD }}>terao dados atualizados</div>
+                </div>
+              </div>
+            )}
+            {!confirmacaoOrders && <div style={{ fontSize:12,color:"var(--color-text-tertiary)" }}>Verificando base existente...</div>}
+          </div>
+          <div style={{ display:"flex",gap:8 }}>
+            <button onClick={()=>{ setModoOrders(false); setPedidosPreview([]); setConfirmacaoOrders(null); setTxt(""); }}
+              style={{ flex:1,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)" }}>
+              Cancelar
+            </button>
+            <button onClick={()=>{ if(!confirmacaoOrders){ dbGetAll().then(ex=>{ const em=new Set(ex.map(c=>(c.email||"").toLowerCase()).filter(Boolean)); setConfirmacaoOrders({novos:pedidosPreview.filter(p=>!em.has(p.email.toLowerCase())).length,atualizados:pedidosPreview.filter(p=>em.has(p.email.toLowerCase())).length}); }); } else { setImp(true); runOrders(); } }}
+              disabled={imp}
+              style={{ flex:2,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:confirmacaoOrders?C.teal:C.purple,color:"#fff",border:"none" }}>
+              {confirmacaoOrders?"Confirmar e importar →":"Verificar base →"}
+            </button>
+          </div>
+        </div>
+      )}
+      {!modoOrders && prev.length>0&&(
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8 }}>Preview — {prev.length} cliente{prev.length!==1?"s":""}</div>
           <div style={{ border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,overflow:"hidden" }}>
@@ -1583,8 +1866,8 @@ const ImportarLista = ({ onSalvo }) => {
           </div>
         </div>
       )}
-      <button onClick={importar} disabled={prev.length===0||imp||ok!==null} style={{ width:"100%",padding:"12px",borderRadius:10,fontSize:14,fontWeight:500,cursor:prev.length>0&&!imp?"pointer":"default",border:"none",background:ok!==null?C.green:prev.length>0&&!imp?C.purple:"var(--color-background-secondary)",color:ok!==null||(prev.length>0&&!imp)?"#fff":"var(--color-text-tertiary)" }}>
-        {ok!==null?ok:imp?"Aguarde...":prev.length>0?"Importar "+prev.length+" lead"+(prev.length!==1?"s":"")+" →":"Cole a lista acima para importar"}
+      <button onClick={importar} disabled={(modoOrders?pedidosPreview.length===0:prev.length===0)||imp||ok!==null} style={{ width:"100%",padding:"12px",borderRadius:10,fontSize:14,fontWeight:500,cursor:((modoOrders?pedidosPreview.length>0:prev.length>0)&&!imp)?"pointer":"default",border:"none",background:ok!==null?C.green:(modoOrders?pedidosPreview.length>0:prev.length>0)&&!imp?C.purple:"var(--color-background-secondary)",color:ok!==null||((modoOrders?pedidosPreview.length>0:prev.length>0)&&!imp)?"#fff":"var(--color-text-tertiary)" }}>
+        {ok!==null?ok:imp?"Aguarde...":(modoOrders&&pedidosPreview.length>0)?"Use o botao acima para importar":prev.length>0?"Importar "+prev.length+" lead"+(prev.length!==1?"s":"")+" →":"Cole a lista acima para importar"}
       </button>
     </div>
   );
