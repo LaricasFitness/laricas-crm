@@ -155,6 +155,45 @@ const buildSeq = (obj, ciclo, p, fora, foraDaJanela, diasUnico) => {
   return steps;
 };
 
+
+const buildRetencao = (assin, tipoLabel) => {
+  const steps = [];
+
+  // R1 — Onboarding (mes 1)
+  steps.push({
+    label: "R1 — Onboarding", quem: "Time humano", cor: C.green, fase: 1,
+    copy: "[Nome]! 😊 Aqui é o Lucas da Laricas.\n\nSua primeira caixinha do Club deve ter chegado — tudo certo por aí?\n\nFico feliz de ter você no Club! 🥰 Me conta: qual foi o que você mais gostou?",
+    regra: "Enviar até 3 dias após a data de início. Não mencionar próximo envio ainda. Registrar o favorito nas notas do perfil.",
+    gatilho: "Responde com favorito → anotar. Não responde em 48h → aguardar próximo ciclo."
+  });
+
+  // R2 — Curadoria mensal (ciclo 2 em diante)
+  steps.push({
+    label: "R2 — Curadoria mensal", quem: "Time humano", cor: C.teal, fase: 2,
+    copy: "[Nome]! 😊 Aqui é o Lucas.\n\nO envio do mês tá chegando! 🍫\n\nQuer manter a seleção atual ou prefere trocar algum produto esse mês?",
+    regra: "Enviar ~5 dias antes da renovação mensal. Se não responder, manter seleção padrão e confirmar envio.",
+    gatilho: "Quer trocar → personalizar e confirmar. Mantém → confirmar envio normalmente."
+  });
+
+  // R3 — Renovação (último mês da fidelidade)
+  steps.push({
+    label: "R3 — Renovação da fidelidade", quem: "Time humano", cor: C.amber, fase: "ultimo",
+    copy: `[Nome]! 😊 Aqui é o Lucas da Laricas.\n\nSeu plano ${tipoLabel} encerra daqui a um mês — o tempo voou! 🥰\n\nQueria já garantir a continuidade pra você não ficar nenhum dia sem Laricas 😄\n\nPosso renovar por mais ${tipoLabel}?`,
+    regra: "Abordar 30 dias antes do fim da fidelidade. Tom de cuidado, não de cobrança. Não mencionar preço primeiro.",
+    gatilho: "Sim → confirmar renovação e nova data. Quer mudar plano → apresentar opções. Não → entender motivo antes de aceitar."
+  });
+
+  // R4 — Win-back (após cancelamento)
+  steps.push({
+    label: "R4 — Win-back pós cancelamento", quem: "Time humano", cor: C.coral, fase: "cancel",
+    copy: "[Nome], tudo bem? 😊 Aqui é o Lucas.\n\nVi que sua assinatura encerrou — espero que tudo esteja bem com você!\n\nQuando bater saudade das Laricas, é só me chamar. A gente resolve 💛",
+    regra: "Enviar até 7 dias após cancelamento. Sem oferta, sem desconto — apenas porta aberta. Uma tentativa só.",
+    gatilho: "Responde → entender motivo e avaliar win-back personalizado. Silêncio → aguardar 30 dias e tentar uma última vez."
+  });
+
+  return steps;
+};
+
 const calcProb = (obj, ciclo, p, fora, foraDaJanela, gasto, diasUnico) => {
   let base = 20, mP = 1, mR = 1, mL = fora ? 1.2 : 1, mG = 1;
   if (obj === "reativacao") { const d = diasUnico||0; base = d<=30?35:d<=60?22:12; }
@@ -606,6 +645,53 @@ const LogAtividade = ({ c, save }) => {
   );
 };
 
+const SeqRetencao = ({ c }) => {
+  const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura);
+  const tipoLabel = (TIPOS_ASSINATURA.find(t=>t.id===c.tipoAssinatura)?.ciclosTotais||"")+"m";
+  const retSteps = buildRetencao(assin, tipoLabel);
+  const cicloAtual = assin ? assin.cicloAtual : 1;
+  const diasParaFim = assin ? assin.diasParaFim : 999;
+  const stepAtivo = c.cancelado ? 3 : diasParaFim <= 30 ? 2 : cicloAtual === 1 ? 0 : 1;
+  const [openR, setOpenR] = useState(stepAtivo);
+
+  return (
+    <div style={{ background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:12 }}>
+      <div style={{ fontSize:13,fontWeight:500,color:C.purpleD,marginBottom:4 }}>Sequência de retenção</div>
+      <div style={{ fontSize:11,color:C.purple,marginBottom:12 }}>
+        {c.cancelado?"R4 ativo — win-back":diasParaFim<=30?"⚠ R3 ativo — renovação urgente":cicloAtual===1?"R1 ativo — onboarding":"R2 ativo — curadoria mensal"}
+      </div>
+      {retSteps.map((s,i)=>{
+        const isAtivo = i === stepAtivo;
+        const textoP = personalizarCopy(s.copy, c);
+        const temPlaceholder = /\[[A-Za-zÀ-ú][^\]]*\]/.test(textoP);
+        return (
+          <div key={i} style={{ marginBottom:8,borderRadius:10,overflow:"hidden",border:"0.5px solid "+(isAtivo?s.cor:"var(--color-border-tertiary)"),opacity:isAtivo?1:0.6 }}>
+            <button onClick={()=>setOpenR(openR===i?-1:i)} style={{ width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:isAtivo?s.cor+"18":"var(--color-background-secondary)",border:"none",cursor:"pointer",textAlign:"left" }}>
+              <span style={{ fontSize:11,fontWeight:600,color:s.cor,flex:1 }}>{s.label}{isAtivo?" ← AGORA":""}</span>
+              <span style={{ fontSize:10,color:"var(--color-text-tertiary)",background:"var(--color-background-primary)",padding:"1px 6px",borderRadius:10 }}>{s.quem}</span>
+              <span style={{ fontSize:10,color:"var(--color-text-tertiary)" }}>{openR===i?"▲":"▼"}</span>
+            </button>
+            {openR===i&&(
+              <div style={{ padding:"14px",background:"var(--color-background-primary)",borderTop:"0.5px solid var(--color-border-tertiary)" }}>
+                <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginBottom:6,fontSize:14,color:"var(--color-text-primary)",lineHeight:1.85,whiteSpace:"pre-line",fontFamily:"inherit",borderLeft:"3px solid "+s.cor }}>{textoP}</div>
+                {temPlaceholder&&<div style={{ fontSize:10,color:C.amber,marginBottom:6 }}>⚠ Campos em [colchetes] precisam ser preenchidos antes de enviar</div>}
+                <button onClick={()=>{ navigator.clipboard.writeText(textoP).then(()=>{}).catch(()=>{}); const el=document.getElementById("rcpbtn_"+i); if(el){el.textContent="✓ Copiado!";el.style.background=C.green;setTimeout(()=>{el.textContent="📋 Copiar mensagem";el.style.background=C.tealL;},2000); }}} id={"rcpbtn_"+i}
+                  style={{ marginBottom:10,padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",background:C.tealL,color:C.tealD,border:"0.5px solid "+C.teal,transition:"background 0.2s" }}>
+                  📋 Copiar mensagem
+                </button>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                  <div><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Regra</div><div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5 }}>{s.regra}</div></div>
+                  <div><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Próximo gatilho</div><div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5 }}>{s.gatilho}</div></div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const Perfil = ({ clienteId, onVoltar }) => {
   const [c,setC]=useState(null); const [confirmDel,setConfirmDel]=useState(false); const [salvando,setSalvando]=useState(false); const [toast,setToast]=useState("");
   useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(cl); }); }, [clienteId]);
@@ -875,6 +961,10 @@ const Perfil = ({ clienteId, onVoltar }) => {
           </div>
         );
       })()}
+
+      {c.etapa==="experiencia"&&c.tipoAssinatura&&(
+        <SeqRetencao c={c} save={save}/>
+      )}
 
       <div style={{ padding:"14px 16px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)" }}>
         <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:10 }}>Encerrar atendimento</div>
