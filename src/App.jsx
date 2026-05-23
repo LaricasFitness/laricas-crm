@@ -172,7 +172,7 @@ const inp = (ex) => ({ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.
 const T = ({ label, active, color, onClick }) => ( <button onClick={onClick} style={{ padding:"8px 12px",fontSize:12,fontWeight:500,color:active?color:"var(--color-text-secondary)",borderBottom:active?"2px solid "+color:"2px solid transparent",marginBottom:-1,background:"transparent",border:"none",cursor:"pointer",whiteSpace:"nowrap" }}>{label}</button> );
 const M = ({ label, value, sub, cor }) => ( <div style={{ background:"var(--color-background-secondary)",borderRadius:8,padding:"10px 12px" }}><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>{label}</div><div style={{ fontSize:18,fontWeight:500,color:cor||"var(--color-text-primary)" }}>{value}</div>{sub&&<div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginTop:2 }}>{sub}</div>}</div> );
 
-const Steps = ({ steps, cur }) => {
+const Steps = ({ steps, cur, cliente }) => {
   const [open, setOpen] = useState(cur||0);
   return (
     <div>
@@ -192,7 +192,7 @@ const Steps = ({ steps, cur }) => {
             {open===i&&(
               <div style={{ border:"0.5px solid "+(isCur?C.teal:s.cor),borderTop:"none",borderRadius:"0 0 10px 10px",padding:"14px",background:"var(--color-background-primary)" }}>
                 {(()=>{
-                  const textoPersonalizado = personalizarCopy(s.copy, c);
+                  const textoPersonalizado = personalizarCopy(s.copy, cliente);
                   const temPlaceholder = /\[[A-Za-zÀ-ú][^\]]*\]/.test(textoPersonalizado);
                   return (
                     <div>
@@ -717,7 +717,7 @@ const Perfil = ({ clienteId, onVoltar }) => {
             <div style={{ display:"flex",gap:3 }}>{c.seq.map((_,i)=>(<div key={i} style={{ width:8,height:8,borderRadius:"50%",background:i<=c.stepAtual?C.teal:"var(--color-border-tertiary)" }}/>))}</div>
             <span style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.stepAtual+1}/{c.seq.length}</span>
           </div>
-          <Steps steps={c.seq} cur={c.stepAtual}/>
+          <Steps steps={c.seq} cur={c.stepAtual} cliente={c}/>
           {c.stepAtual<c.seq.length-1&&<button onClick={avancar} style={{ width:"100%",marginTop:10,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>Cliente respondeu → avançar para passo {c.stepAtual+2} ↓</button>}
         </div>
       )}
