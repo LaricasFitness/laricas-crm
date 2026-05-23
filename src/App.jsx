@@ -192,6 +192,14 @@ const Steps = ({ steps, cur }) => {
             {open===i&&(
               <div style={{ border:"0.5px solid "+(isCur?C.teal:s.cor),borderTop:"none",borderRadius:"0 0 10px 10px",padding:"14px",background:"var(--color-background-primary)" }}>
                 <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"13px 15px",marginBottom:10,fontSize:14,color:"var(--color-text-primary)",lineHeight:1.85,whiteSpace:"pre-line",fontFamily:"inherit",borderLeft:"3px solid "+(isCur?C.teal:s.cor) }}>{s.copy}</div>
+                <button onClick={()=>{
+                  navigator.clipboard.writeText(s.copy).then(()=>{}).catch(()=>{});
+                  const el=document.getElementById("cpbtn_"+i);
+                  if(el){el.textContent="✓ Copiado!";el.style.background=C.green;setTimeout(()=>{el.textContent="📋 Copiar mensagem";el.style.background=C.tealL;},2000);}
+                }} id={"cpbtn_"+i}
+                  style={{ marginBottom:10,padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",background:C.tealL,color:C.tealD,border:"0.5px solid "+C.teal,transition:"background 0.2s" }}>
+                  📋 Copiar mensagem
+                </button>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
                   <div><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Regra</div><div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5 }}>{s.regra}</div></div>
                   <div><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Próximo gatilho</div><div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5 }}>{s.gatilho}</div></div>
@@ -515,6 +523,48 @@ const TriagemForm = ({ onSalvo, lista }) => {
   );
 };
 
+
+const LogAtividade = ({ c, save }) => {
+  const [logTxt, setLogTxt] = useState("");
+  const addLog = () => {
+    if (!logTxt.trim()) return;
+    const novo = {
+      texto: logTxt.trim(),
+      data: new Date().toLocaleDateString("pt-BR"),
+      hora: new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
+      resp: c.responsavel||"",
+    };
+    const logs = [novo, ...(c.logAtividade||[])].slice(0,30);
+    save({logAtividade: logs});
+    setLogTxt("");
+  };
+  return (
+    <div style={{ marginBottom:10 }}>
+      <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em" }}>Log de atividade</div>
+      <div style={{ display:"flex",gap:8,marginBottom:8 }}>
+        <input value={logTxt} onChange={e=>setLogTxt(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();addLog();} }}
+          placeholder="Ex: Tentei contato, nao atendeu. Enviou mensagem..."
+          style={{ flex:1,padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
+        <button onClick={addLog} disabled={!logTxt.trim()}
+          style={{ padding:"7px 12px",borderRadius:8,fontSize:12,fontWeight:500,cursor:logTxt.trim()?"pointer":"default",background:logTxt.trim()?C.teal:"var(--color-background-secondary)",color:logTxt.trim()?"#fff":"var(--color-text-tertiary)",border:"none" }}>
+          + Registrar
+        </button>
+      </div>
+      {(c.logAtividade||[]).length > 0 && (
+        <div style={{ maxHeight:160,overflowY:"auto",display:"flex",flexDirection:"column",gap:4 }}>
+          {(c.logAtividade||[]).map((l,i) => (
+            <div key={i} style={{ fontSize:11,padding:"5px 8px",background:"var(--color-background-primary)",borderRadius:6,border:"0.5px solid var(--color-border-tertiary)",display:"flex",gap:8 }}>
+              <span style={{ color:"var(--color-text-primary)",flex:1 }}>{l.texto}</span>
+              <span style={{ color:"var(--color-text-tertiary)",flexShrink:0 }}>{l.data} {l.hora}{l.resp?" · "+l.resp:""}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Perfil = ({ clienteId, onVoltar }) => {
   const [c,setC]=useState(null); const [confirmDel,setConfirmDel]=useState(false); const [salvando,setSalvando]=useState(false); const [toast,setToast]=useState("");
   useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(cl); }); }, [clienteId]);
@@ -553,6 +603,12 @@ const Perfil = ({ clienteId, onVoltar }) => {
       <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:16 }}>
         <button onClick={onVoltar} style={{ background:"none",border:"none",color:C.teal,fontSize:13,fontWeight:500,cursor:"pointer",padding:0 }}>← Kanban</button>
         <div style={{ flex:1 }}><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2 }}>{c.customerId?("ID "+c.customerId+" · "):""}{c.nome}</div><div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)",lineHeight:1.3 }}>{c.proximaAcao||"— sem próxima ação"}</div></div>
+        {c.telefone&&(
+          <a href={"https://wa.me/55"+c.telefone.replace(/\D/g,"")} target="_blank" rel="noopener noreferrer"
+            style={{ background:"#25D366",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,color:"#fff",cursor:"pointer",fontWeight:500,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4 }}>
+            💬 WhatsApp
+          </a>
+        )}
         {c.historicoEtapas&&c.historicoEtapas.length>0&&(
           <button onClick={desfazer} disabled={salvando} title={"Voltar para: "+ETAPAS.find(e=>e.id===(c.historicoEtapas[c.historicoEtapas.length-1]||{}).etapa)?.label}
             style={{ background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:6,padding:"4px 10px",fontSize:11,color:C.amberD,cursor:salvando?"default":"pointer",fontWeight:500 }}>
@@ -614,11 +670,16 @@ const Perfil = ({ clienteId, onVoltar }) => {
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Customer ID Shopify</div><input style={inp({fontSize:11,color:"var(--color-text-tertiary)"})} value={c.customerId||""} onChange={e=>setC({...c,customerId:e.target.value})} onBlur={()=>save({customerId:c.customerId})} placeholder="ID do cliente no Shopify"/></div>
         </div>
         <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Responsável</div>
+          <input style={inp()} value={c.responsavel||""} onChange={e=>setC({...c,responsavel:e.target.value})} onBlur={()=>save({responsavel:c.responsavel})} placeholder="Nome do operador"/>
+        </div>
+        <div style={{ marginBottom:10 }}>
           <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Lista de origem (opcional)</div>
           <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>{LISTAS.map(l=>(<button key={l} onClick={()=>save({lista:l===c.lista?"":l})} style={{ padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",background:c.lista===l?C.purpleL:"var(--color-background-secondary)",color:c.lista===l?C.purpleD:"var(--color-text-secondary)",border:"0.5px solid "+(c.lista===l?C.purple:"var(--color-border-tertiary)") }}>{l}</button>))}</div>
           <input style={inp({fontSize:12})} value={LISTAS.includes(c.lista||"")?"":c.lista||""} onChange={e=>setC({...c,lista:e.target.value})} onBlur={()=>save({lista:c.lista})} placeholder="Ou digite o nome da lista manualmente..."/>
         </div>
         <div style={{ marginBottom:10 }}><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Anotações</div><textarea value={c.notas} onChange={e=>setC({...c,notas:e.target.value})} onBlur={()=>save({notas:c.notas})} placeholder="Sabor favorito, objeções, contexto..." rows={3} style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none",resize:"vertical",fontFamily:"inherit",lineHeight:1.5 }}/></div>
+        <LogAtividade c={c} save={save}/>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Próxima ação</div><input style={inp()} value={c.proximaAcao||""} onChange={e=>setC({...c,proximaAcao:e.target.value})} onBlur={()=>save({proximaAcao:c.proximaAcao})} placeholder="Ex: Ligar após T1"/></div>
           <div><div style={{ fontSize:11,color:vencido?C.coralD:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Data próximo contato {vencido?"⚠ Vencida":""}</div><input type="date" value={c.dataProximoContato||""} onChange={e=>save({dataProximoContato:e.target.value})} style={{ width:"100%",padding:"8px 10px",borderRadius:8,border:"0.5px solid "+(vencido?C.coral:urgente?C.amber:"var(--color-border-tertiary)"),fontSize:13,color:vencido?C.coralD:urgente?C.amberD:"var(--color-text-primary)",background:vencido?C.coralL:urgente?C.amberL:"var(--color-background-secondary)",outline:"none" }}/></div>
@@ -1128,7 +1189,7 @@ const Kanban = ({ onAbrir }) => {
     if(filtroHoje) r = r.filter(c=>c.dataProximoContato===hoje);
     if(!busca.trim()) return r;
     const q=busca.toLowerCase();
-    return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q)||(c.email||"").toLowerCase().includes(q));
+    return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q)||(c.email||"").toLowerCase().includes(q)||(c.responsavel||"").toLowerCase().includes(q));
   };
 
   const porEtapa=(id)=>{
@@ -1265,6 +1326,34 @@ const Kanban = ({ onAbrir }) => {
   return (
     <div onClick={()=>setMenuAberto(null)}>
       <Dashboard clientes={clientes} conversoes={conversoes}/>
+      {(()=>{
+        const hoje2 = new Date().toISOString().split("T")[0];
+        const vencidos2 = clientes.filter(c=>c.dataProximoContato&&c.dataProximoContato<hoje2&&c.etapa!=="encerrado"&&c.etapa!=="convertido"&&c.etapa!=="experiencia");
+        const renovacoes7 = clientes.filter(c=>{
+          if(c.etapa!=="experiencia"||!c.tipoAssinatura||!c.dataInicioAssinatura) return false;
+          const assin=calcAssinatura(c.tipoAssinatura,c.dataInicioAssinatura);
+          return assin&&assin.diasParaCobranca<=7&&!c.cancelado&&!c.falhaRenovacao;
+        });
+        const focoSemAcao = clientes.filter(c=>(c.objetivo==="club"||c.objetivo==="falta_uma")&&!c.dataProximoContato&&c.etapa!=="encerrado"&&c.etapa!=="convertido"&&c.etapa!=="experiencia");
+        const expSemDados = clientes.filter(c=>c.etapa==="experiencia"&&(!c.tipoAssinatura||!c.valorMensal));
+        const itens = [
+          vencidos2.length>0&&{emoji:"🔴",label:`${vencidos2.length} contato${vencidos2.length>1?"s":""} vencido${vencidos2.length>1?"s":""}`,cor:C.coralD,bg:C.coralL},
+          renovacoes7.length>0&&{emoji:"🔔",label:`${renovacoes7.length} renovação${renovacoes7.length>1?"ões":""} em ≤7 dias`,cor:C.amberD,bg:C.amberL},
+          focoSemAcao.length>0&&{emoji:"🎯",label:`${focoSemAcao.length} Foco Club sem próxima ação`,cor:C.purpleD,bg:C.purpleL},
+          expSemDados.length>0&&{emoji:"⭐",label:`${expSemDados.length} Experiência sem dados`,cor:C.blueD,bg:C.blueL},
+        ].filter(Boolean);
+        if(itens.length===0) return null;
+        return (
+          <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,padding:"10px 14px",background:"var(--color-background-secondary)",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)" }}>
+            <div style={{ fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",alignSelf:"center",marginRight:4 }}>Ações urgentes</div>
+            {itens.map((it,i)=>(
+              <span key={i} style={{ fontSize:11,fontWeight:500,background:it.bg,color:it.cor,padding:"3px 10px",borderRadius:20,border:"0.5px solid "+it.cor }}>
+                {it.emoji} {it.label}
+              </span>
+            ))}
+          </div>
+        );
+      })()}
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
         <div style={{ position:"relative",flex:1 }}>
           <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none" }}>🔍</span>
