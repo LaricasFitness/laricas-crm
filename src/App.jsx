@@ -117,10 +117,26 @@ const buildSeq = (obj, ciclo, p, fora, foraDaJanela, diasUnico) => {
     steps.push({ label:d<=30?"T2 — Link":"T3 — Link", quem:"Automação", cor:C.amber, copy:"Aqui está 🎁\n\n[link do produto]\n\nCupom VOLTA10 — válido 5 dias.", regra:"Cupom com prazo real. Link direto do produto.", gatilho:"Compra → ciclo natural. Não compra → encerramento." });
     steps.push({ label:"Encerramento", quem:"Automação", cor:C.blue, copy:"[Nome], o cupom expirou mas continua disponível 😊\n\nPosso te avisar de novidade?", regra:"Transformar em permissão de contato futuro.", gatilho:"Sim → lista. Não → encerrar." });
   } else if (obj === "falta_uma") {
-    if (foraDaJanela) steps.push({ label:"Antes — Reconexão", quem:"Time humano", cor:C.amber, copy:"Oi [Nome]! 😊 Aqui é o Lucas da Laricas.\n\nComo tá? Ainda tem Laricas em casa? 😄", regra:"Confirmar engajamento antes de qualquer oferta.", gatilho:"Positivo → T1." });
-    steps.push({ label:"T1 — Curadoria", quem:"Time humano", cor:C.green, copy:"Oi [Nome]! 😊 Aqui é o Lucas da Laricas.\n\nVocê já experimentou [produto 1] e [produto 2] — boas escolhas!\n\nQuase todo mundo que experimenta um terceiro encontra o favorito de vez 😄 Tem um que combina muito com você: o [sugestão]. Quer ver?", regra:"Produtos reais do Shopify. Não revelar intenção ainda.", gatilho:"Interesse → T2 com link. Sem resposta → 'pão de mel ou bolinho?'" });
-    steps.push({ label:"T2 — Link + cupom", quem:"Automação", cor:C.amber, copy:"Aqui está 🎁\n\n[link direto do produto]\n\nCupom VOLTA10 — válido 5 dias!", regra:"Link direto. Prazo real.", gatilho:"Compra → 3° pedido → triagem Club. Não compra → T3." });
-    steps.push({ label:"T3 — Última tentativa", quem:"Automação", cor:C.blue, copy:"[Nome], o cupom expirou — mas o [produto] continua disponível 😊\n\nQual foi seu favorito até agora?", regra:"Encerrar mantendo conversa viva.", gatilho:"Responde → sugestão + última tentativa. Sem resposta → encerrar." });
+    if (foraDaJanela) steps.push({ label:"Antes — Reconexão", quem:"Time humano", cor:C.amber,
+      copy:"Oi [Nome]! 😊 Aqui é o Lucas da Laricas.\n\nComo tá? Ainda tem Laricas em casa? 😄",
+      regra:"Confirmar engajamento antes de qualquer oferta. Tom leve, sem pressão.",
+      gatilho:"Resposta positiva → T1. Sem resposta em 48h → T1 direto." });
+    steps.push({ label:"T1 — Curadoria personalizada", quem:"Time humano", cor:C.green,
+      copy:"Oi [Nome]! 😊 Aqui é o Lucas da Laricas.\n\nVi que você já provou o [produto 1] e o [produto 2] — fico feliz demais que você voltou! 🥰\n\n[Se ciclo próximo: Suas Laricas já devem estar quase no fim por aí! 😄\n\n]Tenho uma sugestão que acho que vai ser seu próximo favorito:\n👉 [próximo sabor sugerido]\n\nQuer saber mais sobre ele?",
+      regra:"Ver histórico no Shopify antes de enviar. Indicar UM produto específico, não lista. Incluir a frase de timing se diasUltimo estiver próximo do cicloMedio. Tom: caloroso e próximo, como indicação de amiga.",
+      gatilho:"Interesse → T2 com link. Sem resposta em 48h → T3." });
+    steps.push({ label:"T2 — Link direto", quem:"Time humano", cor:C.amber,
+      copy:"[Nome], que bom! 😄\n\nAqui está o link direto pra você:\n👉 [link do produto]\n\nQualquer dúvida é só me chamar, tô por aqui! 💛",
+      regra:"Só enviar após interesse confirmado. SEM cupom neste passo — guardar para T3.",
+      gatilho:"Compra → encerrado. Sem compra em 72h → T3." });
+    steps.push({ label:"T3 — Follow-up com cupom", quem:"Automação", cor:C.teal,
+      copy:"[Nome], deixa eu facilitar pra você 😊\n\n🎁 VOLTA10 — 10% de desconto, válido por 5 dias.\n\n👉 [link do produto]\n\nQualquer coisa é só chamar!",
+      regra:"Cupom com prazo real de 5 dias. Nunca prorrogar. Só revelar aqui, não antes.",
+      gatilho:"Compra → encerrado. Sem compra → T4." });
+    steps.push({ label:"T4 — Encerramento caloroso", quem:"Time humano", cor:C.purple,
+      copy:"[Nome], sem problema nenhum! 😊\n\nQuando bater aquela vontade de Laricas, é só me chamar que a gente encontra o sabor certo pra você.\n\nA gente vai estar por aqui! 🍫💛",
+      regra:"Sem novo cupom. Encerrar com leveza e porta aberta para contato futuro.",
+      gatilho:"Qualquer contato futuro → retoma do T1." });
   } else if (obj === "habit_rebuild") {
     if (foraDaJanela) steps.push({ label:"Antes — Reconexão", quem:"Time humano", cor:C.coral, copy:"Oi [Nome]! 😊 Aqui é o Lucas da Laricas.\n\nVi que você já fez "+p+" pedidos! Faz um tempo do último, tá sem estoque?", regra:"NÃO mencionar Club. Objetivo: próxima compra.", gatilho:"Positivo → T1." });
     steps.push({ label:"T1 — Curadoria", quem:"Time humano", cor:C.amber, copy:"Oi [Nome]! 😊 Aqui é o Lucas da Laricas.\n\nVi que você já pediu "+p+" vezes — claramente gosta! 🙌\n\nQual foi seu favorito? Pergunto porque tem um que você ainda não experimentou.", regra:"Ciclo de "+ciclo+" dias — NÃO oferecer Club ainda.", gatilho:"Favorito → T2 personalizado." });
