@@ -800,6 +800,16 @@ const Perfil = ({ clienteId, onVoltar }) => {
           <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Responsável</div>
           <input style={inp()} value={c.responsavel||""} onChange={e=>setC({...c,responsavel:e.target.value})} onBlur={()=>save({responsavel:c.responsavel})} placeholder="Nome do operador"/>
         </div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
+          <div>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Foi indicada por</div>
+            <input style={inp()} value={c.indicadaPor||""} onChange={e=>setC({...c,indicadaPor:e.target.value})} onBlur={()=>save({indicadaPor:c.indicadaPor})} placeholder="Nome de quem indicou"/>
+          </div>
+          <div>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Indicou quem</div>
+            <input style={inp()} value={c.indicouQuem||""} onChange={e=>setC({...c,indicouQuem:e.target.value})} onBlur={()=>save({indicouQuem:c.indicouQuem})} placeholder="Nome de quem foi indicado"/>
+          </div>
+        </div>
         <div style={{ marginBottom:10 }}>
           <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Lista de origem (opcional)</div>
           <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>{LISTAS.map(l=>(<button key={l} onClick={()=>save({lista:l===c.lista?"":l})} style={{ padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",background:c.lista===l?C.purpleL:"var(--color-background-secondary)",color:c.lista===l?C.purpleD:"var(--color-text-secondary)",border:"0.5px solid "+(c.lista===l?C.purple:"var(--color-border-tertiary)") }}>{l}</button>))}</div>
@@ -962,9 +972,46 @@ const Perfil = ({ clienteId, onVoltar }) => {
         );
       })()}
 
-      {c.etapa==="experiencia"&&c.tipoAssinatura&&(
-        <SeqRetencao c={c} save={save}/>
-      )}
+      {c.etapa==="experiencia"&&c.tipoAssinatura&&(()=>{
+        const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura);
+        const podeUpsell = c.tipoAssinatura!=="anual" && !c.cancelado && !c.falhaRenovacao && assin && assin.cicloAtual>=2 && assin.diasParaFim>30;
+        const proximoPlano = c.tipoAssinatura==="trimestral"?"semestral":c.tipoAssinatura==="semestral"?"anual":null;
+        const proximoCiclos = proximoPlano==="semestral"?6:proximoPlano==="anual"?12:0;
+        return (
+          <>
+            {podeUpsell&&proximoPlano&&(
+              <div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:12,padding:"14px 16px",marginBottom:12 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13,fontWeight:500,color:C.greenD,marginBottom:2 }}>🚀 Oportunidade de upsell</div>
+                    <div style={{ fontSize:12,color:C.greenD }}>Assinante satisfeita no ciclo {assin.cicloAtual} — candidata a migrar para o plano {proximoPlano}</div>
+                  </div>
+                </div>
+                <div style={{ background:"#fff",borderRadius:8,padding:"10px 12px",fontSize:12,color:"var(--color-text-primary)",lineHeight:1.7,whiteSpace:"pre-line",borderLeft:"3px solid "+C.green }}>
+                  {`[Nome]! 😊 Aqui é o Lucas da Laricas.
+
+Você já está no ${assin.cicloAtual}° mês do Club — fico tão feliz que está gostando! 🥰
+
+Pensando em você, vi que o plano ${proximoPlano} (${proximoCiclos} meses) faria ainda mais sentido para o seu perfil — e o valor mensal fica menor.
+
+Quer que eu te explique como funciona?`}
+                </div>
+                <button onClick={()=>{ navigator.clipboard.writeText(`[Nome]! 😊 Aqui é o Lucas da Laricas.
+
+Você já está no ${assin.cicloAtual}° mês do Club — fico tão feliz que está gostando! 🥰
+
+Pensando em você, vi que o plano ${proximoPlano} (${proximoCiclos} meses) faria ainda mais sentido para o seu perfil — e o valor mensal fica menor.
+
+Quer que eu te explique como funciona?`).catch(()=>{}); }}
+                  style={{ marginTop:8,padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",background:C.greenL,color:C.greenD,border:"0.5px solid "+C.green }}>
+                  📋 Copiar mensagem de upsell
+                </button>
+              </div>
+            )}
+            <SeqRetencao c={c} save={save}/>
+          </>
+        );
+      })()}
 
       <div style={{ padding:"14px 16px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px solid var(--color-border-tertiary)" }}>
         <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:10 }}>Encerrar atendimento</div>
@@ -1388,8 +1435,15 @@ const Kanban = ({ onAbrir }) => {
           const assin=calcAssinatura(cl.tipoAssinatura,cl.dataInicioAssinatura);
           if(!assin)return null;
           const d=assin.diasParaCobranca;
-          if(d>15)return null;
-          return <div style={{ fontSize:10,fontWeight:500,color:d<=7?C.coralD:C.amberD,background:d<=7?C.coralL:C.amberL,padding:"1px 5px",borderRadius:4,marginTop:3 }}>🔔 Renovacao em {d}d</div>;
+          const df=assin.diasParaFim;
+          const riscoChurn = df<=30&&!cl.cancelado&&!cl.falhaRenovacao;
+          if(d>15&&!riscoChurn)return null;
+          return (
+            <div style={{display:"flex",flexDirection:"column",gap:2,marginTop:3}}>
+              {d<=15&&<div style={{ fontSize:10,fontWeight:500,color:d<=7?C.coralD:C.amberD,background:d<=7?C.coralL:C.amberL,padding:"1px 5px",borderRadius:4 }}>🔔 Renovacao em {d}d</div>}
+              {riscoChurn&&<div style={{ fontSize:10,fontWeight:500,color:C.coralD,background:C.coralL,padding:"1px 5px",borderRadius:4 }}>⚠ Fidelidade encerra em {df}d</div>}
+            </div>
+          );
         })()}
       </button>
     );
@@ -1537,6 +1591,34 @@ const Kanban = ({ onAbrir }) => {
           })}
         </div>
       </div>
+
+      {(()=>{
+        const indicadoras = {};
+        assinantes.forEach(a=>{
+          if(a.indicadaPor&&a.indicadaPor.trim()){
+            const k=a.indicadaPor.trim();
+            if(!indicadoras[k]) indicadoras[k]={nome:k,count:0,nomes:[]};
+            indicadoras[k].count++;
+            indicadoras[k].nomes.push(a.nome);
+          }
+        });
+        const ranking = Object.values(indicadoras).sort((a,b)=>b.count-a.count).slice(0,10);
+        if(ranking.length===0) return null;
+        return (
+          <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginTop:16}}>
+            <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>🏆 Ranking de indicações</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {ranking.map((r,i)=>(
+                <div key={r.nome} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:"var(--color-background-primary)",borderRadius:8}}>
+                  <span style={{fontSize:12,fontWeight:500,color:C.amberD,minWidth:20}}>#{i+1}</span>
+                  <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)",flex:1}}>{r.nome}</span>
+                  <span style={{fontSize:11,background:C.greenL,color:C.greenD,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{r.count} indicação{r.count>1?"ões":""}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -2750,11 +2832,29 @@ const LTV = ({ onAbrir }) => {
             <div style={{fontSize:28,fontWeight:500,color:C.purpleD}}>{ativos.length}</div>
             <div style={{fontSize:10,color:C.purpleD,marginTop:2}}>{cancelados.length>0?cancelados.length+" cancelado"+(cancelados.length>1?"s":""):"nenhum cancelamento"}</div>
           </div>
-          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
-            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
-            <div style={{fontSize:24,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
-            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{comValor.length} assinantes · media R${comValor.length>0?(mrr/comValor.length).toFixed(0):0}/mes</div>
-          </div>
+          {(()=>{
+            // MRR do mes anterior para calcular variacao
+            const hoje3 = new Date();
+            const mesAnterior = new Date(hoje3.getFullYear(), hoje3.getMonth()-1, 1);
+            const mrrAnterior = ativos.reduce((acc,a)=>{
+              if(!a.dataInicioAssinatura||!a.valorMensal) return acc;
+              const ini = new Date(a.dataInicioAssinatura+"T12:00:00");
+              if(ini > mesAnterior) return acc; // ainda nao era assinante
+              return acc + (parseFloat(a.valorMensal)||0);
+            }, 0);
+            const varMRR = mrr - mrrAnterior;
+            const varPct = mrrAnterior > 0 ? Math.round(varMRR/mrrAnterior*100) : 0;
+            return (
+              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
+                <div style={{fontSize:24,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
+                  <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{comValor.length} assinantes · média R${comValor.length>0?(mrr/comValor.length).toFixed(0):0}/mês</span>
+                  {mrrAnterior>0&&<span style={{fontSize:10,fontWeight:500,color:varMRR>=0?C.greenD:C.coralD,background:varMRR>=0?C.greenL:C.coralL,padding:"1px 6px",borderRadius:10}}>{varMRR>=0?"+":""}R${varMRR.toFixed(0)} ({varPct>=0?"+":""}{varPct}%)</span>}
+                </div>
+              </div>
+            );
+          })()}
           <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.green}}>
             <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV realizado</div>
             <div style={{fontSize:24,fontWeight:500,color:C.greenD}}>R${ltvPagoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
