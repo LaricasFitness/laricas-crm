@@ -1592,33 +1592,6 @@ const Kanban = ({ onAbrir }) => {
         </div>
       </div>
 
-      {(()=>{
-        const indicadoras = {};
-        assinantes.forEach(a=>{
-          if(a.indicadaPor&&a.indicadaPor.trim()){
-            const k=a.indicadaPor.trim();
-            if(!indicadoras[k]) indicadoras[k]={nome:k,count:0,nomes:[]};
-            indicadoras[k].count++;
-            indicadoras[k].nomes.push(a.nome);
-          }
-        });
-        const ranking = Object.values(indicadoras).sort((a,b)=>b.count-a.count).slice(0,10);
-        if(ranking.length===0) return null;
-        return (
-          <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginTop:16}}>
-            <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>🏆 Ranking de indicações</div>
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {ranking.map((r,i)=>(
-                <div key={r.nome} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:"var(--color-background-primary)",borderRadius:8}}>
-                  <span style={{fontSize:12,fontWeight:500,color:C.amberD,minWidth:20}}>#{i+1}</span>
-                  <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)",flex:1}}>{r.nome}</span>
-                  <span style={{fontSize:11,background:C.greenL,color:C.greenD,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{r.count} indicação{r.count>1?"ões":""}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 };
@@ -2899,6 +2872,34 @@ const LTV = ({ onAbrir }) => {
       )}
 
       <TabelaAssinantes assinantes={assinantes} onAbrir={onAbrir}/>
+
+      {(()=>{
+        const indicadoras = {};
+        assinantes.forEach(a=>{
+          if(a.indicadaPor&&a.indicadaPor.trim()){
+            const k=a.indicadaPor.trim();
+            if(!indicadoras[k]) indicadoras[k]={nome:k,count:0,nomes:[]};
+            indicadoras[k].count++;
+            indicadoras[k].nomes.push(a.nome);
+          }
+        });
+        const ranking = Object.values(indicadoras).sort((a,b)=>b.count-a.count).slice(0,10);
+        if(ranking.length===0) return null;
+        return (
+          <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginTop:16}}>
+            <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>🏆 Ranking de indicações</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {ranking.map((r,i)=>(
+                <div key={r.nome} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:"var(--color-background-primary)",borderRadius:8}}>
+                  <span style={{fontSize:12,fontWeight:500,color:C.amberD,minWidth:20}}>#{i+1}</span>
+                  <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)",flex:1}}>{r.nome}</span>
+                  <span style={{fontSize:11,background:C.greenL,color:C.greenD,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{r.count} indicaç{r.count>1?"ões":"ão"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
