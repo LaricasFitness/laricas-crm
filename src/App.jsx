@@ -191,15 +191,24 @@ const Steps = ({ steps, cur }) => {
             </button>
             {open===i&&(
               <div style={{ border:"0.5px solid "+(isCur?C.teal:s.cor),borderTop:"none",borderRadius:"0 0 10px 10px",padding:"14px",background:"var(--color-background-primary)" }}>
-                <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"13px 15px",marginBottom:10,fontSize:14,color:"var(--color-text-primary)",lineHeight:1.85,whiteSpace:"pre-line",fontFamily:"inherit",borderLeft:"3px solid "+(isCur?C.teal:s.cor) }}>{s.copy}</div>
-                <button onClick={()=>{
-                  navigator.clipboard.writeText(s.copy).then(()=>{}).catch(()=>{});
-                  const el=document.getElementById("cpbtn_"+i);
-                  if(el){el.textContent="✓ Copiado!";el.style.background=C.green;setTimeout(()=>{el.textContent="📋 Copiar mensagem";el.style.background=C.tealL;},2000);}
-                }} id={"cpbtn_"+i}
-                  style={{ marginBottom:10,padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",background:C.tealL,color:C.tealD,border:"0.5px solid "+C.teal,transition:"background 0.2s" }}>
-                  📋 Copiar mensagem
-                </button>
+                {(()=>{
+                  const textoPersonalizado = personalizarCopy(s.copy, c);
+                  const temPlaceholder = /\[[A-Za-zÀ-ú][^\]]*\]/.test(textoPersonalizado);
+                  return (
+                    <div>
+                      <div style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"13px 15px",marginBottom:6,fontSize:14,color:"var(--color-text-primary)",lineHeight:1.85,whiteSpace:"pre-line",fontFamily:"inherit",borderLeft:"3px solid "+(isCur?C.teal:s.cor) }}>{textoPersonalizado}</div>
+                      {temPlaceholder&&<div style={{ fontSize:10,color:C.amber,marginBottom:6 }}>⚠ Campos em [colchetes] precisam ser preenchidos antes de enviar</div>}
+                      <button onClick={()=>{
+                        navigator.clipboard.writeText(textoPersonalizado).then(()=>{}).catch(()=>{});
+                        const el=document.getElementById("cpbtn_"+i);
+                        if(el){el.textContent="✓ Copiado!";el.style.background=C.green;setTimeout(()=>{el.textContent="📋 Copiar mensagem";el.style.background=C.tealL;},2000);}
+                      }} id={"cpbtn_"+i}
+                        style={{ marginBottom:10,padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",background:C.tealL,color:C.tealD,border:"0.5px solid "+C.teal,transition:"background 0.2s" }}>
+                        📋 Copiar mensagem
+                      </button>
+                    </div>
+                  );
+                })()}
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
                   <div><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Regra</div><div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5 }}>{s.regra}</div></div>
                   <div><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em" }}>Próximo gatilho</div><div style={{ fontSize:12,color:"var(--color-text-secondary)",lineHeight:1.5 }}>{s.gatilho}</div></div>
@@ -523,6 +532,22 @@ const TriagemForm = ({ onSalvo, lista }) => {
   );
 };
 
+
+
+const personalizarCopy = (texto, cliente) => {
+  if (!texto || !cliente) return texto;
+  const primeiroNome = (cliente.nome||"").split(" ")[0] || "cliente";
+  const nPedidos = cliente.p || 0;
+  const gasto = (cliente.gasto||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0});
+
+  return texto
+    .replace(/\[Nome\]/g, primeiroNome)
+    .replace(/\[nome\]/g, primeiroNome)
+    .replace(/\[N° pedidos\]/g, nPedidos)
+    .replace(/\[numero de pedidos\]/g, nPedidos)
+    .replace(/R\$\[frete\]/g, "R$XX")
+    .replace(/\[gasto total\]/g, gasto);
+};
 
 const LogAtividade = ({ c, save }) => {
   const [logTxt, setLogTxt] = useState("");
