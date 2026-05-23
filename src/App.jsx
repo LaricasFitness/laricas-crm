@@ -590,6 +590,10 @@ const Perfil = ({ clienteId, onVoltar }) => {
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nome</div><input style={inp()} value={c.nome} onChange={e=>setC({...c,nome:e.target.value})} onBlur={()=>save({nome:c.nome})} /></div>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Telefone / WhatsApp</div><input style={inp()} value={c.telefone||""} onChange={e=>setC({...c,telefone:e.target.value})} onBlur={()=>save({telefone:c.telefone})} placeholder="11 9XXXX-XXXX"/></div>
         </div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
+          <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email</div><input style={inp()} value={c.email||""} onChange={e=>setC({...c,email:e.target.value})} onBlur={()=>save({email:c.email})} placeholder="cliente@email.com" type="email"/></div>
+          <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Customer ID Shopify</div><input style={inp({fontSize:11,color:"var(--color-text-tertiary)"})} value={c.customerId||""} onChange={e=>setC({...c,customerId:e.target.value})} onBlur={()=>save({customerId:c.customerId})} placeholder="ID do cliente no Shopify"/></div>
+        </div>
         <div style={{ marginBottom:10 }}>
           <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Lista de origem (opcional)</div>
           <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>{LISTAS.map(l=>(<button key={l} onClick={()=>save({lista:l===c.lista?"":l})} style={{ padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",background:c.lista===l?C.purpleL:"var(--color-background-secondary)",color:c.lista===l?C.purpleD:"var(--color-text-secondary)",border:"0.5px solid "+(c.lista===l?C.purple:"var(--color-border-tertiary)") }}>{l}</button>))}</div>
@@ -1105,7 +1109,7 @@ const Kanban = ({ onAbrir }) => {
     if(filtroHoje) r = r.filter(c=>c.dataProximoContato===hoje);
     if(!busca.trim()) return r;
     const q=busca.toLowerCase();
-    return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q));
+    return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q)||(c.email||"").toLowerCase().includes(q));
   };
 
   const porEtapa=(id)=>{
@@ -1245,7 +1249,7 @@ const Kanban = ({ onAbrir }) => {
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
         <div style={{ position:"relative",flex:1 }}>
           <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none" }}>🔍</span>
-          <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por nome, ID ou telefone..." style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
+          <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Nome, ID, telefone ou email..." style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}/>
         </div>
         <div style={{ fontSize:13,color:"var(--color-text-tertiary)",whiteSpace:"nowrap" }}>
           {clientes.length} clientes
@@ -1643,7 +1647,7 @@ const ImportarLista = ({ onSalvo }) => {
                 mudou = true;
               }
             }
-            if (cl.email && !existente.email) {
+            if (cl.email) {
               atualizado.email = cl.email;
               mudou = true;
             }
@@ -2556,7 +2560,8 @@ const GlobalSearch = ({ onAbrir }) => {
       const res = todos.filter(c =>
         (c.nome||"").toLowerCase().includes(ql) ||
         (c.customerId||"").toLowerCase().includes(ql) ||
-        (c.telefone||"").toLowerCase().includes(ql)
+        (c.telefone||"").toLowerCase().includes(ql) ||
+        (c.email||"").toLowerCase().includes(ql)
       ).slice(0, 8);
       setResultados(res);
       setBuscando(false);
@@ -2574,7 +2579,7 @@ const GlobalSearch = ({ onAbrir }) => {
           value={q} onChange={e=>{setQ(e.target.value);setAberto(true);}}
           onFocus={()=>setAberto(true)}
           onBlur={()=>setTimeout(()=>setAberto(false),200)}
-          placeholder="Buscar cliente em qualquer etapa..."
+          placeholder="Buscar por nome, ID, telefone ou email..."
           style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}
         />
         {buscando&&<span style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"var(--color-text-tertiary)" }}>...</span>}
@@ -2589,7 +2594,7 @@ const GlobalSearch = ({ onAbrir }) => {
                 style={{ width:"100%",textAlign:"left",padding:"10px 14px",background:"none",border:"none",borderBottom:"0.5px solid var(--color-border-tertiary)",cursor:"pointer",display:"flex",alignItems:"center",gap:10 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)" }}>{c.nome}</div>
-                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.customerId?"#"+c.customerId+" · ":""}{c.telefone||""}</div>
+                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.customerId?"#"+c.customerId+" · ":""}{c.email||c.telefone||""}</div>
                 </div>
                 <span style={{ fontSize:10,fontWeight:500,background:e.corL,color:e.corD,padding:"2px 8px",borderRadius:20,flexShrink:0 }}>{e.emoji} {e.label}</span>
               </button>
