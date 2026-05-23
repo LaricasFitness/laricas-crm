@@ -1532,12 +1532,9 @@ const ImportarLista = ({ onSalvo }) => {
     return Math.ceil(restMs / 60000) + " minuto" + (restMs > 120000 ? "s" : "");
   };
 
-  const importar = () => {
-    if(prev.length===0) return;
-    setImp(true);
+  const executarOrders = async () => {
     const inicio = Date.now();
-
-    const runOrders = async () => {
+    {
       try {
         const total = pedidosPreview.length;
         setProg({ atual: 0, total, inicio });
@@ -1636,7 +1633,12 @@ const ImportarLista = ({ onSalvo }) => {
         setErro("Erro: "+(e.message||"tente novamente"));
         setImp(false); setProg(null);
       }
-    };
+  };
+
+  const importar = () => {
+    if(prev.length===0) return;
+    setImp(true);
+    const inicio = Date.now();
 
     const run = async () => {
       try {
@@ -1835,17 +1837,32 @@ const ImportarLista = ({ onSalvo }) => {
             )}
             {!confirmacaoOrders && <div style={{ fontSize:12,color:"var(--color-text-tertiary)" }}>Verificando base existente...</div>}
           </div>
-          <div style={{ display:"flex",gap:8 }}>
-            <button onClick={()=>{ setModoOrders(false); setPedidosPreview([]); setConfirmacaoOrders(null); setTxt(""); }}
+          {prog && (
+            <div style={{ marginBottom:12,background:"var(--color-background-secondary)",borderRadius:10,padding:"14px 16px",border:"0.5px solid var(--color-border-tertiary)" }}>
+              <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8 }}>
+                <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)" }}>Importando {prog.atual} de {prog.total}...</div>
+                <div style={{ fontSize:12,color:"var(--color-text-tertiary)" }}>{Math.round(prog.atual/prog.total*100)}%</div>
+              </div>
+              <div style={{ height:8,background:"var(--color-border-tertiary)",borderRadius:4,overflow:"hidden",marginBottom:6 }}>
+                <div style={{ height:"100%",width:(prog.atual/prog.total*100)+"%",background:C.teal,borderRadius:4,transition:"width 0.15s ease" }}/>
+              </div>
+              <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>
+                {prog.atual===prog.total?"Finalizando...":tempoRestante(prog)?"Tempo restante: "+tempoRestante(prog):"Calculando..."}
+              </div>
+            </div>
+          )}
+          {ok&&<div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:500,color:C.greenD }}>{ok}</div>}
+          {!prog&&!ok&&<div style={{ display:"flex",gap:8 }}>
+            <button onClick={()=>{ setModoOrders(false); setPedidosPreview([]); setConfirmacaoOrders(null); setTxt(""); setProg(null); setOk(null); }}
               style={{ flex:1,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)" }}>
               Cancelar
             </button>
-            <button onClick={()=>{ if(!confirmacaoOrders){ dbGetAll().then(ex=>{ const em=new Set(ex.map(c=>(c.email||"").toLowerCase()).filter(Boolean)); setConfirmacaoOrders({novos:pedidosPreview.filter(p=>!em.has(p.email.toLowerCase())).length,atualizados:pedidosPreview.filter(p=>em.has(p.email.toLowerCase())).length}); }); } else { setImp(true); runOrders(); } }}
+            <button onClick={()=>{ if(!confirmacaoOrders){ dbGetAll().then(ex=>{ const em=new Set(ex.map(c=>(c.email||"").toLowerCase()).filter(Boolean)); setConfirmacaoOrders({novos:pedidosPreview.filter(p=>!em.has(p.email.toLowerCase())).length,atualizados:pedidosPreview.filter(p=>em.has(p.email.toLowerCase())).length}); }); } else { setImp(true); executarOrders(); } }}
               disabled={imp}
               style={{ flex:2,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:confirmacaoOrders?C.teal:C.purple,color:"#fff",border:"none" }}>
               {confirmacaoOrders?"Confirmar e importar →":"Verificar base →"}
             </button>
-          </div>
+          </div>}
         </div>
       )}
       {!modoOrders && prev.length>0&&(
