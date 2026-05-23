@@ -1378,19 +1378,24 @@ const Kanban = ({ onAbrir }) => {
         const focoSemAcao = clientes.filter(c=>(c.objetivo==="club"||c.objetivo==="falta_uma")&&!c.dataProximoContato&&c.etapa!=="encerrado"&&c.etapa!=="convertido"&&c.etapa!=="experiencia");
         const expSemDados = clientes.filter(c=>c.etapa==="experiencia"&&(!c.tipoAssinatura||!c.valorMensal));
         const itens = [
-          vencidos2.length>0&&{emoji:"🔴",label:`${vencidos2.length} contato${vencidos2.length>1?"s":""} vencido${vencidos2.length>1?"s":""}`,cor:C.coralD,bg:C.coralL},
-          renovacoes7.length>0&&{emoji:"🔔",label:`${renovacoes7.length} renovação${renovacoes7.length>1?"ões":""} em ≤7 dias`,cor:C.amberD,bg:C.amberL},
-          focoSemAcao.length>0&&{emoji:"🎯",label:`${focoSemAcao.length} Foco Club sem próxima ação`,cor:C.purpleD,bg:C.purpleL},
-          expSemDados.length>0&&{emoji:"⭐",label:`${expSemDados.length} Experiência sem dados`,cor:C.blueD,bg:C.blueL},
+          vencidos2.length>0&&{emoji:"🔴",label:`${vencidos2.length} contato${vencidos2.length>1?"s":""} vencido${vencidos2.length>1?"s":""}`,cor:C.coralD,bg:C.coralL,
+            onClick:()=>{ setBusca(""); setFiltroHoje(true); setFiltroClub(false); }},
+          renovacoes7.length>0&&{emoji:"🔔",label:`${renovacoes7.length} renovaç${renovacoes7.length>1?"ões":"ão"} em ≤7 dias`,cor:C.amberD,bg:C.amberL,
+            onClick:()=>{ setBusca(""); setFiltroClub(false); setFiltroHoje(false); }},
+          focoSemAcao.length>0&&{emoji:"🎯",label:`${focoSemAcao.length} Foco Club sem próxima ação`,cor:C.purpleD,bg:C.purpleL,
+            onClick:()=>{ setBusca(""); setFiltroClub(true); setFiltroHoje(false); }},
+          expSemDados.length>0&&{emoji:"⭐",label:`${expSemDados.length} Experiência sem dados`,cor:C.blueD,bg:C.blueL,
+            onClick:()=>{ setBusca(""); setFiltroClub(false); setFiltroHoje(false); }},
         ].filter(Boolean);
         if(itens.length===0) return null;
         return (
           <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,padding:"10px 14px",background:"var(--color-background-secondary)",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)" }}>
             <div style={{ fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",alignSelf:"center",marginRight:4 }}>Ações urgentes</div>
             {itens.map((it,i)=>(
-              <span key={i} style={{ fontSize:11,fontWeight:500,background:it.bg,color:it.cor,padding:"3px 10px",borderRadius:20,border:"0.5px solid "+it.cor }}>
-                {it.emoji} {it.label}
-              </span>
+              <button key={i} onClick={it.onClick||undefined}
+                style={{ fontSize:11,fontWeight:500,background:it.bg,color:it.cor,padding:"3px 10px",borderRadius:20,border:"0.5px solid "+it.cor,cursor:it.onClick?"pointer":"default",fontFamily:"inherit" }}>
+                {it.emoji} {it.label} {it.onClick?"→":""}
+              </button>
             ))}
           </div>
         );
