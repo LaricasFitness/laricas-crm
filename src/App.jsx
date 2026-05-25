@@ -3145,9 +3145,7 @@ const Unificar = ({ onSalvo }) => {
     const listaA = manter.lista||"";
     const listaB = remover.lista||"";
     const listasMerge = [...new Set([...listaA.split(" · "),...listaB.split(" · ")].map(l=>l.trim()).filter(Boolean))].join(" · ");
-    const notasMerge = [manter.notas, remover.notas].filter(Boolean).join("
----
-");
+    const notasMerge = [manter.notas, remover.notas].filter(Boolean).join("\n---\n");
     const logMerge = [...(manter.logAtividade||[]),...(remover.logAtividade||[])].sort((a,b)=>a.data>b.data?-1:1).slice(0,30);
     const histMerge = [...(manter.historicoEtapas||[]),...(remover.historicoEtapas||[])];
     const merged = {
