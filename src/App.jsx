@@ -1921,10 +1921,16 @@ const ImportarLista = ({ onSalvo }) => {
         // Salvar registro do ultimo import
         const datasImport = pedidosPreview.map(p=>p.dataUltimo).filter(Boolean).sort();
         const ultimaData = datasImport[datasImport.length-1]||"";
+        const ultimoPedidoNum = pedidosPreview.reduce((acc,p)=>{
+          const nums = (p.numerosOrdem||[]).map(n=>parseInt(n.replace(/\D/g,""))).filter(Boolean);
+          const max = nums.length>0?Math.max(...nums):0;
+          return max>acc?max:acc;
+        },0);
         await dbSaveUltimoImport({
           data: new Date().toLocaleDateString("pt-BR"),
           hora: new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
           dataUltimoPedido: ultimaData,
+          ultimoPedidoNum: ultimoPedidoNum>0?"#"+ultimoPedidoNum:"",
           novos: novos.length,
           atualizados: atualizados.length,
           ignorados: pedidosIgnorados,
@@ -2101,6 +2107,7 @@ const ImportarLista = ({ onSalvo }) => {
               <div style={{ fontSize:10,color:C.teal,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2 }}>Último pedido</div>
               <div style={{ fontSize:12,fontWeight:500,color:C.tealD }}>
                 {ultimoImport.dataUltimoPedido ? new Date(ultimoImport.dataUltimoPedido+"T12:00:00").toLocaleDateString("pt-BR") : "—"}
+                {ultimoImport.ultimoPedidoNum&&<span style={{ fontSize:11,color:C.teal,marginLeft:6 }}>{ultimoImport.ultimoPedidoNum}</span>}
               </div>
             </div>
             <div>
@@ -2113,7 +2120,7 @@ const ImportarLista = ({ onSalvo }) => {
             </div>
           </div>
           <div style={{ fontSize:11,color:C.tealD,paddingTop:8,borderTop:"0.5px solid "+C.teal }}>
-            💡 Exporte do Shopify os pedidos a partir de <strong>{ultimoImport.dataUltimoPedido ? new Date(ultimoImport.dataUltimoPedido+"T12:00:00").toLocaleDateString("pt-BR") : "ontem"}</strong> para não importar duplicatas.
+            💡 Exporte do Shopify os pedidos a partir de <strong>{ultimoImport.dataUltimoPedido ? new Date(ultimoImport.dataUltimoPedido+"T12:00:00").toLocaleDateString("pt-BR") : "ontem"}</strong>{ultimoImport.ultimoPedidoNum?" (após pedido "+ultimoImport.ultimoPedidoNum+")":""} para não importar duplicatas.
           </div>
         </div>
       )}
