@@ -2509,7 +2509,7 @@ const Guia = () => {
   );
   const Item = ({label, value}) => (
     <div style={{ display:"flex",gap:12,marginBottom:8,fontSize:13 }}>
-      <div style={{ minWidth:180,fontWeight:500,color:"var(--color-text-primary)",flexShrink:0 }}>{label}</div>
+      <div style={{ minWidth:200,fontWeight:500,color:"var(--color-text-primary)",flexShrink:0 }}>{label}</div>
       <div style={{ color:"var(--color-text-secondary)",lineHeight:1.5 }}>{value}</div>
     </div>
   );
@@ -2520,79 +2520,118 @@ const Guia = () => {
     </div>
   );
   return (
-    <div style={{ maxWidth:700 }}>
+    <div style={{ maxWidth:720 }}>
       <div style={{ background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:10,padding:"14px 16px",marginBottom:24 }}>
         <div style={{ fontSize:14,fontWeight:500,color:C.tealD,marginBottom:4 }}>Guia de uso — Laricas CRM</div>
-        <div style={{ fontSize:12,color:C.tealD,lineHeight:1.6 }}>Este guia documenta as premissas, logicas e regras do sistema para garantir consistencia entre os operadores.</div>
+        <div style={{ fontSize:12,color:C.tealD,lineHeight:1.6 }}>Documenta as premissas, logicas e regras do sistema. Mantenha atualizado conforme o operacional evoluir.</div>
       </div>
+
+      <Section title="🗺 Etapas do funil">
+        <Item label="Lead 🎯" value="Cliente importada ou cadastrada. Ainda nao foi contatada."/>
+        <Item label="Primeiro Contato 📞" value="Mover apenas apos enviar a primeira mensagem. Nao antes."/>
+        <Item label="Em Conversa 💬" value="Houve resposta e a conversa esta ativa."/>
+        <Item label="Proposta Feita 📋" value="Proposta de Club apresentada. Aguardando decisao."/>
+        <Item label="Convertido 🏆" value="Fechou Club ou compra avulsa. Encerrar o atendimento pelo botao no perfil."/>
+        <Item label="Experiencia ⭐" value="Assinante ativa do Club. Preencher tipo, data de inicio e valor mensal no perfil."/>
+        <Item label="Encerrado ✗" value="Nao converteu ou foi desqualificado. Registrar o motivo nas notas."/>
+      </Section>
 
       <Section title="🎯 Objetivos de conversao">
         <Block title="Reativacao → 2a compra" cor={C.teal}>
-          <Item label="Quando" value="Cliente com 1 pedido, ou com 2 pedidos e ciclo > 60 dias"/>
-          <Item label="Objetivo" value="Gerar a proxima compra — nao oferecer Club ainda"/>
-          <Item label="Abordagem" value="Curadoria personalizada com base no produto comprado. Sugerir o proximo sabor."/>
-          <Item label="Cupom" value="VOLTA10 — valido 5 dias. Nunca sem prazo."/>
+          <Item label="Quando" value="1 pedido, ou 2 pedidos com ciclo > 60 dias"/>
+          <Item label="Objetivo" value="Gerar a proxima compra. Nao oferecer Club ainda."/>
+          <Item label="Abordagem" value="Tom caloroso. Curadoria com base no produto comprado. Sugerir o proximo sabor especifico."/>
+          <Item label="Cupom" value="VOLTA10 — so no T3 (follow-up), sempre com prazo de 5 dias. Nunca sem prazo."/>
         </Block>
-        <Block title="Falta Uma → 3a compra (aha moment)" cor={C.amber}>
+        <Block title="Falta Uma → 3a compra (momento aha)" cor={C.amber}>
           <Item label="Quando" value="2 pedidos com ciclo ≤ 60 dias"/>
-          <Item label="Objetivo" value="Gerar a 3a compra — e so entao oferecer Club"/>
-          <Item label="Abordagem" value="Curadoria dos dois produtos ja comprados + sugestao do terceiro. Nao revelar intencao de venda ainda."/>
-          <Item label="Prioridade" value="Maxima — janela fecha se ciclo passar de 90 dias sem contato"/>
+          <Item label="Objetivo" value="Gerar a 3a compra. So oferecer Club apos ela acontecer."/>
+          <Item label="T1" value="Ver historico no Shopify. Citar os 2 produtos ja comprados. Indicar UM produto especifico. Tom: calorosa e proxima, como indicacao de amiga."/>
+          <Item label="T2" value="Link direto apos interesse confirmado. SEM cupom neste passo."/>
+          <Item label="T3" value="VOLTA10 como facilitador. Prazo real de 5 dias."/>
+          <Item label="T4" value="Encerramento caloroso. Porta aberta. Sem novo cupom."/>
+          <Item label="Prioridade" value="Maxima — janela fecha se ciclo passar de 90 dias sem contato."/>
         </Block>
         <Block title="Club — habito formado" cor={C.green}>
           <Item label="Quando" value="3+ pedidos com ciclo ≤ 90 dias"/>
           <Item label="Objetivo" value="Converter para assinatura Club"/>
-          <Item label="Angulos" value="3o pedido: emocional (qual foi o favorito?). 4-6o: financeiro (calculo de economia). 7o+: surpresa (ainda nao tem o Club?)."/>
-          <Item label="Calculo" value="Mostrar total gasto + frete acumulado vs preco do Club. Numeros reais do Shopify."/>
-          <Item label="Preco" value="Desconto de 20% so em reuniao presencial — nunca no WhatsApp."/>
+          <Item label="3o pedido" value="Tom emocional: qual foi o favorito? Nao revelar intencao ainda."/>
+          <Item label="4-6o pedido" value="Tom financeiro: calcular total gasto + frete vs preco do Club com numeros reais."/>
+          <Item label="7o+ pedido" value="Tom surpresa: ainda nao tem o Club?"/>
+          <Item label="Preco" value="Preco cheio no WhatsApp. Desconto de 20% so como fechamento em reuniao presencial — nunca antes."/>
+          <Item label="Club pos 3a compra" value="Oferecer Club so apos a 3a compra (aha moment). Excecao: 7+ pedidos pode abordar em qualquer etapa."/>
         </Block>
         <Block title="Reconstruir habito → Club so depois" cor={C.coral}>
           <Item label="Quando" value="3+ pedidos com ciclo > 90 dias"/>
-          <Item label="Objetivo" value="Reativar a compra — Club so apos nova compra"/>
-          <Item label="Atencao" value="Nao oferecer Club neste fluxo. Foco em gerar a proxima compra primeiro."/>
+          <Item label="Objetivo" value="Reativar a compra primeiro. Club so apos nova compra."/>
+          <Item label="Atencao" value="Nao oferecer Club neste fluxo. Foco em gerar a proxima compra."/>
+        </Block>
+        <Block title="Novo cliente — 1a compra" cor={C.blue}>
+          <Item label="Quando" value="Chegou por indicacao, redes sociais, evento ou presencialmente. Sem compras ainda."/>
+          <Item label="Objetivo" value="Gerar a primeira compra. Cadastrar pela aba Triagem → Novo cliente sem compra."/>
+          <Item label="Cupom" value="BEMVINDO10 — 10% na primeira compra. Valido 7 dias."/>
         </Block>
       </Section>
 
+      <Section title="⭐ Retenção Club (Experiencia)">
+        <Item label="R1 — Onboarding (mes 1)" value="Enviar ate 3 dias apos inicio. Perguntar sobre a experiencia e o favorito. Registrar nas notas."/>
+        <Item label="R2 — Curadoria mensal" value="~5 dias antes da renovacao mensal. Perguntar se quer personalizar ou manter a selecao."/>
+        <Item label="R3 — Renovacao (30d antes)" value="Abordar 30 dias antes do fim da fidelidade. Tom de cuidado, nao de cobranca. Nao mencionar preco primeiro."/>
+        <Item label="R4 — Win-back" value="Ate 7 dias apos cancelamento. Sem oferta, sem desconto. Porta aberta."/>
+        <Item label="Upsell" value="Assinante trimestral/semestral satisfeita no ciclo 2+ → candidata a migrar para plano maior. Script disponivel no perfil."/>
+        <Item label="Churn risk" value="Badge vermelho aparece no card quando fidelidade encerra em ≤30 dias. Abordar com R3 antes de vencer."/>
+      </Section>
+
       <Section title="📊 Probabilidade de conversao">
-        <Item label="Alta (≥ 40%)" value="Falta Uma com ciclo curto, ou cliente com muitos pedidos e ciclo regular"/>
-        <Item label="Media (25–39%)" value="Club com ciclo longo, ou reativacao quente (< 30 dias)"/>
-        <Item label="Baixa (< 25%)" value="Reativacao fria, ou ciclo muito longo"/>
-        <Item label="Modificadores positivos" value="Fora de SP (+20%) — frete pesa mais na decisao pelo Club. Gasto total alto (+35%)."/>
-        <Item label="Modificadores negativos" value="Fora da janela de 30 dias (-28%). Gasto total baixo (-15%)."/>
-        <Item label="Teto" value="Maxima de 72% — nenhum lead e certeza de conversao."/>
+        <Item label="Alta (≥ 40%)" value="Falta Uma com ciclo curto, ou 3+ pedidos com ciclo regular"/>
+        <Item label="Media (25–39%)" value="Club com ciclo longo, ou reativacao recente (< 30 dias)"/>
+        <Item label="Baixa (< 25%)" value="Reativacao fria, ciclo longo, ou novo cliente"/>
+        <Item label="Modificador +20%" value="Fora de SP — frete pesa mais na decisao pelo Club"/>
+        <Item label="Modificador +35%" value="Gasto total alto — cliente de alto valor"/>
+        <Item label="Modificador -28%" value="Fora da janela de 30 dias desde ultimo pedido"/>
+        <Item label="Teto" value="Maxima de 72% — nenhum lead e certeza absoluta"/>
       </Section>
 
       <Section title="📋 Prioridade no Kanban">
-        <Item label="1° Em Conversa / Proposta Feita" value="Conversa ja iniciada — risco de esfriar. Prioridade maxima."/>
-        <Item label="2° Falta Uma" value="Janela curta. Cada dia sem contato reduz chance."/>
-        <Item label="3° Club habito" value="Candidata natural — abordagem tranquila mas eficiente."/>
-        <Item label="4° Data vencida" value="Compromisso do operador que nao foi cumprido."/>
-        <Item label="5° Alta probabilidade" value="Modelo indica boa chance independente do objetivo."/>
-        <Item label="6° Reativacao / Reconstruir" value="Menor ROI de tempo. Trabalhar depois das prioridades acima."/>
-        <Item label="Filtro Hoje" value="Botao ⚡ Ver hoje — exibe apenas clientes com data de contato = hoje, com a ordenacao de prioridade acima."/>
+        <Item label="1° Em Conversa / Proposta" value="Conversa ja iniciada. Risco de esfriar. Prioridade maxima."/>
+        <Item label="2° Falta Uma" value="Janela curta. Cada dia sem contato reduz a chance."/>
+        <Item label="3° Club habito" value="Candidata natural. Abordagem tranquila mas eficiente."/>
+        <Item label="4° Reativacao" value="Precisa de mais trabalho antes do Club."/>
+        <Item label="Filtro 🎯 Foco Club" value="Exibe so Club + Falta Uma — as candidatas proximas ao Club. Usar para foco diario."/>
+        <Item label="Filtro ⚡ Hoje" value="Exibe so clientes com data de contato = hoje. Combinavel com Foco Club."/>
+        <Item label="Painel urgencias" value="Barra no topo: contatos vencidos / renovacoes em 7d / Foco Club sem acao / Experiencia sem dados. Clicar ativa o filtro correspondente."/>
       </Section>
 
       <Section title="💬 Regras de abordagem">
-        <Item label="Primeiro contato" value="Mover para 'Primeiro Contato' so apos enviar a primeira mensagem."/>
-        <Item label="Cupom VOLTA10" value="Sempre com prazo de 5 dias. Nunca oferecer sem prazo."/>
-        <Item label="Preco do Club" value="Usar preco cheio no WhatsApp. Desconto de 20% so como fechamento em reuniao."/>
-        <Item label="Frase de impacto" value="Pacientes satisfeitos esquecem. Pacientes encantados indicam."/>
-        <Item label="Sequencia" value="T1 abertura → T2 curadoria ou calculo → T3 objecoes → T4 fechamento. Nunca pular etapas."/>
-        <Item label="Club apos compra" value="So oferecer Club apos a 3a compra (aha moment). Excecao: cliente com 7+ pedidos pode receber abordagem em qualquer etapa."/>
+        <Item label="Tom da Laricas" value="Caloroso, proximo e confiante. Como indicacao de amiga, nao abordagem comercial. 92% do publico e feminino."/>
+        <Item label="Lucas fala em 1a pessoa" value="Humaniza a marca. Manter mesmo quando outros operadores enviarem."/>
+        <Item label="Scripts personalizados" value="[Nome] e substituido automaticamente pelo primeiro nome. Copiar pelo botao 📋 — ja vem com o nome preenchido."/>
+        <Item label="Placeholders em [colchetes]" value="Campos que o operador deve preencher antes de enviar. O sistema avisa quando ainda existem."/>
+        <Item label="Cupom VOLTA10" value="So no T3 (follow-up). Prazo de 5 dias. Nunca prorrogar. Nunca oferecer antes."/>
+        <Item label="Cupom BEMVINDO10" value="So para novos clientes (1a compra). Prazo de 7 dias."/>
+        <Item label="Preco do Club" value="Preco cheio no WhatsApp. Desconto de 20% so em reuniao presencial — nunca revelar antes."/>
       </Section>
 
-      <Section title="📥 Importacao de listas">
-        <Item label="Formato" value="Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Ultimo Pedido, CEP, Lista"/>
-        <Item label="CEP" value="Iniciados em 0 (01xxx–09xxx) = SP / Grande SP. Demais = Fora de SP."/>
+      <Section title="📥 Importacao">
+        <Item label="Formato clientes" value="Customer ID, Nome, Telefone, Total Gasto, Nº Pedidos, Data 1° Pedido, Data Ultimo Pedido, CEP, Lista, Email"/>
+        <Item label="Formato pedidos" value="Export direto do Shopify (orders). Sistema detecta automaticamente e mostra preview com novos leads + perfis a atualizar."/>
+        <Item label="CEP" value="Iniciados em 0 (01xxx–09xxx) = SP. Demais = Fora de SP."/>
         <Item label="Datas" value="Aceita AAAA-MM-DD, DD/MM/AAAA ou serial do Excel."/>
-        <Item label="Duplicata" value="Cliente com mesmo Customer ID: lista e acrescentada no perfil. Dados existentes nao sao alterados."/>
-        <Item label="Triagem automatica" value="Se tiver datas + CEP, o sistema calcula ciclo, objetivo e gera sequencia automaticamente."/>
+        <Item label="Duplicata por Customer ID" value="Lista e acrescentada. Dados existentes nao sao alterados."/>
+        <Item label="Duplicata por email (pedidos)" value="Pedidos novos atualizam gasto, data e recalculam triagem. Pedidos ja importados sao ignorados."/>
+        <Item label="Ultimo import" value="Exibido no topo da aba com data, numero do ultimo pedido e dica de quando exportar no Shopify."/>
+      </Section>
+
+      <Section title="🔗 Unificacao de perfis">
+        <Item label="Quando usar" value="Mesma cliente com dois cadastros no CRM (ex: importada + cadastrada manualmente)."/>
+        <Item label="Deteccao automatica" value="Sistema sugere pares com nome, email ou telefone similares."/>
+        <Item label="Merge" value="Escolher qual perfil manter. O outro e removido. Listas, notas, logs e historico sao combinados. Pedidos e gasto sao somados."/>
       </Section>
 
       <Section title="💾 Backup e versoes">
         <Item label="Dados" value="Exportar JSON antes de qualquer importacao grande (aba Backup → Exportar backup JSON)."/>
-        <Item label="Codigo" value="Vercel guarda historico de todos os deploys. Em caso de problema, ir em Deployments → 3 pontinhos → Promote to Production."/>
-        <Item label="Restaurar dados" value="Aba Backup → Restaurar backup → selecionar o arquivo JSON exportado."/>
+        <Item label="Codigo" value="Vercel guarda historico de todos os deploys. Em caso de problema: Deployments → 3 pontinhos → Promote to Production."/>
+        <Item label="Restaurar dados" value="Aba Backup → Restaurar backup → selecionar o arquivo JSON."/>
       </Section>
 
       <Section title="🎯 Metas Club 2026">
@@ -2600,434 +2639,6 @@ const Guia = () => {
           <Item key={m} label={m+" 2026"} value={v+" novos assinantes Club"}/>
         ))}
       </Section>
-    </div>
-  );
-};
-
-
-
-
-const GraficoMRR = ({ mrrEvolucao, assinantes }) => {
-  const [mesSel, setMesSel] = useState(null);
-  const maxMrr = Math.max(...mrrEvolucao.map(m=>m.mrr), 1);
-  const barW = Math.max(32, Math.min(60, Math.floor(560/mrrEvolucao.length)));
-  const mesDetalhes = mesSel ? assinantes.filter(a=>{
-    if (!a.dataInicioAssinatura||!a.valorMensal) return false;
-    const inicio = new Date(a.dataInicioAssinatura+"T12:00:00");
-    const [y,mo] = mesSel.split("-").map(Number);
-    const dMes = new Date(y,mo-1,1);
-    if (inicio > dMes) return false;
-    if ((a.cancelado||a.falhaRenovacao)&&(a.dataCancelamento||a.dataFalhaRenovacao)) {
-      const cancel = new Date((a.dataCancelamento||a.dataFalhaRenovacao)+"T12:00:00");
-      if (cancel < dMes) return false;
-    }
-    return true;
-  }) : [];
-  return (
-    <div>
-      <div style={{overflowX:"auto"}}>
-        <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:"max-content",paddingTop:28,paddingBottom:8}}>
-          {mrrEvolucao.map((m,i)=>{
-            const pct=m.mrr/maxMrr;
-            const isLast=i===mrrEvolucao.length-1;
-            const isSel=mesSel===m.mesKey;
-            const prev=i>0?mrrEvolucao[i-1].mrr:m.mrr;
-            const cresceu=m.mrr>=prev;
-            const barColor=isSel?C.purple:isLast?C.teal:cresceu?C.green:C.coral;
-            return (
-              <div key={m.mesKey} onClick={()=>setMesSel(isSel?null:m.mesKey)}
-                style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,width:barW,cursor:"pointer",position:"relative"}}>
-                {(m.novos>0||m.canc>0)&&(
-                  <div style={{position:"absolute",top:-22,display:"flex",gap:2,zIndex:1}}>
-                    {m.novos>0&&<span style={{fontSize:7,color:C.greenD,background:C.greenL,padding:"1px 3px",borderRadius:3}}>+{m.novos}</span>}
-                    {m.canc>0&&<span style={{fontSize:7,color:C.coralD,background:C.coralL,padding:"1px 3px",borderRadius:3}}>-{m.canc}</span>}
-                  </div>
-                )}
-                <div style={{fontSize:9,fontWeight:500,color:isSel?C.purpleD:isLast?C.tealD:"var(--color-text-tertiary)",textAlign:"center",marginBottom:2}}>
-                  {m.mrr>0?"R$"+m.mrr:"—"}
-                </div>
-                <div style={{width:"80%",height:Math.max(4,Math.round(pct*110)),background:barColor,borderRadius:"4px 4px 0 0",transition:"height 0.3s",border:isSel?"2px solid "+C.purpleD:"none"}}/>
-                <div style={{fontSize:9,color:isSel?C.purpleD:"var(--color-text-tertiary)",textAlign:"center",textTransform:"capitalize",fontWeight:isSel?500:400}}>{m.mesLabel}</div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{display:"flex",gap:12,marginTop:4,fontSize:10,color:"var(--color-text-tertiary)"}}>
-          <span style={{color:C.greenD}}>+N novos</span>
-          <span style={{color:C.coralD}}>-N cancelamentos</span>
-          <span style={{color:C.teal}}>● mes atual</span>
-          <span style={{color:C.purple}}>■ selecionado</span>
-          <span>Clique na barra para ver detalhes</span>
-        </div>
-      </div>
-      {mesSel&&(
-        <div style={{marginTop:12,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",border:"0.5px solid "+C.purple}}>
-          <div style={{fontSize:11,fontWeight:500,color:C.purpleD,marginBottom:8}}>
-            Assinantes ativos em {mrrEvolucao.find(m=>m.mesKey===mesSel)?.mesLabel} ({mesDetalhes.length})
-          </div>
-          {mesDetalhes.length===0
-            ?<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Nenhum assinante com valor cadastrado neste mes.</div>
-            :mesDetalhes.map(a=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
-                <div style={{flex:1,fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>{a.nome}</div>
-                <div style={{fontSize:11,color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</div>
-                <div style={{fontSize:12,fontWeight:500,color:C.tealD}}>R${a.valorMensal}/mes</div>
-              </div>
-            ))
-          }
-        </div>
-      )}
-    </div>
-  );
-};
-
-const TabelaAssinantes = ({ assinantes, onAbrir }) => {
-  const [sortCol, setSortCol] = useState("cicloAtual");
-  const [sortDir, setSortDir] = useState("desc");
-  const toggleSort = (col) => {
-    if (sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
-    else { setSortCol(col); setSortDir("desc"); }
-  };
-  const Th = ({col,label}) => (
-    <th onClick={()=>toggleSort(col)} style={{padding:"7px 10px",textAlign:col==="nome"?"left":"center",fontWeight:500,color:sortCol===col?C.teal:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em",cursor:"pointer",userSelect:"none",whiteSpace:"nowrap"}}>
-      {label}{sortCol===col?(sortDir==="asc"?" ↑":" ↓"):""}
-    </th>
-  );
-  const sorted = [...assinantes].sort((a,b)=>{
-    let vA,vB;
-    if(sortCol==="nome"){vA=a.nome||"";vB=b.nome||"";return sortDir==="asc"?vA.localeCompare(vB):vB.localeCompare(vA);}
-    const assinA=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
-    const assinB=calcAssinatura(b.tipoAssinatura,b.dataInicioAssinatura);
-    if(sortCol==="cicloAtual"){vA=assinA?assinA.cicloAtual:0;vB=assinB?assinB.cicloAtual:0;}
-    else if(sortCol==="valorMensal"){vA=parseFloat(a.valorMensal)||0;vB=parseFloat(b.valorMensal)||0;}
-    else if(sortCol==="ltvAtual"){
-      const cA=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assinA?assinA.cicloAtual:0);
-      const cB=b.cancelado?calcCiclosCancelado(b.dataInicioAssinatura,b.dataCancelamento):(assinB?assinB.cicloAtual:0);
-      vA=(parseFloat(a.valorMensal)||0)*cA+(a.gasto||0);vB=(parseFloat(b.valorMensal)||0)*cB+(b.gasto||0);
-    }
-    else if(sortCol==="diasCobranca"){vA=assinA?assinA.diasParaCobranca:9999;vB=assinB?assinB.diasParaCobranca:9999;}
-    else{vA=0;vB=0;}
-    return sortDir==="asc"?vA-vB:vB-vA;
-  });
-  return (
-    <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
-      <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Assinantes individuais ({assinantes.length})</div>
-      <div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead>
-            <tr style={{background:"var(--color-background-primary)"}}>
-              <Th col="nome" label="Nome"/>
-              <Th col="plano" label="Plano"/>
-              <Th col="cicloAtual" label="Ciclo total"/>
-              <Th col="valorMensal" label="R$/mes"/>
-              <Th col="ltvAtual" label="LTV atual"/>
-              <Th col="diasCobranca" label="Prox. cobr."/>
-              <th style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map(a=>{
-              const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
-              const vm=parseFloat(a.valorMensal)||0;
-              const ciclosPagos=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assin?assin.cicloAtual:0);
-              const ltvAtual=vm*ciclosPagos+(a.gasto||0);
-              const ciclosRest=a.cancelado?0:(assin?assin.ciclosTotais-assin.cicloNoPeriodo:0);
-              const ltvProj=ltvAtual+vm*ciclosRest;
-              const statusLabel=a.cancelado?"Cancelado":a.falhaRenovacao?"Falha renovacao":"Ativa";
-              const statusCor=a.cancelado?C.coralD:a.falhaRenovacao?C.amberD:C.greenD;
-              const statusBg=a.cancelado?C.coralL:a.falhaRenovacao?C.amberL:C.greenL;
-              return (
-                <tr key={a.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",opacity:(a.cancelado||a.falhaRenovacao)?0.7:1}}>
-                  <td style={{padding:"7px 10px"}}>
-                    <button onClick={()=>onAbrir&&onAbrir(a.id)} style={{background:"none",border:"none",cursor:onAbrir?"pointer":"default",fontWeight:500,color:onAbrir?C.teal:"var(--color-text-primary)",fontSize:12,padding:0,textAlign:"left"}}>
-                      {a.nome}
-                    </button>
-                  </td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:C.purpleD,fontWeight:500}}>
-                    {assin?<span>{assin.cicloAtual}°<span style={{fontSize:10,color:C.purple,fontWeight:400}}> ({assin.cicloNoPeriodo}/{assin.ciclosTotais})</span></span>:"—"}
-                  </td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)"}}>{vm>0?"R$"+vm.toFixed(0):"—"}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:C.greenD}}>{vm>0?"R$"+ltvAtual.toFixed(0):"—"}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:assin&&assin.diasParaCobranca<=7?C.coralD:assin&&assin.diasParaCobranca<=15?C.amberD:"var(--color-text-secondary)"}}>{assin&&!a.cancelado?assin.proximaCobranca:"—"}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center"}}><span style={{fontSize:10,fontWeight:500,background:statusBg,color:statusCor,padding:"2px 8px",borderRadius:20}}>{statusLabel}</span></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-const LTV = ({ onAbrir }) => {
-  const [assinantes, setAssinantes] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    dbGetAssinantes().then(a => { setAssinantes(a); setLoading(false); });
-  }, []);
-
-  if (loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Carregando...</div>;
-
-  if (assinantes.length === 0) return (
-    <div style={{textAlign:"center",padding:"48px 24px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px dashed var(--color-border-tertiary)"}}>
-      <div style={{fontSize:32,marginBottom:12}}>💰</div>
-      <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:6}}>Sem assinantes ainda</div>
-      <div style={{fontSize:13,color:"var(--color-text-secondary)"}}>Mova clientes para a etapa ⭐ Experiencia para calcular o LTV.</div>
-    </div>
-  );
-
-  const ativos = assinantes.filter(a=>!a.cancelado&&!a.falhaRenovacao);
-  const comFalha = assinantes.filter(a=>a.falhaRenovacao&&!a.cancelado);
-  const cancelados = assinantes.filter(a=>a.cancelado);
-  const comValor = ativos.filter(a=>a.valorMensal>0);
-  const ltvRealizadoAtivos = comValor.reduce((acc,a) => {
-    const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
-    return acc + (a.valorMensal||0) * (assin?assin.cicloAtual:0) + (a.gasto||0);
-  }, 0);
-  const ltvCancelados = cancelados.filter(a=>a.valorMensal>0).reduce((acc,a) => {
-    const ciclos = calcCiclosCancelado(a.dataInicioAssinatura, a.dataCancelamento);
-    return acc + (a.valorMensal||0) * ciclos + (a.gasto||0);
-  }, 0);
-  const ltvPagoTotal = ltvRealizadoAtivos + ltvCancelados;
-  const ltvProjetadoTotal = comValor.reduce((acc,a) => {
-    const assin = calcAssinatura(a.tipoAssinatura, a.dataInicioAssinatura);
-    const vm = a.valorMensal||0;
-    const ciclosRestantes = assin ? assin.ciclosTotais - assin.cicloNoPeriodo : 0;
-    return acc + vm * (assin?assin.cicloAtual:0) + vm * ciclosRestantes + (a.gasto||0);
-  }, 0);
-  const mrr = comValor.reduce((acc,a) => acc + (a.valorMensal||0), 0);
-  const semValor = ativos.length - comValor.length;
-
-  // Evolucao do MRR mes a mes
-  // Para cada mes desde o primeiro assinante ate hoje,
-  // recalcula o MRR somando quem estava ativo naquele mes
-  const mrrEvolucao = (() => {
-    if (assinantes.length === 0) return [];
-    const datas = assinantes
-      .filter(a=>a.dataInicioAssinatura)
-      .map(a=>new Date(a.dataInicioAssinatura+"T12:00:00"));
-    if (datas.length === 0) return [];
-    const minData = new Date(Math.min(...datas.map(d=>d.getTime())));
-    const hoje2 = new Date();
-    const meses = [];
-    let cursor = new Date(minData.getFullYear(), minData.getMonth(), 1);
-    while (cursor <= hoje2 && meses.length < 24) {
-      const mesKey = cursor.toISOString().substring(0,7);
-      const mesLabel = cursor.toLocaleDateString("pt-BR",{month:"short",year:"2-digit"});
-      const mrr_mes = assinantes.filter(a => {
-        if (!a.dataInicioAssinatura || !a.valorMensal) return false;
-        const inicio = new Date(a.dataInicioAssinatura+"T12:00:00");
-        if (inicio > cursor) return false;
-        if (a.cancelado && a.dataCancelamento) {
-          const cancel = new Date(a.dataCancelamento+"T12:00:00");
-          const fimMes = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0);
-          if (cancel < cursor) return false;
-        }
-        return true;
-      }).reduce((acc,a) => acc + (parseFloat(a.valorMensal)||0), 0);
-      const novos = assinantes.filter(a => {
-        if (!a.dataInicioAssinatura) return false;
-        return new Date(a.dataInicioAssinatura+"T12:00:00").toISOString().substring(0,7) === mesKey;
-      }).length;
-      const canc = assinantes.filter(a => a.cancelado && a.dataCancelamento && a.dataCancelamento.substring(0,7) === mesKey).length;
-      meses.push({ mesKey, mesLabel, mrr: Math.round(mrr_mes), novos, canc });
-      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
-    }
-    return meses;
-  })();
-
-  // Churn: cancelamentos por mes
-  const churnPorMes = {};
-  cancelados.forEach(a => {
-    if (!a.dataCancelamento) return;
-    const key = a.dataCancelamento.substring(0,7);
-    churnPorMes[key] = (churnPorMes[key]||0) + 1;
-  });
-  const mesesComChurn = Object.keys(churnPorMes).sort().reverse().slice(0,3);
-  const churnMesAtual = churnPorMes[new Date().toISOString().substring(0,7)]||0;
-  const tempoMedioMeses = cancelados.length > 0
-    ? Math.round(cancelados.filter(a=>a.dataInicioAssinatura&&a.dataCancelamento).reduce((acc,a)=>{
-        return acc + calcCiclosCancelado(a.dataInicioAssinatura, a.dataCancelamento);
-      },0) / cancelados.filter(a=>a.dataInicioAssinatura&&a.dataCancelamento).length)
-    : 0;
-  const churnRate = ativos.length > 0 ? Math.round(cancelados.length/(ativos.length+cancelados.length)*100) : 0;
-
-  return (
-    <div>
-      <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
-          Dash Club — {ativos.length} ativos
-          {comFalha.length>0&&<span style={{color:C.amberD,marginLeft:6}}>· {comFalha.length} falha renovacao</span>}
-          {cancelados.length>0&&<span style={{color:C.coralD,marginLeft:6}}>· {cancelados.length} cancelados</span>}
-          {semValor>0&&<span style={{color:C.amber,marginLeft:6}}>· {semValor} sem valor</span>}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
-          <div style={{background:C.purpleL,borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
-            <div style={{fontSize:10,color:C.purpleD,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500}}>Assinantes ativos</div>
-            <div style={{fontSize:28,fontWeight:500,color:C.purpleD}}>{ativos.length}</div>
-            <div style={{fontSize:10,color:C.purpleD,marginTop:2}}>{cancelados.length>0?cancelados.length+" cancelado"+(cancelados.length>1?"s":""):"nenhum cancelamento"}</div>
-          </div>
-          {(()=>{
-            // MRR do mes anterior para calcular variacao
-            const hoje3 = new Date();
-            const mesAnterior = new Date(hoje3.getFullYear(), hoje3.getMonth()-1, 1);
-            const mrrAnterior = ativos.reduce((acc,a)=>{
-              if(!a.dataInicioAssinatura||!a.valorMensal) return acc;
-              const ini = new Date(a.dataInicioAssinatura+"T12:00:00");
-              if(ini > mesAnterior) return acc; // ainda nao era assinante
-              return acc + (parseFloat(a.valorMensal)||0);
-            }, 0);
-            const varMRR = mrr - mrrAnterior;
-            const varPct = mrrAnterior > 0 ? Math.round(varMRR/mrrAnterior*100) : 0;
-            return (
-              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
-                <div style={{fontSize:24,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
-                  <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{comValor.length} assinantes · média R${comValor.length>0?(mrr/comValor.length).toFixed(0):0}/mês</span>
-                  {mrrAnterior>0&&<span style={{fontSize:10,fontWeight:500,color:varMRR>=0?C.greenD:C.coralD,background:varMRR>=0?C.greenL:C.coralL,padding:"1px 6px",borderRadius:10}}>{varMRR>=0?"+":""}R${varMRR.toFixed(0)} ({varPct>=0?"+":""}{varPct}%)</span>}
-                </div>
-              </div>
-            );
-          })()}
-          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.green}}>
-            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV realizado</div>
-            <div style={{fontSize:24,fontWeight:500,color:C.greenD}}>R${ltvPagoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
-            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>ativos + cancelados</div>
-          </div>
-          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
-            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV projetado</div>
-            <div style={{fontSize:24,fontWeight:500,color:C.purpleD}}>R${ltvProjetadoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
-            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>ativos ate fim do plano</div>
-          </div>
-        </div>
-      </div>
-
-      {cancelados.length > 0 && (
-        <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Cancelamentos e churn</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.coral}}>
-              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Churn total</div>
-              <div style={{fontSize:24,fontWeight:500,color:C.coralD}}>{churnRate}%</div>
-              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{cancelados.length} de {ativos.length+cancelados.length} assinantes</div>
-            </div>
-            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.amber}}>
-              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Tempo medio ate cancelar</div>
-              <div style={{fontSize:24,fontWeight:500,color:C.amberD}}>{tempoMedioMeses || "—"}{tempoMedioMeses?"m":""}</div>
-              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>meses de assinatura</div>
-            </div>
-            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
-              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cancelamentos mes atual</div>
-              <div style={{fontSize:24,fontWeight:500,color:churnMesAtual>0?C.coralD:"var(--color-text-primary)"}}>{churnMesAtual}</div>
-              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{mesesComChurn.slice(1).map(m=><span key={m} style={{marginRight:6}}>{m}: {churnPorMes[m]}</span>)}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {mrrEvolucao.length > 1 && (
-        <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>Evolucao do MRR</div>
-          <GraficoMRR mrrEvolucao={mrrEvolucao} assinantes={assinantes}/>
-        </div>
-      )}
-
-      <TabelaAssinantes assinantes={assinantes} onAbrir={onAbrir}/>
-
-      {(()=>{
-        const indicadoras = {};
-        assinantes.forEach(a=>{
-          if(a.indicadaPor&&a.indicadaPor.trim()){
-            const k=a.indicadaPor.trim();
-            if(!indicadoras[k]) indicadoras[k]={nome:k,count:0,nomes:[]};
-            indicadoras[k].count++;
-            indicadoras[k].nomes.push(a.nome);
-          }
-        });
-        const ranking = Object.values(indicadoras).sort((a,b)=>b.count-a.count).slice(0,10);
-        if(ranking.length===0) return null;
-        return (
-          <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginTop:16}}>
-            <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>🏆 Ranking de indicações</div>
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {ranking.map((r,i)=>(
-                <div key={r.nome} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:"var(--color-background-primary)",borderRadius:8}}>
-                  <span style={{fontSize:12,fontWeight:500,color:C.amberD,minWidth:20}}>#{i+1}</span>
-                  <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)",flex:1}}>{r.nome}</span>
-                  <span style={{fontSize:11,background:C.greenL,color:C.greenD,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{r.count} indicaç{r.count>1?"ões":"ão"}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
-    </div>
-  );
-};
-
-
-const GlobalSearch = ({ onAbrir }) => {
-  const [q, setQ] = useState("");
-  const [resultados, setResultados] = useState([]);
-  const [buscando, setBuscando] = useState(false);
-  const [aberto, setAberto] = useState(false);
-
-  useEffect(() => {
-    if (!q.trim() || q.length < 2) { setResultados([]); return; }
-    setBuscando(true);
-    const timer = setTimeout(async () => {
-      const todos = await dbGetAll();
-      const ql = q.toLowerCase();
-      const res = todos.filter(c =>
-        (c.nome||"").toLowerCase().includes(ql) ||
-        (c.customerId||"").toLowerCase().includes(ql) ||
-        (c.telefone||"").toLowerCase().includes(ql) ||
-        (c.email||"").toLowerCase().includes(ql)
-      ).slice(0, 8);
-      setResultados(res);
-      setBuscando(false);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [q]);
-
-  const etapaInfo = (id) => ETAPAS.find(e=>e.id===id) || ETAPAS[0];
-
-  return (
-    <div style={{ position:"relative", flex:1, maxWidth:400 }}>
-      <div style={{ position:"relative" }}>
-        <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none" }}>🔍</span>
-        <input
-          value={q} onChange={e=>{setQ(e.target.value);setAberto(true);}}
-          onFocus={()=>setAberto(true)}
-          onBlur={()=>setTimeout(()=>setAberto(false),200)}
-          placeholder="Buscar por nome, ID, telefone ou email..."
-          style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}
-        />
-        {buscando&&<span style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"var(--color-text-tertiary)" }}>...</span>}
-      </div>
-      {aberto&&q.length>=2&&(
-        <div style={{ position:"absolute",top:"100%",left:0,right:0,background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,boxShadow:"0 4px 20px rgba(0,0,0,0.1)",zIndex:100,marginTop:4,overflow:"hidden" }}>
-          {resultados.length===0&&!buscando&&<div style={{ padding:"12px 14px",fontSize:13,color:"var(--color-text-tertiary)" }}>Nenhum cliente encontrado</div>}
-          {resultados.map(c => {
-            const e = etapaInfo(c.etapa);
-            return (
-              <button key={c.id} onClick={()=>{onAbrir(c.id);setQ("");setAberto(false);}}
-                style={{ width:"100%",textAlign:"left",padding:"10px 14px",background:"none",border:"none",borderBottom:"0.5px solid var(--color-border-tertiary)",cursor:"pointer",display:"flex",alignItems:"center",gap:10 }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)" }}>{c.nome}</div>
-                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.customerId?"#"+c.customerId+" · ":""}{c.emailClub||c.email||c.telefone||""}</div>
-                </div>
-                <span style={{ fontSize:10,fontWeight:500,background:e.corL,color:e.corD,padding:"2px 8px",borderRadius:20,flexShrink:0 }}>{e.emoji} {e.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 };
