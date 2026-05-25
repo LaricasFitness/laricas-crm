@@ -77,6 +77,18 @@ const dbSave    = async (c)  => { await sb("/clientes", {method:"POST", body:{id
 const dbBulkSave= async (cs) => { if(!cs.length)return; await sb("/clientes", {method:"POST", body:cs.map(c=>({id:c.id,dados:c,atualizado_em:new Date().toISOString()})), pref:"resolution=merge-duplicates"}); };
 const dbDelete  = async (id) => { await sb("/clientes?id=eq."+id, {method:"DELETE"}); };
 const dbTest    = async ()   => { await sb("/clientes?limit=1"); return true; };
+const dbGetUltimoImport = async () => {
+  try {
+    const r = await sb("/clientes?id=eq.__ultimo_import__&select=dados");
+    return r&&r[0] ? r[0].dados : null;
+  } catch(e) { return null; }
+};
+const dbSaveUltimoImport = async (info) => {
+  try {
+    await sb("/clientes", { method:"POST", pref:"resolution=merge-duplicates",
+      body:{ id:"__ultimo_import__", dados:info, atualizado_em:new Date().toISOString() } });
+  } catch(e) {}
+};
 const dbGetAssinantes = async () => {
   try {
     const r = await sb("/clientes?select=dados&dados->>etapa=eq.experiencia");
@@ -1761,6 +1773,8 @@ const ImportarLista = ({ onSalvo }) => {
   const [modoOrders,setModoOrders]=useState(false);
   const [pedidosPreview,setPedidosPreview]=useState([]);
   const [confirmacaoOrders,setConfirmacaoOrders]=useState(null);
+  const [ultimoImport,setUltimoImport]=useState(null);
+  useEffect(()=>{ dbGetUltimoImport().then(setUltimoImport); },[]);
   const parse = (raw) => {
     const linhas = raw.split("\n").map(l=>l.trim()).filter(l=>l.length>0);
     const cls=[]; const errs=[];
@@ -1904,6 +1918,18 @@ const ImportarLista = ({ onSalvo }) => {
           novos.filter(c=>c.datasPreenchidas).length > 0 ? novos.filter(c=>c.datasPreenchidas).length+" com triagem" : "",
           pedidosIgnorados > 0 ? pedidosIgnorados+" pedidos ja importados (ignorados)" : "",
         ].filter(Boolean).join(" · ");
+        // Salvar registro do ultimo import
+        const datasImport = pedidosPreview.map(p=>p.dataUltimo).filter(Boolean).sort();
+        const ultimaData = datasImport[datasImport.length-1]||"";
+        await dbSaveUltimoImport({
+          data: new Date().toLocaleDateString("pt-BR"),
+          hora: new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
+          dataUltimoPedido: ultimaData,
+          novos: novos.length,
+          atualizados: atualizados.length,
+          ignorados: pedidosIgnorados,
+          total: pedidosPreview.length,
+        });
         setOk("✓ "+msg);
         setImp(false); setProg(null);
         setTimeout(()=>{ setTxt(""); setPrev([]); setPedidosPreview([]); setModoOrders(false);
@@ -2063,6 +2089,34 @@ const ImportarLista = ({ onSalvo }) => {
   };
   return (
     <div>
+      {ultimoImport&&(
+        <div style={{ background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
+          <div style={{ fontSize:12,fontWeight:500,color:C.tealD,marginBottom:8 }}>📦 Último import de pedidos</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8 }}>
+            <div>
+              <div style={{ fontSize:10,color:C.teal,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2 }}>Realizado em</div>
+              <div style={{ fontSize:12,fontWeight:500,color:C.tealD }}>{ultimoImport.data} {ultimoImport.hora}</div>
+            </div>
+            <div>
+              <div style={{ fontSize:10,color:C.teal,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2 }}>Último pedido</div>
+              <div style={{ fontSize:12,fontWeight:500,color:C.tealD }}>
+                {ultimoImport.dataUltimoPedido ? new Date(ultimoImport.dataUltimoPedido+"T12:00:00").toLocaleDateString("pt-BR") : "—"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:10,color:C.teal,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2 }}>Novos leads</div>
+              <div style={{ fontSize:12,fontWeight:500,color:C.tealD }}>{ultimoImport.novos||0}</div>
+            </div>
+            <div>
+              <div style={{ fontSize:10,color:C.teal,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2 }}>Atualizados</div>
+              <div style={{ fontSize:12,fontWeight:500,color:C.tealD }}>{ultimoImport.atualizados||0}</div>
+            </div>
+          </div>
+          <div style={{ fontSize:11,color:C.tealD,paddingTop:8,borderTop:"0.5px solid "+C.teal }}>
+            💡 Exporte do Shopify os pedidos a partir de <strong>{ultimoImport.dataUltimoPedido ? new Date(ultimoImport.dataUltimoPedido+"T12:00:00").toLocaleDateString("pt-BR") : "ontem"}</strong> para não importar duplicatas.
+          </div>
+        </div>
+      )}
       <div style={{ background:C.purpleL,border:"0.5px solid "+C.purple,borderRadius:8,padding:"12px 16px",marginBottom:16 }}>
         <div style={{ fontSize:13,fontWeight:500,color:C.purpleD,marginBottom:6 }}>Importação em lote de leads</div>
         <div style={{ fontSize:12,color:C.purpleD,lineHeight:1.6 }}>Cole a lista abaixo ou faça upload de um CSV. Todos entram na coluna Lead. O operador preenche as datas no perfil para gerar a sequência.</div>
