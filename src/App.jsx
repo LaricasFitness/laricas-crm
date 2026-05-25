@@ -3053,6 +3053,221 @@ const TriagemTab = ({ onSalvo }) => {
   );
 };
 
+
+const Unificar = ({ onSalvo }) => {
+  const [clientes, setClientes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sugestoes, setSugestoes] = useState([]);
+  const [busca, setBusca] = useState("");
+  const [resultados, setResultados] = useState([]);
+  const [selecionados, setSelecionados] = useState([]); // [idA, idB]
+  const [preview, setPreview] = useState(null); // {a, b}
+  const [salvando, setSalvando] = useState(false);
+  const [ok, setOk] = useState("");
+
+  useEffect(() => {
+    dbGetAll().then(lista => {
+      setClientes(lista);
+      // Detectar duplicatas: mesmo nome (normalizado) ou mesmo email ou mesmo telefone
+      const grupos = {};
+      lista.forEach(c => {
+        const nomeNorm = (c.nome||"").toLowerCase().trim().replace(/\s+/g," ");
+        const email = (c.email||"").toLowerCase().trim();
+        const tel = (c.telefone||"").replace(/\D/g,"").slice(-8);
+        [nomeNorm, email&&"e:"+email, tel&&tel.length>=8&&"t:"+tel].filter(Boolean).forEach(k => {
+          if(!grupos[k]) grupos[k]=[];
+          grupos[k].push(c);
+        });
+      });
+      const dupl = Object.values(grupos)
+        .filter(g=>g.length>=2)
+        .map(g=>({ a:g[0], b:g[1], score: calcScore(g[0],g[1]) }))
+        .filter(g=>g.score>0)
+        .sort((a,b)=>b.score-a.score)
+        .slice(0,20);
+      // Deduplicate sugestoes
+      const seen = new Set();
+      const uniq = dupl.filter(d=>{
+        const k=[d.a.id,d.b.id].sort().join("|");
+        if(seen.has(k)) return false;
+        seen.add(k); return true;
+      });
+      setSugestoes(uniq);
+      setLoading(false);
+    });
+  }, []);
+
+  const calcScore = (a, b) => {
+    let s = 0;
+    const nA=(a.nome||"").toLowerCase().trim();
+    const nB=(b.nome||"").toLowerCase().trim();
+    if(nA&&nB&&nA===nB) s+=3;
+    else if(nA&&nB&&(nA.includes(nB)||nB.includes(nA))) s+=2;
+    const eA=(a.email||"").toLowerCase().trim();
+    const eB=(b.email||"").toLowerCase().trim();
+    if(eA&&eB&&eA===eB) s+=3;
+    const tA=(a.telefone||"").replace(/\D/g,"").slice(-8);
+    const tB=(b.telefone||"").replace(/\D/g,"").slice(-8);
+    if(tA&&tB&&tA.length>=8&&tA===tB) s+=3;
+    return s;
+  };
+
+  const buscar = () => {
+    if(!busca.trim()) return;
+    const q = busca.toLowerCase();
+    const res = clientes.filter(c=>
+      (c.nome||"").toLowerCase().includes(q)||
+      (c.email||"").toLowerCase().includes(q)||
+      (c.telefone||"").includes(q)||
+      (c.customerId||"").includes(q)
+    ).slice(0,10);
+    setResultados(res);
+    setSelecionados([]);
+    setPreview(null);
+  };
+
+  const toggleSel = (c) => {
+    setSelecionados(prev => {
+      if(prev.find(x=>x.id===c.id)) return prev.filter(x=>x.id!==c.id);
+      if(prev.length>=2) return [prev[1],c];
+      return [...prev,c];
+    });
+  };
+
+  useEffect(()=>{
+    if(selecionados.length===2) setPreview({a:selecionados[0],b:selecionados[1]});
+    else setPreview(null);
+  },[selecionados]);
+
+  const unificar = async (manter, remover) => {
+    setSalvando(true);
+    // Merge: keep manter, delete remover, combine listas and notas
+    const listaA = manter.lista||"";
+    const listaB = remover.lista||"";
+    const listasMerge = [...new Set([...listaA.split(" · "),...listaB.split(" · ")].map(l=>l.trim()).filter(Boolean))].join(" · ");
+    const notasMerge = [manter.notas, remover.notas].filter(Boolean).join("
+---
+");
+    const logMerge = [...(manter.logAtividade||[]),...(remover.logAtividade||[])].sort((a,b)=>a.data>b.data?-1:1).slice(0,30);
+    const histMerge = [...(manter.historicoEtapas||[]),...(remover.historicoEtapas||[])];
+    const merged = {
+      ...manter,
+      lista: listasMerge,
+      notas: notasMerge,
+      logAtividade: logMerge,
+      historicoEtapas: histMerge,
+      email: manter.email||remover.email,
+      telefone: manter.telefone||remover.telefone,
+      customerId: manter.customerId||remover.customerId,
+      gasto: (manter.gasto||0) + (remover.gasto||0),
+      p: (manter.p||0) + (remover.p||0),
+      dataPrimeiro: [manter.dataPrimeiro,remover.dataPrimeiro].filter(Boolean).sort()[0]||"",
+      dataUltimo: [manter.dataUltimo,remover.dataUltimo].filter(Boolean).sort().reverse()[0]||"",
+    };
+    try {
+      await dbSave(merged);
+      await dbDelete(remover.id);
+      setOk("✓ Perfis unificados com sucesso!");
+      setPreview(null); setSelecionados([]); setResultados([]);
+      setBusca(""); setSugestoes(prev=>prev.filter(s=>s.a.id!==remover.id&&s.b.id!==remover.id));
+      setClientes(prev=>prev.filter(c=>c.id!==remover.id).map(c=>c.id===manter.id?merged:c));
+      setTimeout(()=>{setOk(""); onSalvo&&onSalvo();},2000);
+    } catch(e) { setOk("Erro: "+e.message); }
+    setSalvando(false);
+  };
+
+  const CardCliente = ({c, selecionado, onClick}) => {
+    const etapa = ETAPAS.find(e=>e.id===c.etapa)||ETAPAS[0];
+    return (
+      <button onClick={onClick} style={{ width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:10,border:"2px solid "+(selecionado?C.teal:"var(--color-border-tertiary)"),background:selecionado?C.tealL:"var(--color-background-secondary)",cursor:"pointer",marginBottom:6,transition:"all 0.15s" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:4 }}>
+          <span style={{ fontSize:11,fontWeight:500,color:etapa.corD,background:etapa.corL,padding:"1px 6px",borderRadius:10 }}>{etapa.emoji} {etapa.label}</span>
+          {selecionado&&<span style={{ fontSize:10,fontWeight:500,color:C.tealD }}>✓ Selecionado</span>}
+        </div>
+        <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:2 }}>{c.nome}</div>
+        <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>
+          {c.email&&<span>{c.email} · </span>}{c.telefone&&<span>{c.telefone} · </span>}
+          {c.p||0} pedidos · R${(c.gasto||0).toFixed(0)}
+        </div>
+        {c.notas&&<div style={{ fontSize:11,color:"var(--color-text-secondary)",marginTop:4,fontStyle:"italic" }}>"{c.notas.slice(0,60)}{c.notas.length>60?"...":""}"</div>}
+      </button>
+    );
+  };
+
+  if(loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Analisando base...</div>;
+
+  return (
+    <div>
+      {ok&&<div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:500,color:C.greenD }}>{ok}</div>}
+
+      {/* Sugestões automáticas */}
+      {sugestoes.length>0&&(
+        <div style={{ background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
+          <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:4 }}>🔍 Possíveis duplicatas detectadas</div>
+          <div style={{ fontSize:12,color:"var(--color-text-secondary)",marginBottom:12 }}>{sugestoes.length} pares com nome, email ou telefone similares</div>
+          {sugestoes.map((s,i)=>(
+            <div key={i} style={{ background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",marginBottom:10,border:"0.5px solid var(--color-border-tertiary)" }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8 }}>
+                <CardCliente c={s.a} selecionado={!!selecionados.find(x=>x.id===s.a.id)} onClick={()=>{setSelecionados([s.a,s.b]);}}/>
+                <CardCliente c={s.b} selecionado={!!selecionados.find(x=>x.id===s.b.id)} onClick={()=>{setSelecionados([s.a,s.b]);}}/>
+              </div>
+              <button onClick={()=>setSelecionados([s.a,s.b])} style={{ width:"100%",padding:"7px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
+                Analisar e unificar →
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Busca manual */}
+      <div style={{ background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
+        <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:10 }}>Busca manual</div>
+        <div style={{ display:"flex",gap:8,marginBottom:10 }}>
+          <input value={busca} onChange={e=>setBusca(e.target.value)} onKeyDown={e=>e.key==="Enter"&&buscar()}
+            placeholder="Nome, email ou telefone..."
+            style={{ flex:1,padding:"8px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-primary)",outline:"none" }}/>
+          <button onClick={buscar} style={{ padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>Buscar</button>
+        </div>
+        {resultados.length>0&&(
+          <div>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8 }}>Selecione 2 perfis para unificar:</div>
+            {resultados.map(c=><CardCliente key={c.id} c={c} selecionado={!!selecionados.find(x=>x.id===c.id)} onClick={()=>toggleSel(c)}/>)}
+          </div>
+        )}
+      </div>
+
+      {/* Preview unificação */}
+      {preview&&(
+        <div style={{ background:"var(--color-background-primary)",border:"0.5px solid "+C.teal,borderRadius:12,padding:"16px" }}>
+          <div style={{ fontSize:13,fontWeight:500,color:C.tealD,marginBottom:12 }}>Escolha qual perfil manter</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
+            {[preview.a, preview.b].map((c,i)=>(
+              <div key={c.id} style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px" }}>
+                <div style={{ fontSize:12,fontWeight:500,color:"var(--color-text-primary)",marginBottom:8 }}>{c.nome}</div>
+                <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,lineHeight:1.6 }}>
+                  {c.email&&<div>📧 {c.email}</div>}
+                  {c.telefone&&<div>📱 {c.telefone}</div>}
+                  <div>🛒 {c.p||0} pedidos · R${(c.gasto||0).toFixed(0)}</div>
+                  <div>📋 {ETAPAS.find(e=>e.id===c.etapa)?.label||c.etapa}</div>
+                  {c.notas&&<div>📝 Tem anotações</div>}
+                  {(c.logAtividade||[]).length>0&&<div>📌 {c.logAtividade.length} logs</div>}
+                </div>
+                <button onClick={()=>unificar(c, i===0?preview.b:preview.a)} disabled={salvando}
+                  style={{ width:"100%",padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:salvando?"default":"pointer",background:C.teal,color:"#fff",border:"none",opacity:salvando?0.6:1 }}>
+                  ✓ Manter este
+                </button>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center" }}>
+            O perfil escolhido absorve listas, notas, logs e histórico do outro. O outro é removido.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   const [tab,setTab]=useState("kanban");
   const [clienteId,setClienteId]=useState(null);
@@ -3085,6 +3300,7 @@ export default function App() {
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
         <T label="📈 Dash Club" active={tab==="dashclub"} color={C.green} onClick={()=>setTab("dashclub")}/>
+        <T label="🔗 Unificar" active={tab==="unificar"} color={C.amber} onClick={()=>setTab("unificar")}/>
         <T label="📖 Guia" active={tab==="guia"} color={C.teal} onClick={()=>setTab("guia")}/>
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
@@ -3103,6 +3319,7 @@ export default function App() {
         </div>
       )}
       {tab==="historico"&&<Historico/>}
+      {tab==="unificar"&&<Unificar onSalvo={()=>setRefresh(r=>r+1)}/>}
       {tab==="dashclub"&&<LTV onAbrir={(id)=>{abrirClienteGlobal(id);setTab("kanban");}}/>}
       {tab==="guia"&&<Guia/>}
       {tab==="backup"&&<Backup onRestore={onRestore}/>}
