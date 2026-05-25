@@ -805,12 +805,16 @@ const Perfil = ({ clienteId, onVoltar }) => {
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Telefone / WhatsApp</div><input style={inp()} value={c.telefone||""} onChange={e=>setC({...c,telefone:e.target.value})} onBlur={()=>save({telefone:c.telefone})} placeholder="11 9XXXX-XXXX"/></div>
         </div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
-          <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email</div><input style={inp()} value={c.email||""} onChange={e=>setC({...c,email:e.target.value})} onBlur={()=>save({email:c.email})} placeholder="cliente@email.com" type="email"/></div>
+          <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email Shopify</div><input style={inp()} value={c.email||""} onChange={e=>setC({...c,email:e.target.value})} onBlur={()=>save({email:c.email})} placeholder="email da conta Shopify" type="email"/></div>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Customer ID Shopify</div><input style={inp({fontSize:11,color:"var(--color-text-tertiary)"})} value={c.customerId||""} onChange={e=>setC({...c,customerId:e.target.value})} onBlur={()=>save({customerId:c.customerId})} placeholder="ID do cliente no Shopify"/></div>
         </div>
         <div style={{ marginBottom:10 }}>
           <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Responsável</div>
           <input style={inp()} value={c.responsavel||""} onChange={e=>setC({...c,responsavel:e.target.value})} onBlur={()=>save({responsavel:c.responsavel})} placeholder="Nome do operador"/>
+        </div>
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email Club <span style={{ fontWeight:400,textTransform:"none",letterSpacing:0,color:"var(--color-text-tertiary)" }}>(preferencial para comunicação)</span></div>
+          <input style={inp()} value={c.emailClub||""} onChange={e=>setC({...c,emailClub:e.target.value})} onBlur={()=>save({emailClub:c.emailClub})} placeholder="email preferencial para o Club" type="email"/>
         </div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
           <div>
@@ -1379,7 +1383,7 @@ const Kanban = ({ onAbrir }) => {
     if(filtroHoje) r = r.filter(c=>c.dataProximoContato===hoje);
     if(!busca.trim()) return r;
     const q=busca.toLowerCase();
-    return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q)||(c.email||"").toLowerCase().includes(q)||(c.responsavel||"").toLowerCase().includes(q));
+    return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q)||(c.email||"").toLowerCase().includes(q)||(c.emailClub||"").toLowerCase().includes(q)||(c.responsavel||"").toLowerCase().includes(q));
   };
 
   const porEtapa=(id)=>{
@@ -3016,7 +3020,7 @@ const GlobalSearch = ({ onAbrir }) => {
                 style={{ width:"100%",textAlign:"left",padding:"10px 14px",background:"none",border:"none",borderBottom:"0.5px solid var(--color-border-tertiary)",cursor:"pointer",display:"flex",alignItems:"center",gap:10 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)" }}>{c.nome}</div>
-                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.customerId?"#"+c.customerId+" · ":""}{c.email||c.telefone||""}</div>
+                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.customerId?"#"+c.customerId+" · ":""}{c.emailClub||c.email||c.telefone||""}</div>
                 </div>
                 <span style={{ fontSize:10,fontWeight:500,background:e.corL,color:e.corD,padding:"2px 8px",borderRadius:20,flexShrink:0 }}>{e.emoji} {e.label}</span>
               </button>
@@ -3155,6 +3159,7 @@ const Unificar = ({ onSalvo }) => {
       logAtividade: logMerge,
       historicoEtapas: histMerge,
       email: manter.email||remover.email,
+      emailClub: manter.emailClub||remover.emailClub,
       telefone: manter.telefone||remover.telefone,
       customerId: manter.customerId||remover.customerId,
       gasto: (manter.gasto||0) + (remover.gasto||0),
