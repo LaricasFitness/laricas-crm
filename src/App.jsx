@@ -2644,6 +2644,69 @@ const Guia = () => {
 };
 
 
+const GlobalSearch = ({ onAbrir }) => {
+  const [q, setQ] = useState("");
+  const [resultados, setResultados] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+  const [aberto, setAberto] = useState(false);
+
+  useEffect(() => {
+    if (!q.trim() || q.length < 2) { setResultados([]); return; }
+    setBuscando(true);
+    const timer = setTimeout(async () => {
+      const todos = await dbGetAll();
+      const ql = q.toLowerCase();
+      const res = todos.filter(c =>
+        (c.nome||"").toLowerCase().includes(ql) ||
+        (c.customerId||"").toLowerCase().includes(ql) ||
+        (c.telefone||"").toLowerCase().includes(ql) ||
+        (c.email||"").toLowerCase().includes(ql) ||
+        (c.emailClub||"").toLowerCase().includes(ql) ||
+        (c.responsavel||"").toLowerCase().includes(ql)
+      ).slice(0, 8);
+      setResultados(res);
+      setBuscando(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  const etapaInfo = (id) => ETAPAS.find(e=>e.id===id) || ETAPAS[0];
+
+  return (
+    <div style={{ position:"relative", flex:1, maxWidth:400 }}>
+      <div style={{ position:"relative" }}>
+        <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none" }}>🔍</span>
+        <input
+          value={q} onChange={e=>{setQ(e.target.value);setAberto(true);}}
+          onFocus={()=>setAberto(true)}
+          onBlur={()=>setTimeout(()=>setAberto(false),200)}
+          placeholder="Buscar por nome, ID, telefone ou email..."
+          style={{ width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none" }}
+        />
+        {buscando&&<span style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"var(--color-text-tertiary)" }}>...</span>}
+      </div>
+      {aberto&&q.length>=2&&(
+        <div style={{ position:"absolute",top:"100%",left:0,right:0,background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,boxShadow:"0 4px 20px rgba(0,0,0,0.1)",zIndex:100,marginTop:4,overflow:"hidden" }}>
+          {resultados.length===0&&!buscando&&<div style={{ padding:"12px 14px",fontSize:13,color:"var(--color-text-tertiary)" }}>Nenhum cliente encontrado</div>}
+          {resultados.map(c => {
+            const e = etapaInfo(c.etapa);
+            return (
+              <button key={c.id} onClick={()=>{onAbrir(c.id);setQ("");setAberto(false);}}
+                style={{ width:"100%",textAlign:"left",padding:"10px 14px",background:"none",border:"none",borderBottom:"0.5px solid var(--color-border-tertiary)",cursor:"pointer",display:"flex",alignItems:"center",gap:10 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13,fontWeight:500,color:"var(--color-text-primary)" }}>{c.nome}</div>
+                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)" }}>{c.customerId?"#"+c.customerId+" · ":""}{c.emailClub||c.email||c.telefone||""}</div>
+                </div>
+                <span style={{ fontSize:10,fontWeight:500,background:e.corL,color:e.corD,padding:"2px 8px",borderRadius:20,flexShrink:0 }}>{e.emoji} {e.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const TriagemTab = ({ onSalvo }) => {
   const [modo, setModo] = useState("historico"); // "historico" | "novo"
   return (
