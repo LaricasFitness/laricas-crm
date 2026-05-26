@@ -58,7 +58,7 @@ const dbGetAll  = async () => {
   const PAGE = 1000;
   let all = [], offset = 0;
   while (true) {
-    const r = await sb("/clientes?select=dados&order=atualizado_em.desc&limit="+PAGE+"&offset="+offset);
+    const r = await sb("/clientes?select=id,dados&id=neq.__ultimo_import__&order=atualizado_em.desc&limit="+PAGE+"&offset="+offset);
     const pg = (r||[]).map(x=>x.dados).filter(Boolean);
     all = [...all, ...pg];
     if (pg.length < PAGE) break;
