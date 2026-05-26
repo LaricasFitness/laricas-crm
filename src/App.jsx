@@ -40,18 +40,28 @@ const sb = async (path, opts={}) => {
   if (!isConfigured()) throw new Error("Supabase nao configurado.");
   const sep = path.includes("?") ? "&" : "?";
   const url = _SB.url + "/rest/v1" + path + sep + "apikey=" + encodeURIComponent(_SB.key);
-  const resp = await fetch(url, {
-    method: opts.method || "GET",
-    headers: {
-      "Authorization": "Bearer " + _SB.key,
-      "Content-Type": "application/json",
-      ...(opts.pref ? {"Prefer": opts.pref} : {}),
-    },
-    ...(opts.body !== undefined ? {body: JSON.stringify(opts.body)} : {})
-  });
-  if (!resp.ok) { const t = await resp.text(); throw new Error("Erro " + resp.status + ": " + t.slice(0,120)); }
-  const t = await resp.text();
-  return t ? JSON.parse(t) : null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const resp = await fetch(url, {
+      method: opts.method || "GET",
+      headers: {
+        "Authorization": "Bearer " + _SB.key,
+        "Content-Type": "application/json",
+        ...(opts.pref ? {"Prefer": opts.pref} : {}),
+      },
+      ...(opts.body !== undefined ? {body: JSON.stringify(opts.body)} : {}),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) { const t = await resp.text(); throw new Error("Erro " + resp.status + ": " + t.slice(0,120)); }
+    const t = await resp.text();
+    return t ? JSON.parse(t) : null;
+  } catch(e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new Error("Supabase timeout — projeto pode estar inativo. Aguarde 30s e tente novamente.");
+    throw e;
+  }
 };
 
 const dbGetAll  = async () => {
@@ -1342,17 +1352,17 @@ const prioScore = (c) => {
 
 const Kanban = ({ onAbrir }) => {
   const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true); const [conversoes,setConversoes]=useState([]);
-  const [pages,setPages]=useState({}); // {etapaId_grupo: pageIndex}
+  const [pages,setPages]=useState({});
   const [filtroHoje,setFiltroHoje]=useState(false);
   const [filtroClub,setFiltroClub]=useState(false);
-  const [filtroProb,setFiltroProb]=useState(""); // "alta" | "media" | "baixa" | ""
-  const [filtroPedidos,setFiltroPedidos]=useState(""); // "1" | "2" | "3+" | ""
-
+  const [filtroProb,setFiltroProb]=useState("");
+  const [filtroPedidos,setFiltroPedidos]=useState("");
   const [draggedId,setDraggedId]=useState(null);
   const [dragOverEtapa,setDragOverEtapa]=useState(null);
   const [busca,setBusca]=useState("");
   const [menuAberto,setMenuAberto]=useState(null);
   const [abertos,setAbertos]=useState({});
+  const [erroCarregar,setErroCarregar]=useState("");
   const toggleGrupo=(etapaId,grupo)=>{ const k=etapaId+"_"+grupo; setAbertos(a=>({...a,[k]:!a[k]})); };
   const isAberto=(etapaId,grupo)=>!!abertos[etapaId+"_"+grupo];
 
@@ -1361,7 +1371,13 @@ const Kanban = ({ onAbrir }) => {
     try {
       const [todos, conv] = await Promise.all([dbGetAll(), dbGetConversoes()]);
       setClientes(todos); setConversoes(conv);
-    } catch(e) { setClientes([]); setConversoes([]); }
+    } catch(e) {
+      setClientes([]);
+      setConversoes([]);
+      console.error("Erro ao carregar:", e.message);
+      // Show error in UI
+      setErroCarregar(e.message||"Erro ao conectar com Supabase");
+    }
     setLoading(false);
   }, []);
   useEffect(()=>{carregar();},[carregar]);
@@ -1530,6 +1546,16 @@ const Kanban = ({ onAbrir }) => {
   };
 
   if (loading) return <div style={{ textAlign:"center",padding:40,color:"var(--color-text-tertiary)" }}>Carregando...</div>;
+  if (erroCarregar) return (
+    <div style={{textAlign:"center",padding:48,background:"var(--color-background-secondary)",borderRadius:12,margin:"20px 0"}}>
+      <div style={{fontSize:24,marginBottom:12}}>⚠️</div>
+      <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:8}}>Erro ao carregar</div>
+      <div style={{fontSize:12,color:C.coralD,marginBottom:16}}>{erroCarregar}</div>
+      <button onClick={()=>{setErroCarregar("");carregar();}} style={{padding:"8px 20px",borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none"}}>
+        Tentar novamente
+      </button>
+    </div>
+  );
   if (clientes.length===0) return (
     <div style={{ textAlign:"center",padding:"48px 24px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px dashed var(--color-border-tertiary)" }}>
       <div style={{ fontSize:36,marginBottom:12 }}>📋</div>
