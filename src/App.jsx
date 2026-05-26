@@ -606,6 +606,7 @@ const personalizarCopy = (texto, cliente) => {
   const primeiroNome = (cliente.nome||"").split(" ")[0] || "cliente";
   const nPedidos = cliente.p || 0;
   const gasto = (cliente.gasto||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0});
+  const operador = (cliente.responsavel||"").split(" ")[0] || "Lucas";
 
   return texto
     .replace(/\[Nome\]/g, primeiroNome)
@@ -613,7 +614,11 @@ const personalizarCopy = (texto, cliente) => {
     .replace(/\[N° pedidos\]/g, nPedidos)
     .replace(/\[numero de pedidos\]/g, nPedidos)
     .replace(/R\$\[frete\]/g, "R$XX")
-    .replace(/\[gasto total\]/g, gasto);
+    .replace(/\[gasto total\]/g, gasto)
+    .replace(/Lucas da Laricas/g, operador+" da Laricas")
+    .replace(/Aqui é o Lucas\.\n/g, "Aqui é o "+operador+".\n")
+    .replace(/Aqui é o Lucas!/g, "Aqui é o "+operador+"!")
+    .replace(/Aqui é o Lucas\.\n\n/g, "Aqui é o "+operador+".\n\n");
 };
 
 const LogAtividade = ({ c, save }) => {
