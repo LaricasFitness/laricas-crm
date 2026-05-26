@@ -1340,6 +1340,9 @@ const Kanban = ({ onAbrir }) => {
   const [pages,setPages]=useState({}); // {etapaId_grupo: pageIndex}
   const [filtroHoje,setFiltroHoje]=useState(false);
   const [filtroClub,setFiltroClub]=useState(false);
+  const [filtroProb,setFiltroProb]=useState(""); // "alta" | "media" | "baixa" | ""
+  const [filtroPedidos,setFiltroPedidos]=useState(""); // "1" | "2" | "3+" | ""
+
   const [draggedId,setDraggedId]=useState(null);
   const [dragOverEtapa,setDragOverEtapa]=useState(null);
   const [busca,setBusca]=useState("");
@@ -1381,6 +1384,12 @@ const Kanban = ({ onAbrir }) => {
     let r = lista;
     if(filtroClub) r = r.filter(c=>c.objetivo==="club"||c.objetivo==="falta_uma");
     if(filtroHoje) r = r.filter(c=>c.dataProximoContato===hoje);
+    if(filtroProb==="alta") r = r.filter(c=>(c.prob||0)>=40);
+    else if(filtroProb==="media") r = r.filter(c=>(c.prob||0)>=25&&(c.prob||0)<40);
+    else if(filtroProb==="baixa") r = r.filter(c=>(c.prob||0)<25);
+    if(filtroPedidos==="1") r = r.filter(c=>(c.p||0)===1);
+    else if(filtroPedidos==="2") r = r.filter(c=>(c.p||0)===2);
+    else if(filtroPedidos==="3+") r = r.filter(c=>(c.p||0)>=3);
     if(!busca.trim()) return r;
     const q=busca.toLowerCase();
     return r.filter(c=>(c.nome||"").toLowerCase().includes(q)||(c.customerId||"").toLowerCase().includes(q)||(c.telefone||"").toLowerCase().includes(q)||(c.email||"").toLowerCase().includes(q)||(c.emailClub||"").toLowerCase().includes(q)||(c.responsavel||"").toLowerCase().includes(q));
@@ -1568,6 +1577,9 @@ const Kanban = ({ onAbrir }) => {
         <div style={{ fontSize:13,color:"var(--color-text-tertiary)",whiteSpace:"nowrap" }}>
           {clientes.length} clientes
           {!filtroClub && (() => { const fc=clientes.filter(c=>c.objetivo==="club"||c.objetivo==="falta_uma").length; return fc>0?<span style={{ marginLeft:6,fontSize:11,background:C.greenL,color:C.greenD,padding:"1px 7px",borderRadius:20,fontWeight:500 }}>{fc} foco club</span>:null; })()}
+          {(filtroProb||filtroPedidos)&&<span style={{ marginLeft:6,fontSize:11,background:C.amberL,color:C.amberD,padding:"1px 7px",borderRadius:20,fontWeight:500 }}>
+            {[filtroProb&&"prob:"+filtroProb,filtroPedidos&&filtroPedidos+"ped"].filter(Boolean).join(" · ")}
+          </span>}
         </div>
         <button onClick={()=>setFiltroClub(f=>!f)} style={{ padding:"5px 14px",borderRadius:8,fontSize:12,fontWeight:500,background:filtroClub?C.green:"var(--color-background-secondary)",border:"0.5px solid "+(filtroClub?C.green:"var(--color-border-tertiary)"),color:filtroClub?C.greenD:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>
           {filtroClub?"🎯 Foco Club ×":"🎯 Foco Club"}
@@ -1575,6 +1587,30 @@ const Kanban = ({ onAbrir }) => {
         <button onClick={()=>setFiltroHoje(f=>!f)} style={{ padding:"5px 14px",borderRadius:8,fontSize:12,fontWeight:500,background:filtroHoje?C.amber:"var(--color-background-secondary)",border:"0.5px solid "+(filtroHoje?C.amber:"var(--color-border-tertiary)"),color:filtroHoje?C.amberD:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>
           {filtroHoje?"⚡ Hoje ×":"⚡ Hoje"}
         </button>
+        {/* Filtro probabilidade */}
+        <div style={{ display:"flex",gap:4 }}>
+          {[["","Prob."],["alta","Alta ≥40%"],["media","Média"],["baixa","Baixa"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setFiltroProb(filtroProb===v?"":v)}
+              style={{ padding:"4px 8px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap",
+                background:filtroProb===v?C.teal:"var(--color-background-secondary)",
+                color:filtroProb===v?"#fff":"var(--color-text-secondary)",
+                border:"0.5px solid "+(filtroProb===v?C.teal:"var(--color-border-tertiary)") }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {/* Filtro pedidos */}
+        <div style={{ display:"flex",gap:4 }}>
+          {[["","Ped."],["1","1 ped."],["2","2 ped."],["3+","3+ ped."]].map(([v,l])=>(
+            <button key={v} onClick={()=>setFiltroPedidos(filtroPedidos===v?"":v)}
+              style={{ padding:"4px 8px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap",
+                background:filtroPedidos===v?C.purple:"var(--color-background-secondary)",
+                color:filtroPedidos===v?"#fff":"var(--color-text-secondary)",
+                border:"0.5px solid "+(filtroPedidos===v?C.purple:"var(--color-border-tertiary)") }}>
+              {l}
+            </button>
+          ))}
+        </div>
         <button onClick={carregar} style={{ padding:"5px 12px",borderRadius:8,fontSize:12,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap" }}>↺</button>
       </div>
       <div style={{ overflowX:"auto",paddingBottom:8 }}>
