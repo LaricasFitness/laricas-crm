@@ -626,9 +626,9 @@ const personalizarCopy = (texto, cliente) => {
     .replace(/R\$\[frete\]/g, "R$XX")
     .replace(/\[gasto total\]/g, gasto)
     .replace(/Lucas da Laricas/g, operador+" da Laricas")
-    .replace(/Aqui é o Lucas\.\n/g, "Aqui é o "+operador+".\n")
-    .replace(/Aqui é o Lucas!/g, "Aqui é o "+operador+"!")
-    .replace(/Aqui é o Lucas\.\n\n/g, "Aqui é o "+operador+".\n\n");
+    .replace(/Aqui é o Lucas\./g, "Aqui é a "+operador+".")
+    .replace(/Aqui é o Lucas!/g, "Aqui é a "+operador+"!")
+    .replace(/Aqui é o Lucas,/g, "Aqui é a "+operador+",");
 };
 
 const LogAtividade = ({ c, save }) => {
