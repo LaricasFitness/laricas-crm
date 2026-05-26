@@ -1351,7 +1351,7 @@ const prioScore = (c) => {
   return stageBonus + objBonus + cicloAdj + prob;
 };
 
-const Kanban = ({ onAbrir, filtroHoje, setFiltroHoje, filtroClub, setFiltroClub, filtroProb, setFiltroProb, filtroPedidos, setFiltroPedidos }) => {
+const Kanban = ({ onAbrir, reloadToken, filtroHoje, setFiltroHoje, filtroClub, setFiltroClub, filtroProb, setFiltroProb, filtroPedidos, setFiltroPedidos }) => {
   const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true); const [conversoes,setConversoes]=useState([]);
   const [pages,setPages]=useState({});
   // filtroHoje, filtroClub, filtroProb, filtroPedidos — recebidos como props do App
@@ -1379,6 +1379,7 @@ const Kanban = ({ onAbrir, filtroHoje, setFiltroHoje, filtroClub, setFiltroClub,
     setLoading(false);
   }, []);
   useEffect(()=>{carregar();},[carregar]);
+  useEffect(()=>{ if(reloadToken>0) carregar(); },[reloadToken]);
 
   // Auto-refresh a cada 60 segundos
   useEffect(()=>{
@@ -3429,7 +3430,13 @@ export default function App() {
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
       </div>
-      {tab==="kanban"&&(clienteId?<Perfil key={clienteId} clienteId={clienteId} onVoltar={()=>{setClienteId(null);setRefresh(r=>r+1);}}/>:<Kanban key={refresh} onAbrir={setClienteId}/>)}
+      {tab==="kanban"&&(clienteId?<Perfil key={clienteId} clienteId={clienteId} onVoltar={()=>{setClienteId(null);setRefresh(r=>r+1);}}/>:
+          <Kanban onAbrir={setClienteId} reloadToken={refresh}
+            filtroHoje={filtroHojeApp} setFiltroHoje={setFiltroHojeApp}
+            filtroClub={filtroClubApp} setFiltroClub={setFiltroClubApp}
+            filtroProb={filtroProbApp} setFiltroProb={setFiltroProbApp}
+            filtroPedidos={filtroPedidosApp} setFiltroPedidos={setFiltroPedidosApp}
+          />)}
       {tab==="import"&&<ImportarLista onSalvo={onSalvo}/>}
       {tab==="triagem"&&(
         <div>
