@@ -616,7 +616,10 @@ const personalizarCopy = (texto, cliente) => {
   const primeiroNome = (cliente.nome||"").split(" ")[0] || "cliente";
   const nPedidos = cliente.p || 0;
   const gasto = (cliente.gasto||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0});
-  const operador = (cliente.responsavel||"").split(" ")[0] || "Lucas";
+  const responsavel = (cliente.responsavel||"").trim();
+  const operador = responsavel.split(" ")[0] || "Lucas";
+  // Se responsavel preenchido, usa "a" (operadoras); se vazio mantém "o Lucas" original
+  const artigo = responsavel ? "a" : "o";
 
   return texto
     .replace(/\[Nome\]/g, primeiroNome)
@@ -625,10 +628,8 @@ const personalizarCopy = (texto, cliente) => {
     .replace(/\[numero de pedidos\]/g, nPedidos)
     .replace(/R\$\[frete\]/g, "R$XX")
     .replace(/\[gasto total\]/g, gasto)
-    .replace(/Lucas da Laricas/g, operador+" da Laricas")
-    .replace(/Aqui é o Lucas\./g, "Aqui é a "+operador+".")
-    .replace(/Aqui é o Lucas!/g, "Aqui é a "+operador+"!")
-    .replace(/Aqui é o Lucas,/g, "Aqui é a "+operador+",");
+    .replace(/Aqui é o Lucas/g, "Aqui é "+artigo+" "+operador)
+    .replace(/Lucas da Laricas/g, operador+" da Laricas");
 };
 
 const LogAtividade = ({ c, save }) => {
@@ -1350,13 +1351,10 @@ const prioScore = (c) => {
   return stageBonus + objBonus + cicloAdj + prob;
 };
 
-const Kanban = ({ onAbrir }) => {
+const Kanban = ({ onAbrir, filtroHoje, setFiltroHoje, filtroClub, setFiltroClub, filtroProb, setFiltroProb, filtroPedidos, setFiltroPedidos }) => {
   const [clientes,setClientes]=useState([]); const [loading,setLoading]=useState(true); const [conversoes,setConversoes]=useState([]);
   const [pages,setPages]=useState({});
-  const [filtroHoje,setFiltroHoje]=useState(false);
-  const [filtroClub,setFiltroClub]=useState(false);
-  const [filtroProb,setFiltroProb]=useState("");
-  const [filtroPedidos,setFiltroPedidos]=useState("");
+  // filtroHoje, filtroClub, filtroProb, filtroPedidos — recebidos como props do App
   const [draggedId,setDraggedId]=useState(null);
   const [dragOverEtapa,setDragOverEtapa]=useState(null);
   const [busca,setBusca]=useState("");
@@ -3394,6 +3392,11 @@ export default function App() {
   const [clienteId,setClienteId]=useState(null);
   const [refresh,setRefresh]=useState(0);
   const abrirClienteGlobal = (id) => { setClienteId(id); setTab("kanban"); };
+  // Filtros persistidos fora do Kanban para sobreviver à navegação
+  const [filtroHojeApp,setFiltroHojeApp]=useState(false);
+  const [filtroClubApp,setFiltroClubApp]=useState(false);
+  const [filtroProbApp,setFiltroProbApp]=useState("");
+  const [filtroPedidosApp,setFiltroPedidosApp]=useState("");
   const [cfgOk,setCfgOk]=useState(false);
   const [cfgLoad,setCfgLoad]=useState(true);
   useEffect(()=>{ loadCfg().then(cfg=>{ setCfgOk(!!(cfg.url&&cfg.key)); setCfgLoad(false); }); },[]);
