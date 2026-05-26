@@ -2644,6 +2644,383 @@ const Guia = () => {
 };
 
 
+
+const GraficoMRR = ({ mrrEvolucao, assinantes }) => {
+  const [mesSel, setMesSel] = useState(null);
+  const maxMrr = Math.max(...mrrEvolucao.map(m=>m.mrr), 1);
+  const barW = Math.max(32, Math.min(60, Math.floor(560/mrrEvolucao.length)));
+  const mesDetalhes = mesSel ? assinantes.filter(a=>{
+    if (!a.dataInicioAssinatura||!a.valorMensal) return false;
+    const inicio = new Date(a.dataInicioAssinatura+"T12:00:00");
+    const [y,mo] = mesSel.split("-").map(Number);
+    const dMes = new Date(y,mo-1,1);
+    if (inicio > dMes) return false;
+    if ((a.cancelado||a.falhaRenovacao)&&(a.dataCancelamento||a.dataFalhaRenovacao)) {
+      const cancel = new Date((a.dataCancelamento||a.dataFalhaRenovacao)+"T12:00:00");
+      if (cancel < dMes) return false;
+    }
+    return true;
+  }) : [];
+  return (
+    <div>
+      <div style={{overflowX:"auto"}}>
+        <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:"max-content",paddingTop:28,paddingBottom:8}}>
+          {mrrEvolucao.map((m,i)=>{
+            const pct=m.mrr/maxMrr;
+            const isLast=i===mrrEvolucao.length-1;
+            const isSel=mesSel===m.mesKey;
+            const prev=i>0?mrrEvolucao[i-1].mrr:m.mrr;
+            const cresceu=m.mrr>=prev;
+            const barColor=isSel?C.purple:isLast?C.teal:cresceu?C.green:C.coral;
+            return (
+              <div key={m.mesKey} onClick={()=>setMesSel(isSel?null:m.mesKey)}
+                style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,width:barW,cursor:"pointer",position:"relative"}}>
+                {(m.novos>0||m.canc>0)&&(
+                  <div style={{position:"absolute",top:-22,display:"flex",gap:2,zIndex:1}}>
+                    {m.novos>0&&<span style={{fontSize:7,color:C.greenD,background:C.greenL,padding:"1px 3px",borderRadius:3}}>+{m.novos}</span>}
+                    {m.canc>0&&<span style={{fontSize:7,color:C.coralD,background:C.coralL,padding:"1px 3px",borderRadius:3}}>-{m.canc}</span>}
+                  </div>
+                )}
+                <div style={{fontSize:9,fontWeight:500,color:isSel?C.purpleD:isLast?C.tealD:"var(--color-text-tertiary)",textAlign:"center",marginBottom:2}}>
+                  {m.mrr>0?"R$"+m.mrr:"—"}
+                </div>
+                <div style={{width:"80%",height:Math.max(4,Math.round(pct*110)),background:barColor,borderRadius:"4px 4px 0 0",transition:"height 0.3s",border:isSel?"2px solid "+C.purpleD:"none"}}/>
+                <div style={{fontSize:9,color:isSel?C.purpleD:"var(--color-text-tertiary)",textAlign:"center",textTransform:"capitalize",fontWeight:isSel?500:400}}>{m.mesLabel}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:12,marginTop:4,fontSize:10,color:"var(--color-text-tertiary)"}}>
+          <span style={{color:C.greenD}}>+N novos</span>
+          <span style={{color:C.coralD}}>-N cancelamentos</span>
+          <span style={{color:C.teal}}>● mes atual</span>
+          <span style={{color:C.purple}}>■ selecionado — clique para detalhar</span>
+        </div>
+      </div>
+      {mesSel&&(
+        <div style={{marginTop:12,background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",border:"0.5px solid "+C.purple}}>
+          <div style={{fontSize:11,fontWeight:500,color:C.purpleD,marginBottom:8}}>
+            Assinantes ativos em {mrrEvolucao.find(m=>m.mesKey===mesSel)?.mesLabel} ({mesDetalhes.length})
+          </div>
+          {mesDetalhes.length===0
+            ?<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Nenhum assinante com valor cadastrado neste mes.</div>
+            :mesDetalhes.map(a=>(
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+                <div style={{flex:1,fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>{a.nome}</div>
+                <div style={{fontSize:11,color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</div>
+                <div style={{fontSize:12,fontWeight:500,color:C.tealD}}>R${a.valorMensal}/mes</div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TabelaAssinantes = ({ assinantes, onAbrir }) => {
+  const [sortCol, setSortCol] = useState("cicloAtual");
+  const [sortDir, setSortDir] = useState("desc");
+  const toggleSort = (col) => {
+    if (sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
+    else { setSortCol(col); setSortDir("desc"); }
+  };
+  const Th = ({col,label}) => (
+    <th onClick={()=>toggleSort(col)} style={{padding:"7px 10px",textAlign:col==="nome"?"left":"center",fontWeight:500,color:sortCol===col?C.teal:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em",cursor:"pointer",userSelect:"none",whiteSpace:"nowrap"}}>
+      {label}{sortCol===col?(sortDir==="asc"?" ↑":" ↓"):""}
+    </th>
+  );
+  const sorted = [...assinantes].sort((a,b)=>{
+    let vA,vB;
+    if(sortCol==="nome"){vA=a.nome||"";vB=b.nome||"";return sortDir==="asc"?vA.localeCompare(vB):vB.localeCompare(vA);}
+    const assinA=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+    const assinB=calcAssinatura(b.tipoAssinatura,b.dataInicioAssinatura);
+    if(sortCol==="cicloAtual"){vA=assinA?assinA.cicloAtual:0;vB=assinB?assinB.cicloAtual:0;}
+    else if(sortCol==="valorMensal"){vA=parseFloat(a.valorMensal)||0;vB=parseFloat(b.valorMensal)||0;}
+    else if(sortCol==="ltvAtual"){
+      const cA=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assinA?assinA.cicloAtual:0);
+      const cB=b.cancelado?calcCiclosCancelado(b.dataInicioAssinatura,b.dataCancelamento):(assinB?assinB.cicloAtual:0);
+      vA=(parseFloat(a.valorMensal)||0)*cA+(a.gasto||0);vB=(parseFloat(b.valorMensal)||0)*cB+(b.gasto||0);
+    }
+    else if(sortCol==="diasCobranca"){vA=assinA?assinA.diasParaCobranca:9999;vB=assinB?assinB.diasParaCobranca:9999;}
+    else{vA=0;vB=0;}
+    return sortDir==="asc"?vA-vB:vB-vA;
+  });
+  return (
+    <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px"}}>
+      <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Assinantes individuais ({assinantes.length})</div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead>
+            <tr style={{background:"var(--color-background-primary)"}}>
+              <Th col="nome" label="Nome"/>
+              <Th col="plano" label="Plano"/>
+              <Th col="cicloAtual" label="Ciclo total"/>
+              <Th col="valorMensal" label="R$/mes"/>
+              <Th col="ltvAtual" label="LTV atual"/>
+              <Th col="diasCobranca" label="Prox. cobr."/>
+              <th style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:"var(--color-text-tertiary)",fontSize:11,borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(a=>{
+              const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+              const vm=parseFloat(a.valorMensal)||0;
+              const ciclosPagos=a.cancelado?calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento):(assin?assin.cicloAtual:0);
+              const ltvAtual=vm*ciclosPagos+(a.gasto||0);
+              const statusLabel=a.cancelado?"Cancelado":a.falhaRenovacao?"Falha renovacao":"Ativa";
+              const statusCor=a.cancelado?C.coralD:a.falhaRenovacao?C.amberD:C.greenD;
+              const statusBg=a.cancelado?C.coralL:a.falhaRenovacao?C.amberL:C.greenL;
+              return (
+                <tr key={a.id} style={{borderBottom:"0.5px solid var(--color-border-tertiary)",opacity:(a.cancelado||a.falhaRenovacao)?0.7:1}}>
+                  <td style={{padding:"7px 10px"}}>
+                    <button onClick={()=>onAbrir&&onAbrir(a.id)} style={{background:"none",border:"none",cursor:onAbrir?"pointer":"default",fontWeight:500,color:onAbrir?C.teal:"var(--color-text-primary)",fontSize:12,padding:0,textAlign:"left"}}>{a.nome}</button>
+                  </td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)",textTransform:"capitalize"}}>{a.tipoAssinatura||"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:C.purpleD,fontWeight:500}}>
+                    {assin?<span>{assin.cicloAtual}°<span style={{fontSize:10,color:C.purple,fontWeight:400}}> ({assin.cicloNoPeriodo}/{assin.ciclosTotais})</span></span>:"—"}
+                  </td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:"var(--color-text-secondary)"}}>{vm>0?"R$"+vm.toFixed(0):"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center",fontWeight:500,color:C.greenD}}>{vm>0?"R$"+ltvAtual.toFixed(0):"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center",color:assin&&assin.diasParaCobranca<=7?C.coralD:assin&&assin.diasParaCobranca<=15?C.amberD:"var(--color-text-secondary)"}}>{assin&&!a.cancelado?assin.proximaCobranca:"—"}</td>
+                  <td style={{padding:"7px 10px",textAlign:"center"}}><span style={{fontSize:10,fontWeight:500,background:statusBg,color:statusCor,padding:"2px 8px",borderRadius:20}}>{statusLabel}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const LTV = ({ onAbrir }) => {
+  const [assinantes, setAssinantes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    dbGetAssinantes().then(a => { setAssinantes(a); setLoading(false); });
+  }, []);
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Carregando...</div>;
+
+  if (assinantes.length === 0) return (
+    <div style={{textAlign:"center",padding:"48px 24px",background:"var(--color-background-secondary)",borderRadius:12,border:"0.5px dashed var(--color-border-tertiary)"}}>
+      <div style={{fontSize:32,marginBottom:12}}>💰</div>
+      <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:6}}>Sem assinantes ainda</div>
+      <div style={{fontSize:13,color:"var(--color-text-secondary)"}}>Mova clientes para a etapa ⭐ Experiencia para calcular o LTV.</div>
+    </div>
+  );
+
+  const ativos = assinantes.filter(a=>!a.cancelado&&!a.falhaRenovacao);
+  const comFalha = assinantes.filter(a=>a.falhaRenovacao&&!a.cancelado);
+  const cancelados = assinantes.filter(a=>a.cancelado);
+  const comValor = ativos.filter(a=>a.valorMensal>0);
+  const ltvRealizadoAtivos = comValor.reduce((acc,a)=>{
+    const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+    return acc+(a.valorMensal||0)*(assin?assin.cicloAtual:0)+(a.gasto||0);
+  },0);
+  const ltvCancelados = cancelados.filter(a=>a.valorMensal>0).reduce((acc,a)=>{
+    const ciclos=calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento);
+    return acc+(a.valorMensal||0)*ciclos+(a.gasto||0);
+  },0);
+  const ltvPagoTotal = ltvRealizadoAtivos + ltvCancelados;
+  const ltvProjetadoTotal = comValor.reduce((acc,a)=>{
+    const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+    const vm=a.valorMensal||0;
+    const ciclosRestantes=assin?assin.ciclosTotais-assin.cicloNoPeriodo:0;
+    return acc+vm*(assin?assin.cicloAtual:0)+vm*ciclosRestantes+(a.gasto||0);
+  },0);
+  const mrr = comValor.reduce((acc,a)=>acc+(a.valorMensal||0),0);
+  const semValor = ativos.length - comValor.length;
+
+  // MRR variação mês anterior
+  const hoje3=new Date();
+  const mesAnterior=new Date(hoje3.getFullYear(),hoje3.getMonth()-1,1);
+  const mrrAnterior=ativos.reduce((acc,a)=>{
+    if(!a.dataInicioAssinatura||!a.valorMensal) return acc;
+    const ini=new Date(a.dataInicioAssinatura+"T12:00:00");
+    if(ini>mesAnterior) return acc;
+    return acc+(parseFloat(a.valorMensal)||0);
+  },0);
+  const varMRR=mrr-mrrAnterior;
+  const varPct=mrrAnterior>0?Math.round(varMRR/mrrAnterior*100):0;
+
+  // Churn
+  const churnPorMes={};
+  cancelados.forEach(a=>{
+    if(!a.dataCancelamento) return;
+    const key=a.dataCancelamento.substring(0,7);
+    churnPorMes[key]=(churnPorMes[key]||0)+1;
+  });
+  const mesesComChurn=Object.keys(churnPorMes).sort().reverse().slice(0,3);
+  const churnMesAtual=churnPorMes[new Date().toISOString().substring(0,7)]||0;
+  const tempoMedioMeses=cancelados.length>0
+    ?Math.round(cancelados.filter(a=>a.dataInicioAssinatura&&a.dataCancelamento).reduce((acc,a)=>acc+calcCiclosCancelado(a.dataInicioAssinatura,a.dataCancelamento),0)/cancelados.filter(a=>a.dataInicioAssinatura&&a.dataCancelamento).length)
+    :0;
+  const churnRate=ativos.length>0?Math.round(cancelados.length/(ativos.length+cancelados.length)*100):0;
+
+  // MRR evolucao
+  const mrrEvolucao=(()=>{
+    if(assinantes.length===0) return [];
+    const datas=assinantes.filter(a=>a.dataInicioAssinatura).map(a=>new Date(a.dataInicioAssinatura+"T12:00:00"));
+    if(datas.length===0) return [];
+    const minData=new Date(Math.min(...datas.map(d=>d.getTime())));
+    const hoje2=new Date();
+    const meses=[];
+    let cursor=new Date(minData.getFullYear(),minData.getMonth(),1);
+    while(cursor<=hoje2&&meses.length<24){
+      const mesKey=cursor.toISOString().substring(0,7);
+      const mesLabel=cursor.toLocaleDateString("pt-BR",{month:"short",year:"2-digit"});
+      const mrr_mes=assinantes.filter(a=>{
+        if(!a.dataInicioAssinatura||!a.valorMensal) return false;
+        const inicio=new Date(a.dataInicioAssinatura+"T12:00:00");
+        if(inicio>cursor) return false;
+        if((a.cancelado||a.falhaRenovacao)&&(a.dataCancelamento||a.dataFalhaRenovacao)){
+          const cancel=new Date((a.dataCancelamento||a.dataFalhaRenovacao)+"T12:00:00");
+          const fimMes=new Date(cursor.getFullYear(),cursor.getMonth()+1,0);
+          if(cancel<cursor) return false;
+        }
+        return true;
+      }).reduce((acc,a)=>acc+(parseFloat(a.valorMensal)||0),0);
+      const novos=assinantes.filter(a=>{
+        if(!a.dataInicioAssinatura) return false;
+        return new Date(a.dataInicioAssinatura+"T12:00:00").toISOString().substring(0,7)===mesKey;
+      }).length;
+      const canc=assinantes.filter(a=>a.cancelado&&a.dataCancelamento&&a.dataCancelamento.substring(0,7)===mesKey).length;
+      meses.push({mesKey,mesLabel,mrr:Math.round(mrr_mes),novos,canc});
+      cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);
+    }
+    return meses;
+  })();
+
+  return (
+    <div>
+      <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
+          Dash Club — {ativos.length} ativos
+          {comFalha.length>0&&<span style={{color:C.amberD,marginLeft:6}}>· {comFalha.length} falha renovacao</span>}
+          {cancelados.length>0&&<span style={{color:C.coralD,marginLeft:6}}>· {cancelados.length} cancelados</span>}
+          {semValor>0&&<span style={{color:C.amber,marginLeft:6}}>· {semValor} sem valor</span>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
+          <div style={{background:C.purpleL,borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
+            <div style={{fontSize:10,color:C.purpleD,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500}}>Assinantes ativos</div>
+            <div style={{fontSize:28,fontWeight:500,color:C.purpleD}}>{ativos.length}</div>
+            <div style={{fontSize:10,color:C.purpleD,marginTop:2}}>{cancelados.length>0?cancelados.length+" cancelado"+(cancelados.length>1?"s":""):"nenhum cancelamento"}</div>
+          </div>
+          {(()=>{
+            return (
+              <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.teal}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>MRR — ativos</div>
+                <div style={{fontSize:24,fontWeight:500,color:C.tealD}}>R${mrr.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
+                  <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{comValor.length} · média R${comValor.length>0?(mrr/comValor.length).toFixed(0):0}/mês</span>
+                  {mrrAnterior>0&&<span style={{fontSize:10,fontWeight:500,color:varMRR>=0?C.greenD:C.coralD,background:varMRR>=0?C.greenL:C.coralL,padding:"1px 6px",borderRadius:10}}>{varMRR>=0?"+":""}R${varMRR.toFixed(0)} ({varPct>=0?"+":""}{varPct}%)</span>}
+                </div>
+              </div>
+            );
+          })()}
+          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.green}}>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV realizado</div>
+            <div style={{fontSize:24,fontWeight:500,color:C.greenD}}>R${ltvPagoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>ativos + cancelados</div>
+          </div>
+          <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>LTV projetado</div>
+            <div style={{fontSize:24,fontWeight:500,color:C.purpleD}}>R${ltvProjetadoTotal.toLocaleString("pt-BR",{minimumFractionDigits:0})}</div>
+            <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>ativos ate fim do plano</div>
+          </div>
+        </div>
+      </div>
+
+      {cancelados.length>0&&(
+        <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Cancelamentos e churn</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.coral}}>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Churn total</div>
+              <div style={{fontSize:24,fontWeight:500,color:C.coralD}}>{churnRate}%</div>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{cancelados.length} de {ativos.length+cancelados.length}</div>
+            </div>
+            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.amber}}>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Tempo medio ate cancelar</div>
+              <div style={{fontSize:24,fontWeight:500,color:C.amberD}}>{tempoMedioMeses||"—"}{tempoMedioMeses?"m":""}</div>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>meses de assinatura</div>
+            </div>
+            <div style={{background:"var(--color-background-primary)",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid "+C.purple}}>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cancelamentos mes atual</div>
+              <div style={{fontSize:24,fontWeight:500,color:churnMesAtual>0?C.coralD:"var(--color-text-primary)"}}>{churnMesAtual}</div>
+              <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:2}}>{mesesComChurn.slice(1).map(m=><span key={m} style={{marginRight:6}}>{m}: {churnPorMes[m]}</span>)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mrrEvolucao.length>1&&(
+        <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>Evolucao do MRR</div>
+          <GraficoMRR mrrEvolucao={mrrEvolucao} assinantes={assinantes}/>
+        </div>
+      )}
+
+      {(()=>{
+        const grupos=comValor.length>0?["trimestral","semestral","anual"].map(tipo=>{
+          const g=comValor.filter(a=>a.tipoAssinatura===tipo);
+          if(g.length===0) return null;
+          const mediaVM=Math.round(g.reduce((acc,a)=>acc+(a.valorMensal||0),0)/g.length);
+          const mediaLTV=Math.round(g.reduce((acc,a)=>{
+            const assin=calcAssinatura(a.tipoAssinatura,a.dataInicioAssinatura);
+            return acc+(a.valorMensal||0)*(assin?assin.ciclosTotais:0)+(a.gasto||0);
+          },0)/g.length);
+          return {tipo,count:g.length,mediaVM,mediaLTV};
+        }).filter(Boolean):[];
+        if(grupos.length===0) return null;
+        return (
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            {grupos.map(g=>(
+              <div key={g.tipo} style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",flex:1,textAlign:"center"}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"capitalize",marginBottom:4}}>{g.tipo} ({g.count})</div>
+                <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)"}}>R${g.mediaVM}/mes</div>
+                <div style={{fontSize:11,color:C.purpleD}}>LTV ~R${g.mediaLTV}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      <TabelaAssinantes assinantes={assinantes} onAbrir={onAbrir}/>
+
+      {(()=>{
+        const indicadoras={};
+        assinantes.forEach(a=>{
+          if(a.indicadaPor&&a.indicadaPor.trim()){
+            const k=a.indicadaPor.trim();
+            if(!indicadoras[k]) indicadoras[k]={nome:k,count:0};
+            indicadoras[k].count++;
+          }
+        });
+        const ranking=Object.values(indicadoras).sort((a,b)=>b.count-a.count).slice(0,10);
+        if(ranking.length===0) return null;
+        return (
+          <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginTop:16}}>
+            <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>🏆 Ranking de indicações</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {ranking.map((r,i)=>(
+                <div key={r.nome} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:"var(--color-background-primary)",borderRadius:8}}>
+                  <span style={{fontSize:12,fontWeight:500,color:C.amberD,minWidth:20}}>#{i+1}</span>
+                  <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)",flex:1}}>{r.nome}</span>
+                  <span style={{fontSize:11,background:C.greenL,color:C.greenD,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{r.count} indicaç{r.count>1?"ões":"ão"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
 const GlobalSearch = ({ onAbrir }) => {
   const [q, setQ] = useState("");
   const [resultados, setResultados] = useState([]);
