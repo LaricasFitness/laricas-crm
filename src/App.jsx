@@ -2473,6 +2473,18 @@ const Backup = ({ onRestore }) => {
 
   return (
     <div>
+      {/* RELATÓRIO DIÁRIO */}
+      <div style={{ background:C.tealL, border:"0.5px solid "+C.teal, borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
+        <div style={{ fontSize:14, fontWeight:500, color:C.tealD, marginBottom:4 }}>📋 Relatório diário</div>
+        <div style={{ fontSize:12, color:C.teal, marginBottom:14, lineHeight:1.5 }}>
+          Gera um PDF com todas as atividades do dia, resumo por operador e situação atual do funil.
+        </div>
+        <button onClick={gerarRelatorioDiario}
+          style={{ padding:"10px 20px", borderRadius:10, fontSize:13, fontWeight:500, cursor:"pointer", background:C.teal, color:"#fff", border:"none" }}>
+          📄 Gerar relatório do dia → PDF
+        </button>
+      </div>
+
       {/* OPÇÃO 1 */}
       <div style={{ background:"var(--color-background-secondary)", borderRadius:12, padding:"16px 20px", marginBottom:16, border:"0.5px solid var(--color-border-tertiary)" }}>
         <div style={{ fontSize:14, fontWeight:500, color:"var(--color-text-primary)", marginBottom:4 }}>💾 Opção 1 — Backup local (JSON)</div>
@@ -3445,6 +3457,190 @@ const Unificar = ({ onSalvo }) => {
       )}
     </div>
   );
+};
+
+
+const gerarRelatorioDiario = async () => {
+  const todos = await dbGetAll();
+  const hoje = new Date();
+  const hojeStr = hoje.toLocaleDateString("pt-BR");
+  const hojeISO = hoje.toISOString().split("T")[0];
+
+  // ── Coletar atividades do dia ──────────────────────────────────────────────
+  const atividades = []; // {hora, operador, cliente, tipo, detalhe}
+
+  todos.forEach(c => {
+    // Logs de atividade do dia
+    (c.logAtividade||[]).forEach(l => {
+      if (l.data === hojeStr) {
+        atividades.push({ hora:l.hora||"--:--", operador:l.resp||"—", cliente:c.nome, tipo:"Contato", detalhe:l.texto });
+      }
+    });
+    // Movimentações de etapa do dia
+    (c.historicoEtapas||[]).forEach(h => {
+      const dataH = h.data||"";
+      // data pode ser "DD/MM/AAAA" ou ISO
+      const eHoje = dataH === hojeStr || dataH.startsWith(hojeISO);
+      if (eHoje) {
+        const etLabel = ETAPAS.find(e=>e.id===h.etapa)?.label || h.etapa;
+        atividades.push({ hora:h.hora||"--:--", operador:h.resp||"—", cliente:c.nome, tipo:"Etapa", detalhe:"Movido para "+etLabel });
+      }
+    });
+    // Novos leads criados hoje
+    if ((c.dataCriacao||"") === hojeStr) {
+      atividades.push({ hora:"--:--", operador:c.responsavel||"—", cliente:c.nome, tipo:"Novo Lead", detalhe:"Lista: "+(c.lista||"—") });
+    }
+  });
+
+  atividades.sort((a,b) => a.hora > b.hora ? 1 : -1);
+
+  // ── Resumo por operador ────────────────────────────────────────────────────
+  const porOperador = {};
+  atividades.forEach(a => {
+    const op = a.operador||"—";
+    if (!porOperador[op]) porOperador[op] = { contatos:0, etapas:0, leads:0 };
+    if (a.tipo==="Contato") porOperador[op].contatos++;
+    else if (a.tipo==="Etapa") porOperador[op].etapas++;
+    else if (a.tipo==="Novo Lead") porOperador[op].leads++;
+  });
+
+  // ── Situação atual do funil ────────────────────────────────────────────────
+  const porEtapaFunil = {};
+  ETAPAS.forEach(e => { porEtapaFunil[e.id] = { label:e.label, emoji:e.emoji, count:0 }; });
+  todos.forEach(c => { if (porEtapaFunil[c.etapa]) porEtapaFunil[c.etapa].count++; });
+
+  const totalAtivos = todos.filter(c=>c.etapa!=="encerrado").length;
+  const focoClub = todos.filter(c=>c.objetivo==="club"||c.objetivo==="falta_uma").length;
+  const experiencia = todos.filter(c=>c.etapa==="experiencia").length;
+
+  // ── Gerar HTML do relatório ────────────────────────────────────────────────
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório Diário — Laricas CRM — ${hojeStr}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1a1a; background:#fff; padding:32px; font-size:12px; }
+  .header { border-bottom:3px solid #C9A84C; padding-bottom:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; }
+  .header h1 { font-size:22px; font-weight:700; color:#1a1a1a; }
+  .header .sub { font-size:13px; color:#666; margin-top:4px; }
+  .header .data { font-size:14px; font-weight:600; color:#C9A84C; }
+  .section { margin-bottom:24px; }
+  .section h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:#C9A84C; border-left:3px solid #C9A84C; padding-left:8px; margin-bottom:12px; }
+  .cards { display:flex; gap:12px; margin-bottom:0; flex-wrap:wrap; }
+  .card { background:#f8f8f8; border-radius:8px; padding:12px 16px; flex:1; min-width:120px; }
+  .card .val { font-size:24px; font-weight:700; color:#1a1a1a; }
+  .card .lbl { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.06em; margin-top:3px; }
+  table { width:100%; border-collapse:collapse; }
+  th { background:#f0f0f0; padding:7px 10px; text-align:left; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#666; }
+  td { padding:7px 10px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600; }
+  .badge-contato { background:#e0f5f5; color:#0a7070; }
+  .badge-etapa { background:#fff4e0; color:#a05c00; }
+  .badge-lead { background:#f0e8ff; color:#5a3d9e; }
+  .funil-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #f0f0f0; }
+  .funil-bar-bg { flex:1; background:#f0f0f0; border-radius:4px; height:10px; overflow:hidden; }
+  .funil-bar { height:100%; background:#C9A84C; border-radius:4px; }
+  .footer { margin-top:32px; padding-top:12px; border-top:1px solid #eee; font-size:10px; color:#bbb; text-align:center; }
+  @media print {
+    body { padding:16px; }
+    .no-print { display:none; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Laricas Fitness — CRM</h1>
+      <div class="sub">Relatório Diário de Atividades</div>
+    </div>
+    <div class="data">${hojeStr}</div>
+  </div>
+
+  <div class="section">
+    <h2>Resumo do dia</h2>
+    <div class="cards">
+      <div class="card"><div class="val">${atividades.filter(a=>a.tipo==="Contato").length}</div><div class="lbl">Contatos realizados</div></div>
+      <div class="card"><div class="val">${atividades.filter(a=>a.tipo==="Etapa").length}</div><div class="lbl">Etapas movidas</div></div>
+      <div class="card"><div class="val">${atividades.filter(a=>a.tipo==="Novo Lead").length}</div><div class="lbl">Novos leads</div></div>
+      <div class="card"><div class="val">${atividades.length}</div><div class="lbl">Total de ações</div></div>
+    </div>
+  </div>
+
+  ${Object.keys(porOperador).length > 0 ? `
+  <div class="section">
+    <h2>Por operador</h2>
+    <table>
+      <thead><tr><th>Operador</th><th>Contatos</th><th>Etapas</th><th>Novos Leads</th><th>Total</th></tr></thead>
+      <tbody>
+        ${Object.entries(porOperador).map(([op,d])=>`
+          <tr>
+            <td style="font-weight:600">${op}</td>
+            <td>${d.contatos}</td>
+            <td>${d.etapas}</td>
+            <td>${d.leads}</td>
+            <td style="font-weight:600">${d.contatos+d.etapas+d.leads}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  </div>` : ""}
+
+  ${atividades.length > 0 ? `
+  <div class="section">
+    <h2>Atividades detalhadas</h2>
+    <table>
+      <thead><tr><th>Hora</th><th>Operador</th><th>Cliente</th><th>Tipo</th><th>Detalhe</th></tr></thead>
+      <tbody>
+        ${atividades.map(a=>`
+          <tr>
+            <td style="color:#888;white-space:nowrap">${a.hora}</td>
+            <td style="white-space:nowrap">${a.operador}</td>
+            <td style="font-weight:500">${a.cliente}</td>
+            <td><span class="badge badge-${a.tipo.toLowerCase().replace(" ","")}">${a.tipo}</span></td>
+            <td style="color:#555">${a.detalhe}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  </div>` : `<div class="section"><h2>Atividades detalhadas</h2><p style="color:#aaa;padding:16px 0">Nenhuma atividade registrada hoje.</p></div>`}
+
+  <div class="section">
+    <h2>Situação atual do funil</h2>
+    <div style="margin-bottom:12px">
+      <div class="cards">
+        <div class="card"><div class="val">${totalAtivos}</div><div class="lbl">Leads ativos</div></div>
+        <div class="card"><div class="val">${focoClub}</div><div class="lbl">Foco Club</div></div>
+        <div class="card"><div class="val">${experiencia}</div><div class="lbl">Assinantes</div></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Etapa</th><th>Clientes</th><th>Distribuição</th></tr></thead>
+      <tbody>
+        ${Object.values(porEtapaFunil).filter(e=>e.count>0).map(e=>`
+          <tr>
+            <td style="font-weight:500">${e.emoji} ${e.label}</td>
+            <td style="font-weight:700">${e.count}</td>
+            <td style="width:50%">
+              <div class="funil-bar-bg"><div class="funil-bar" style="width:${Math.min(100,Math.round(e.count/totalAtivos*100))}%"></div></div>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">Laricas Fitness CRM · Gerado em ${hoje.toLocaleString("pt-BR")} · laricas-crm.vercel.app</div>
+</body>
+</html>`;
+
+  // Abrir em nova aba para imprimir/salvar como PDF
+  const win = window.open("", "_blank");
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
 };
 
 export default function App() {
