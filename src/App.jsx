@@ -3473,7 +3473,7 @@ const gerarRelatorioDiario = async () => {
     // Logs de atividade do dia
     (c.logAtividade||[]).forEach(l => {
       if (l.data === hojeStr) {
-        atividades.push({ hora:l.hora||"--:--", operador:l.resp||"—", cliente:c.nome, tipo:"Contato", detalhe:l.texto });
+        atividades.push({ hora:l.hora||"--:--", operador:l.resp||"—", cliente:c.nome, tipo:"Contato", detalhe:l.texto, proximaAcao:c.proximaAcao||"", dataProximoContato:c.dataProximoContato||"" });
       }
     });
     // Movimentações de etapa do dia
@@ -3483,12 +3483,12 @@ const gerarRelatorioDiario = async () => {
       const eHoje = dataH === hojeStr || dataH.startsWith(hojeISO);
       if (eHoje) {
         const etLabel = ETAPAS.find(e=>e.id===h.etapa)?.label || h.etapa;
-        atividades.push({ hora:h.hora||"--:--", operador:h.resp||"—", cliente:c.nome, tipo:"Etapa", detalhe:"Movido para "+etLabel });
+        atividades.push({ hora:h.hora||"--:--", operador:h.resp||"—", cliente:c.nome, tipo:"Etapa", detalhe:"Movido para "+etLabel, proximaAcao:c.proximaAcao||"", dataProximoContato:c.dataProximoContato||"" });
       }
     });
     // Novos leads criados hoje
     if ((c.dataCriacao||"") === hojeStr) {
-      atividades.push({ hora:"--:--", operador:c.responsavel||"—", cliente:c.nome, tipo:"Novo Lead", detalhe:"Lista: "+(c.lista||"—") });
+      atividades.push({ hora:"--:--", operador:c.responsavel||"—", cliente:c.nome, tipo:"Novo Lead", detalhe:"Lista: "+(c.lista||"—"), proximaAcao:c.proximaAcao||"", dataProximoContato:c.dataProximoContato||"" });
     }
   });
 
@@ -3592,7 +3592,7 @@ const gerarRelatorioDiario = async () => {
   <div class="section">
     <h2>Atividades detalhadas</h2>
     <table>
-      <thead><tr><th>Hora</th><th>Operador</th><th>Cliente</th><th>Tipo</th><th>Detalhe</th></tr></thead>
+      <thead><tr><th>Hora</th><th>Operador</th><th>Cliente</th><th>Tipo</th><th>Detalhe</th><th>Próxima ação</th><th>Data contato</th></tr></thead>
       <tbody>
         ${atividades.map(a=>`
           <tr>
@@ -3601,6 +3601,8 @@ const gerarRelatorioDiario = async () => {
             <td style="font-weight:500">${a.cliente}</td>
             <td><span class="badge badge-${a.tipo.toLowerCase().replace(" ","")}">${a.tipo}</span></td>
             <td style="color:#555">${a.detalhe}</td>
+            <td style="color:#444">${a.proximaAcao||"—"}</td>
+            <td style="color:#888;white-space:nowrap">${a.dataProximoContato ? new Date(a.dataProximoContato+"T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
           </tr>
         `).join("")}
       </tbody>
