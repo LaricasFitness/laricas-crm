@@ -240,6 +240,19 @@ const runTriagem = (pedidos, dp, du, fora, gasto) => {
   if (p===1) { obj="reativacao"; label="Reativação → 2ª compra"; cor=C.teal; corD=C.tealD; }
   else if (p===2) { if (ciclo<=60) { obj="falta_uma"; label="Falta Uma → 3ª compra"; cor=C.amber; corD=C.amberD; } else { obj="reativacao"; label="Reativar → 3ª compra"; cor=C.teal; corD=C.tealD; alerta="Ciclo "+ciclo+"d — reconectar antes de empurrar para o 3°."; } }
   else { if (ciclo<=90) { obj="club"; label=ciclo<=60?"Club — hábito formado":"Club — abordagem suave"; cor=C.green; corD=C.greenD; if(ciclo>60) alerta="Ciclo "+ciclo+"d — usar ângulo de conveniência."; } else { obj="habit_rebuild"; label="Reconstruir hábito → Club só depois"; cor=C.coral; corD=C.coralD; alerta="⛔ Ciclo "+ciclo+"d — NÃO oferecer Club agora."; } }
+
+  // Correção por tempo desde último pedido — independente do histórico
+  // Se último pedido > 90 dias: hábito perdido → reativação
+  // Se último pedido 45-90 dias e obj era club/falta_uma: reconstruir hábito primeiro
+  if (p > 1 && diasUlt > 90) {
+    obj="reativacao"; cor=C.teal; corD=C.tealD;
+    label="Reativação — inativa +90d";
+    alerta="⛔ Último pedido há "+diasUlt+"d — tratar como cliente nova antes de qualquer oferta de Club.";
+  } else if (p > 1 && diasUlt > 45 && (obj==="club" || obj==="falta_uma")) {
+    obj="habit_rebuild"; cor=C.coral; corD=C.coralD;
+    label="Reconstruir hábito — inativa +45d";
+    alerta="⚠ Último pedido há "+diasUlt+"d — reativar compra antes de oferecer Club.";
+  }
   const seq = buildSeq(obj, ciclo, p, fora, foraDaJanela, diasUnico);
   const prob = calcProb(obj, ciclo, p, fora, foraDaJanela, gasto, diasUnico);
   return { obj, label, cor, corD, alerta, ciclo, p, fora, foraDaJanela, diasUlt, diasUnico, span, seq, prob };
@@ -2619,7 +2632,7 @@ const Guia = () => {
           <Item label="Prioridade" value="Maxima — janela fecha se ciclo passar de 90 dias sem contato."/>
         </Block>
         <Block title="Club — habito formado" cor={C.green}>
-          <Item label="Quando" value="3+ pedidos com ciclo ≤ 90 dias"/>
+          <Item label="Quando" value="3+ pedidos com ciclo ≤ 90 dias E último pedido há ≤ 45 dias"/>
           <Item label="Objetivo" value="Converter para assinatura Club"/>
           <Item label="3o pedido" value="Tom emocional: qual foi o favorito? Nao revelar intencao ainda."/>
           <Item label="4-6o pedido" value="Tom financeiro: calcular total gasto + frete vs preco do Club com numeros reais."/>
@@ -2627,10 +2640,12 @@ const Guia = () => {
           <Item label="Preco" value="Preco cheio no WhatsApp. Desconto de 20% so como fechamento em reuniao presencial — nunca antes."/>
           <Item label="Club pos 3a compra" value="Oferecer Club so apos a 3a compra (aha moment). Excecao: 7+ pedidos pode abordar em qualquer etapa."/>
         </Block>
-        <Block title="Reconstruir habito → Club so depois" cor={C.coral}>
-          <Item label="Quando" value="3+ pedidos com ciclo > 90 dias"/>
+        <Block title="Reconstruir habito → Club só depois" cor={C.coral}>
+          <Item label="Quando — ciclo longo" value="3+ pedidos com ciclo > 90 dias"/>
+          <Item label="Quando — inativa 45-90d" value="3+ pedidos (qualquer ciclo) mas último pedido há 45–90 dias"/>
+          <Item label="Quando — inativa +90d" value="Qualquer histórico com último pedido há mais de 90 dias → reclassificada como Reativação"/>
           <Item label="Objetivo" value="Reativar a compra primeiro. Club so apos nova compra."/>
-          <Item label="Atencao" value="Nao oferecer Club neste fluxo. Foco em gerar a proxima compra."/>
+          <Item label="Atencao" value="⛔ NÃO oferecer Club. Muitas clientes com histórico de Club ativo estão aqui por estarem inativas há meses — precisam reconectar primeiro."/>
         </Block>
         <Block title="Novo cliente — 1a compra" cor={C.blue}>
           <Item label="Quando" value="Chegou por indicacao, redes sociais, evento ou presencialmente. Sem compras ainda."/>
