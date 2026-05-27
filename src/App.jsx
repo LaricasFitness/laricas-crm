@@ -258,6 +258,35 @@ const runTriagem = (pedidos, dp, du, fora, gasto) => {
   return { obj, label, cor, corD, alerta, ciclo, p, fora, foraDaJanela, diasUlt, diasUnico, span, seq, prob };
 };
 
+
+// Aplica correção por tempo de inatividade em tempo real
+// Usado para exibição — independente do valor salvo no Supabase
+const corrigirObjetivo = (c) => {
+  if (!c.dataUltimo || !c.p || c.p < 2) return c;
+  const hoje = new Date();
+  const dtU = new Date(c.dataUltimo + "T12:00:00");
+  const diasUlt = Math.round((hoje - dtU) / 86400000);
+  if (diasUlt > 90 && c.objetivo !== "reativacao") {
+    return { ...c,
+      objetivo: "reativacao",
+      objetivoLabel: "Reativação — inativa +" + diasUlt + "d",
+      objetivoCor: C.teal,
+      objetivoCorD: C.tealD,
+      objetivoAlerta: "⛔ Último pedido há " + diasUlt + "d — tratar como cliente nova antes de qualquer oferta de Club.",
+    };
+  }
+  if (diasUlt > 45 && (c.objetivo === "club" || c.objetivo === "falta_uma")) {
+    return { ...c,
+      objetivo: "habit_rebuild",
+      objetivoLabel: "Reconstruir hábito — inativa +" + diasUlt + "d",
+      objetivoCor: C.coral,
+      objetivoCorD: C.coralD,
+      objetivoAlerta: "⚠ Último pedido há " + diasUlt + "d — reativar compra antes de oferecer Club.",
+    };
+  }
+  return c;
+};
+
 const inp = (ex) => ({ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:14,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none",...ex });
 const T = ({ label, active, color, onClick }) => ( <button onClick={onClick} style={{ padding:"8px 12px",fontSize:12,fontWeight:500,color:active?color:"var(--color-text-secondary)",borderBottom:active?"2px solid "+color:"2px solid transparent",marginBottom:-1,background:"transparent",border:"none",cursor:"pointer",whiteSpace:"nowrap" }}>{label}</button> );
 const M = ({ label, value, sub, cor }) => ( <div style={{ background:"var(--color-background-secondary)",borderRadius:8,padding:"10px 12px" }}><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>{label}</div><div style={{ fontSize:18,fontWeight:500,color:cor||"var(--color-text-primary)" }}>{value}</div>{sub&&<div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginTop:2 }}>{sub}</div>}</div> );
@@ -735,7 +764,7 @@ const SeqRetencao = ({ c }) => {
 
 const Perfil = ({ clienteId, onVoltar }) => {
   const [c,setC]=useState(null); const [confirmDel,setConfirmDel]=useState(false); const [salvando,setSalvando]=useState(false); const [toast,setToast]=useState("");
-  useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(cl); }); }, [clienteId]);
+  useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(corrigirObjetivo(cl)); }); }, [clienteId]);
   const save = async (updates) => { const novo={...c,...updates}; setC(novo); try { await dbSave(novo); } catch(e) {} };
   const mover = async (etapaId) => {
     setSalvando(true);
@@ -776,6 +805,21 @@ const Perfil = ({ clienteId, onVoltar }) => {
             style={{ background:"#25D366",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,color:"#fff",cursor:"pointer",fontWeight:500,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4 }}>
             💬 WhatsApp
           </a>
+        )}
+        {c.datasPreenchidas&&(
+          <button onClick={async()=>{
+            const tr=runTriagem(c.p,c.dataPrimeiro,c.dataUltimo,c.fora,c.gasto);
+            const atualizado={...c,
+              objetivo:tr.obj,objetivoLabel:tr.label,objetivoCor:tr.cor,objetivoCorD:tr.corD,
+              objetivoAlerta:tr.alerta,prob:tr.prob.pct,probLabel:tr.prob.label,probCor:tr.prob.cor,
+              seq:tr.seq,cicloMedio:tr.ciclo,datasPreenchidas:true,
+            };
+            await save(atualizado);
+            setC(corrigirObjetivo(atualizado));
+          }} disabled={salvando}
+            style={{ background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:6,padding:"4px 10px",fontSize:11,color:C.tealD,cursor:salvando?"default":"pointer",fontWeight:500 }}>
+            ↺ Recalcular
+          </button>
         )}
         {c.historicoEtapas&&c.historicoEtapas.length>0&&(
           <button onClick={desfazer} disabled={salvando} title={"Voltar para: "+ETAPAS.find(e=>e.id===(c.historicoEtapas[c.historicoEtapas.length-1]||{}).etapa)?.label}
@@ -1429,7 +1473,7 @@ const Kanban = ({ onAbrir, reloadToken, filtroHoje, setFiltroHoje, filtroClub, s
   };
 
   const porEtapa=(id)=>{
-    const grupo=filtrar(clientes.filter(c=>c.etapa===id));
+    const grupo=filtrar(clientes.filter(c=>c.etapa===id).map(corrigirObjetivo));
     // Sort by priority score (objective + stage + probability)
     // Experiencia: sort by next billing date ascending (closest first)
     const byPrio = (etId) => (a,b) => {
