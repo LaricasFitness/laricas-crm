@@ -3645,6 +3645,789 @@ const gerarRelatorioDiario = async () => {
   setTimeout(() => win.print(), 500);
 };
 
+
+// ── FUNIL CLUB ─────────────────────────────────────────────────────────────
+const STATUS_CLUB = [
+  { id:"",            label:"Não abordado",   cor:C.purple,  emoji:"○" },
+  { id:"contatado",   label:"Contatado",      cor:C.blue,    emoji:"📤" },
+  { id:"respondeu",   label:"Respondeu",      cor:C.teal,    emoji:"💬" },
+  { id:"interessado", label:"Interessado",    cor:C.green,   emoji:"🔥" },
+  { id:"link_enviado",label:"Link enviado",   cor:C.amber,   emoji:"🔗" },
+  { id:"fechou",      label:"Fechou ✓",       cor:C.green,   emoji:"🏆" },
+  { id:"nao_agora",   label:"Não agora",      cor:C.coral,   emoji:"⏸" },
+  { id:"follow_up",   label:"Follow-up",      cor:C.amber,   emoji:"🔔" },
+  { id:"perdido",     label:"Perdido",        cor:C.coral,   emoji:"✗"  },
+];
+
+const OBJECTIONS = [
+  "Caro","Não quer fidelidade","Não entendeu os planos","Não consome todo mês",
+  "Medo de enjoar","Não mora em SP","Quer pensar","Prefere compra avulsa",
+  "Problema com frete","Quer montar caixa diferente","Sem resposta","Outro"
+];
+
+const PLANOS = ["Trimestral","Semestral","Anual"];
+
+const FOLLOW_UP_DAYS = {
+  "contatado": 2, "respondeu": 1, "interessado": 1,
+  "link_enviado": 1, "nao_agora": 7, "follow_up": 3,
+};
+
+const SCRIPTS_CLUB = [
+  {
+    id:"recorrente", label:"A — Cliente recorrente", tag:"recorrente",
+    perfil:"3+ pedidos com ciclo regular",
+    copy:`Oi [Nome]! 😊 Aqui é a [Operador] da Laricas.
+
+Vi que você já comprou com a gente [N° pedidos]x e queria te apresentar o Laricas Club, nossa assinatura mensal.
+
+A ideia é simples: você monta uma caixa com seus produtos favoritos, recebe todo mês em casa com desconto e frete grátis para SP.
+
+Como você já conhece a Laricas, acho que pode fazer sentido para não precisar ficar fazendo pedido avulso toda vez.
+
+Posso te mandar as opções de planos?`,
+  },
+  {
+    id:"ticket_alto", label:"B — Ticket alto", tag:"ticket_alto",
+    perfil:"Gasto acima de R$300 no último pedido",
+    copy:`Oi [Nome]! 😊 Aqui é a [Operador] da Laricas.
+
+Vi que no seu último pedido você comprou uma quantidade legal de produtos e queria te apresentar o Laricas Club.
+
+Ele funciona como uma caixa mensal: você escolhe seus produtos favoritos, recebe todo mês em casa com desconto e frete grátis para SP.
+
+Para quem já costuma comprar Laricas em maior volume, normalmente fica mais prático e mais vantajoso.
+
+Posso te explicar rapidinho os planos?`,
+  },
+  {
+    id:"kit", label:"C — Comprou kit", tag:"kit",
+    perfil:"Comprou kit ou seleção ampla de produtos",
+    copy:`Oi [Nome]! 😊 Aqui é a [Operador] da Laricas.
+
+Vi que você já comprou um dos nossos kits e queria te apresentar o Laricas Club.
+
+A ideia é parecida com deixar seu estoque do mês garantido: você monta uma caixa com seus produtos favoritos e recebe todo mês em casa com desconto e frete grátis para SP.
+
+Como você já comprou uma seleção maior de produtos, acho que pode fazer sentido.
+
+Posso te mandar as opções?`,
+  },
+  {
+    id:"planos", label:"D — Explicação dos planos", tag:"planos",
+    perfil:"Após interesse confirmado",
+    copy:`Hoje temos 3 opções:
+
+*Trimestral:* para quem quer testar o Club com menor compromisso.
+*Semestral:* bom meio-termo para quem quer manter Laricas na rotina.
+*Anual:* melhor condição, com maior desconto e benefícios.
+
+Você monta sua caixa com produtos Laricas e recebe todos os meses.
+
+Pelo seu perfil, eu recomendaria começar pelo plano [plano recomendado], porque [motivo].`,
+  },
+  {
+    id:"fechamento", label:"E — Fechamento", tag:"fechamento",
+    perfil:"Cliente quente, pronta para fechar",
+    copy:`Acho que para você faz bastante sentido, principalmente porque você já compra Laricas e no Club fica mais prático e mais econômico.
+
+Quer que eu te mande o link direto para montar sua caixa?`,
+  },
+  {
+    id:"followup_48h", label:"F — Follow-up 48h", tag:"follow_up",
+    perfil:"Sem resposta após 48h",
+    copy:`Oi [Nome], passando só para não deixar perdido.
+
+Te mandei sobre o Laricas Club porque, pelo seu histórico, achei que poderia fazer sentido.
+
+Quer que eu te explique rapidinho como funciona? 😊`,
+  },
+  {
+    id:"followup_7d", label:"G — Follow-up 7 dias", tag:"follow_up",
+    perfil:"Última tentativa após 7 dias",
+    copy:`Última mensagem sobre isso, prometo! 😄
+
+Se em algum momento você quiser receber Laricas todo mês com desconto e frete grátis, me chama que te ajudo a escolher o melhor plano.`,
+  },
+  {
+    id:"obj_caro", label:"H — Objeção: caro", tag:"objecao",
+    perfil:"Disse que é caro",
+    copy:`Entendo totalmente!
+
+O Club faz mais sentido para quem já compraria Laricas ao longo do mês. A diferença é que você recebe com desconto, frete grátis e não precisa fazer pedidos avulsos.
+
+Para quem compra com frequência, normalmente acaba ficando mais vantajoso 😊`,
+  },
+  {
+    id:"obj_enjoar", label:"I — Objeção: medo de enjoar", tag:"objecao",
+    perfil:"Com medo de enjoar",
+    copy:`Total, entendo! Por isso a ideia não é receber sempre a mesma coisa.
+
+Você pode montar uma caixa variada com produtos diferentes da Laricas e ir ajustando conforme sua rotina 😄`,
+  },
+  {
+    id:"obj_fidelidade", label:"J — Objeção: não quer fidelidade", tag:"objecao",
+    perfil:"Não quer compromisso longo",
+    copy:`Entendo! Nesse caso, talvez o trimestral seja o melhor começo.
+
+Ele tem o menor compromisso e serve justamente para testar se o Club faz sentido na sua rotina 😊`,
+  },
+  {
+    id:"obj_pensar", label:"K — Objeção: quer pensar", tag:"objecao",
+    perfil:"Disse que vai pensar",
+    copy:`Claro, sem pressão! 😊
+
+Só para te ajudar: o Club faz mais sentido para quem já sabe que vai comprar Laricas de novo. Não é uma compra nova — é transformar a recompra em algo mais prático e com condição melhor.`,
+  },
+];
+
+// Score de calor Club (0-100)
+const calcScoreClub = (c) => {
+  const p = c.p || 0;
+  const ciclo = c.cicloMedio || 999;
+  const gasto = c.gasto || 0;
+  const fora = c.fora || false;
+  const hoje = new Date();
+  const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
+  const diasUlt = dtU ? Math.round((hoje-dtU)/86400000) : 999;
+  const diasParaProxima = dtU && ciclo < 999 ? ciclo - diasUlt : 999;
+
+  let score = 0;
+  // Pedidos (max 30)
+  if (p >= 5) score += 30;
+  else if (p >= 3) score += 22;
+  else if (p === 2) score += 12;
+  else score += 4;
+  // Ciclo (max 25)
+  if (ciclo <= 20) score += 25;
+  else if (ciclo <= 30) score += 20;
+  else if (ciclo <= 45) score += 14;
+  else if (ciclo <= 60) score += 8;
+  else if (ciclo <= 90) score += 3;
+  // Janela de compra (max 20) — SINAL MAIS PODEROSO
+  if (diasParaProxima >= -3 && diasParaProxima <= 5) score += 20; // está comprando agora
+  else if (diasParaProxima <= 10) score += 14;
+  else if (diasParaProxima <= 14) score += 8;
+  // Gasto (max 15)
+  if (gasto > 1500) score += 15;
+  else if (gasto > 800) score += 10;
+  else if (gasto > 400) score += 6;
+  else if (gasto > 150) score += 3;
+  // Fora SP (max 10)
+  if (fora) score += 10;
+  return Math.min(100, score);
+};
+
+const sugerirScript = (c) => {
+  const gasto = c.gasto || 0;
+  const p = c.p || 0;
+  if (c.statusClub === "respondeu" || c.statusClub === "interessado") return "planos";
+  if (c.statusClub === "link_enviado") return "fechamento";
+  if (c.statusClub === "contatado") return "followup_48h";
+  if (c.statusClub === "nao_agora" || c.statusClub === "follow_up") return "followup_7d";
+  if (gasto / Math.max(p, 1) > 200) return "ticket_alto";
+  if (p >= 3) return "recorrente";
+  if (p >= 2) return "recorrente";
+  return "recorrente";
+};
+
+const sugerirPlano = (c) => {
+  const ciclo = c.cicloMedio || 999;
+  const gasto = c.gasto || 0;
+  const p = c.p || 0;
+  if (p >= 6 || gasto > 1500 || ciclo <= 25) return "Anual";
+  if (p >= 4 || gasto > 700 || ciclo <= 40) return "Semestral";
+  return "Trimestral";
+};
+
+const addDays = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split("T")[0];
+};
+
+const ScoreBar = ({ score }) => {
+  const cor = score >= 70 ? C.green : score >= 45 ? C.amber : C.coral;
+  const corD = score >= 70 ? C.greenD : score >= 45 ? C.amberD : C.coralD;
+  const corL = score >= 70 ? C.greenL : score >= 45 ? C.amberL : C.coralL;
+  return (
+    <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+      <div style={{ flex:1,height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden" }}>
+        <div style={{ width:score+"%",height:"100%",background:cor,borderRadius:3,transition:"width 0.3s" }}/>
+      </div>
+      <span style={{ fontSize:11,fontWeight:600,color:corD,background:corL,padding:"1px 6px",borderRadius:10,minWidth:32,textAlign:"center" }}>{score}</span>
+    </div>
+  );
+};
+
+const FunilClub = ({ onAbrirPerfil }) => {
+  const [clientes, setClientes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sel, setSel] = useState(null);
+  const [aba, setAba] = useState("hoje");
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [busca, setBusca] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [ok, setOk] = useState("");
+  const [scriptSel, setScriptSel] = useState(null);
+  const [campos, setCampos] = useState({});
+  const [copiadoId, setCopiadoId] = useState("");
+  const hoje = new Date().toISOString().split("T")[0];
+
+  useEffect(() => {
+    dbGetAll().then(lista => {
+      // Só clientes com pedidos (potenciais Club) e que não são assinantes
+      const candidatos = lista.filter(c =>
+        (c.p||0) >= 1 &&
+        c.etapa !== "experiencia" &&
+        c.etapa !== "encerrado" &&
+        c.statusClub !== "fechou" &&
+        c.statusClub !== "perdido"
+      ).map(c => ({ ...c, _score: calcScoreClub(c) }))
+        .sort((a,b) => b._score - a._score);
+      setClientes(candidatos);
+      setLoading(false);
+    });
+  }, []);
+
+  const saveCliente = async (atualizado) => {
+    setSalvando(true);
+    await dbSave(atualizado);
+    setClientes(prev => prev.map(c => c.id === atualizado.id ? {...atualizado, _score: calcScoreClub(atualizado)} : c));
+    setSel({...atualizado, _score: calcScoreClub(atualizado)});
+    setOk("Salvo!");
+    setTimeout(() => setOk(""), 1500);
+    setSalvando(false);
+  };
+
+  const atualizarStatus = async (c, novoStatus) => {
+    const followUpDias = FOLLOW_UP_DAYS[novoStatus];
+    const atualizado = {
+      ...c,
+      statusClub: novoStatus,
+      ...(novoStatus === "contatado" && !c.dataAbordagem ? { dataAbordagem: hoje } : {}),
+      dataUltimoContato: hoje,
+      ...(followUpDias ? { proximoFollowup: addDays(followUpDias) } : {}),
+    };
+    if (novoStatus === "fechou") {
+      atualizado.dataConversao = hoje;
+    }
+    await saveCliente(atualizado);
+  };
+
+  const personalizarScript = (copy, c) => {
+    const nome = (c.nome||"").split(" ")[0] || "cliente";
+    const operador = (c.responsavel||"Lucas").split(" ")[0];
+    const artigo = c.responsavel ? "a" : "o";
+    const planoRec = c.planoRec || sugerirPlano(c);
+    return copy
+      .replace(/\[Nome\]/g, nome)
+      .replace(/\[Operador\]/g, operador)
+      .replace(/\[N° pedidos\]/g, c.p||0)
+      .replace(/\[plano recomendado\]/g, planoRec)
+      .replace(/Lucas da Laricas/g, operador+" da Laricas")
+      .replace(/Aqui é o Lucas/g, "Aqui é "+artigo+" "+operador);
+  };
+
+  const abrirWhatsApp = (c, scriptId) => {
+    const s = SCRIPTS_CLUB.find(s=>s.id===(scriptId||sugerirScript(c)));
+    if (!s || !c.telefone) return;
+    const texto = personalizarScript(s.copy, c);
+    const tel = (c.telefone||"").replace(/\D/g,"");
+    const url = `https://wa.me/55${tel}?text=${encodeURIComponent(texto)}`;
+    window.open(url, "_blank");
+    if (!c.dataAbordagem) atualizarStatus(c, "contatado");
+  };
+
+  // ── Segmentos para o painel Hoje ──────────────────────────────────────────
+  const vencidos = clientes.filter(c => c.proximoFollowup && c.proximoFollowup < hoje);
+  const interessadosSemLink = clientes.filter(c => c.statusClub === "interessado");
+  const linkSemFechamento = clientes.filter(c => c.statusClub === "link_enviado");
+  const semResposta48h = clientes.filter(c => {
+    if (c.statusClub !== "contatado") return false;
+    if (!c.dataUltimoContato) return false;
+    const dias = Math.round((new Date()-new Date(c.dataUltimoContato+"T12:00:00"))/86400000);
+    return dias >= 2;
+  });
+  const janeslaAberta = clientes.filter(c => {
+    if (c.statusClub) return false;
+    const score = c._score||0;
+    if (score < 50) return false;
+    const ciclo = c.cicloMedio||999;
+    const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
+    const diasUlt = dtU ? Math.round((new Date()-dtU)/86400000) : 999;
+    const diasParaProxima = dtU && ciclo < 999 ? ciclo - diasUlt : 999;
+    return diasParaProxima <= 7;
+  });
+  const quentesNaoAbordados = clientes.filter(c => !c.statusClub && (c._score||0) >= 65).slice(0, 10);
+
+  // ── Filtro da lista ────────────────────────────────────────────────────────
+  const listaFiltrada = clientes.filter(c => {
+    if (filtroStatus && c.statusClub !== filtroStatus) return false;
+    if (busca) {
+      const q = busca.toLowerCase();
+      if (!(c.nome||"").toLowerCase().includes(q) && !(c.telefone||"").includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (loading) return <div style={{textAlign:"center",padding:60,color:"var(--color-text-tertiary)"}}>Carregando funil Club...</div>;
+
+  const statusInfo = (id) => STATUS_CLUB.find(s=>s.id===id)||STATUS_CLUB[0];
+
+  // ── Card de urgência clicável ──────────────────────────────────────────────
+  const CardUrgencia = ({emoji, label, count, cor, corD, corL, lista}) => {
+    if (count === 0) return null;
+    return (
+      <button onClick={()=>{ if(lista?.length>0){setSel(lista[0]);setAba("lista");} }}
+        style={{ flex:1,minWidth:140,background:corL,border:"0.5px solid "+cor,borderRadius:10,padding:"10px 14px",cursor:"pointer",textAlign:"left" }}>
+        <div style={{fontSize:22,marginBottom:4}}>{emoji}</div>
+        <div style={{fontSize:20,fontWeight:600,color:corD}}>{count}</div>
+        <div style={{fontSize:11,color:corD,lineHeight:1.3}}>{label}</div>
+      </button>
+    );
+  };
+
+  // ── Card cliente na lista ──────────────────────────────────────────────────
+  const CardLista = ({c}) => {
+    const st = statusInfo(c.statusClub);
+    const ciclo = c.cicloMedio||0;
+    const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
+    const diasUlt = dtU ? Math.round((new Date()-dtU)/86400000) : null;
+    const diasParaProxima = dtU && ciclo > 0 ? ciclo - diasUlt : null;
+    const janelaAberta = diasParaProxima !== null && diasParaProxima >= -3 && diasParaProxima <= 7;
+    const isSelected = sel?.id === c.id;
+    return (
+      <button onClick={()=>{setSel(c);setScriptSel(sugerirScript(c));setCampos({});}}
+        style={{ width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:10,marginBottom:6,
+          border:"1.5px solid "+(isSelected?C.teal:"var(--color-border-tertiary)"),
+          background:isSelected?C.tealL:"var(--color-background-secondary)",cursor:"pointer",transition:"all 0.15s" }}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6}}>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)"}}>{c.nome}</span>
+              {janelaAberta&&<span style={{fontSize:9,fontWeight:600,background:C.greenL,color:C.greenD,padding:"1px 6px",borderRadius:10}}>🛒 COMPRANDO AGORA</span>}
+            </div>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>
+              {c.p||0}p · R${(c.gasto||0).toFixed(0)} · ciclo {ciclo||"?"}d
+              {diasUlt!==null&&<span style={{marginLeft:6}}>· ult. {diasUlt}d atrás</span>}
+            </div>
+          </div>
+          <span style={{fontSize:10,fontWeight:500,color:st.cor,background:st.cor+"22",padding:"2px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
+            {st.emoji} {st.label}
+          </span>
+        </div>
+        <ScoreBar score={c._score||0}/>
+        {c.proximoFollowup&&c.proximoFollowup<=hoje&&(
+          <div style={{fontSize:10,color:C.coralD,marginTop:4}}>⚠ Follow-up vencido: {new Date(c.proximoFollowup+"T12:00:00").toLocaleDateString("pt-BR")}</div>
+        )}
+      </button>
+    );
+  };
+
+  // ── Painel de detalhes do cliente selecionado ──────────────────────────────
+  const PainelDetalhe = () => {
+    if (!sel) return (
+      <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>
+        <div style={{fontSize:32,marginBottom:12}}>👈</div>
+        <div style={{fontSize:13}}>Selecione um cliente para ver detalhes e scripts</div>
+      </div>
+    );
+    const c = sel;
+    const st = statusInfo(c.statusClub);
+    const planoRec = c.planoRec || sugerirPlano(c);
+    const ciclo = c.cicloMedio||0;
+    const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
+    const diasUlt = dtU ? Math.round((new Date()-dtU)/86400000) : null;
+    const diasParaProxima = dtU && ciclo > 0 ? ciclo - diasUlt : null;
+    const janelaAberta = diasParaProxima !== null && diasParaProxima >= -3 && diasParaProxima <= 7;
+
+    const scriptAtual = SCRIPTS_CLUB.find(s=>s.id===scriptSel) || SCRIPTS_CLUB.find(s=>s.id===sugerirScript(c));
+    const textoScript = scriptAtual ? personalizarScript(scriptAtual.copy, c) : "";
+
+    const copiar = (txt, id) => {
+      navigator.clipboard.writeText(txt).catch(()=>{});
+      setCopiadoId(id);
+      setTimeout(()=>setCopiadoId(""),2000);
+    };
+
+    return (
+      <div>
+        {/* Header cliente */}
+        <div style={{background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)"}}>{c.nome}</div>
+              <div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{c.telefone||"—"} · {c.email||"—"}</div>
+            </div>
+            {c.telefone&&(
+              <a href={"https://wa.me/55"+(c.telefone||"").replace(/\D/g,"")} target="_blank" rel="noopener noreferrer"
+                style={{background:"#25D366",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,color:"#fff",fontWeight:500,textDecoration:"none"}}>
+                💬 WhatsApp
+              </a>
+            )}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:600,color:C.tealD}}>{c.p||0}</div>
+              <div style={{fontSize:10,color:C.teal,textTransform:"uppercase"}}>Pedidos</div>
+            </div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:600,color:C.tealD}}>R${(c.gasto||0).toFixed(0)}</div>
+              <div style={{fontSize:10,color:C.teal,textTransform:"uppercase"}}>Total gasto</div>
+            </div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:600,color:C.tealD}}>{ciclo||"?"}d</div>
+              <div style={{fontSize:10,color:C.teal,textTransform:"uppercase"}}>Ciclo médio</div>
+            </div>
+          </div>
+          {janelaAberta&&(
+            <div style={{marginTop:8,background:C.green,borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:500,color:"#fff",textAlign:"center"}}>
+              🛒 Janela de compra aberta — ela está pensando em Laricas agora!
+            </div>
+          )}
+          {diasParaProxima!==null&&!janelaAberta&&(
+            <div style={{marginTop:6,fontSize:11,color:C.teal,textAlign:"center"}}>
+              Próxima compra estimada em {diasParaProxima>0?diasParaProxima+"d":"já passou"}
+            </div>
+          )}
+        </div>
+
+        {/* Status rápido */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Status no funil</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {STATUS_CLUB.filter(s=>s.id!=="fechou"&&s.id!=="perdido").map(s=>(
+              <button key={s.id} onClick={()=>atualizarStatus(c,s.id)} disabled={salvando}
+                style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:500,cursor:"pointer",
+                  background:c.statusClub===s.id?s.cor:"var(--color-background-secondary)",
+                  color:c.statusClub===s.id?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(c.statusClub===s.id?s.cor:"var(--color-border-tertiary)")}}>
+                {s.emoji} {s.label}
+              </button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:6,marginTop:6}}>
+            <button onClick={()=>atualizarStatus(c,"fechou")} disabled={salvando}
+              style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",background:C.green,color:"#fff",border:"none"}}>
+              🏆 Fechou!
+            </button>
+            <button onClick={()=>atualizarStatus(c,"perdido")} disabled={salvando}
+              style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:"var(--color-background-secondary)",color:C.coralD,border:"0.5px solid "+C.coral}}>
+              ✗ Perdido
+            </button>
+          </div>
+          {ok&&<div style={{fontSize:12,color:C.greenD,marginTop:4,textAlign:"center"}}>✓ {ok}</div>}
+        </div>
+
+        {/* Script sugerido */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
+            Script {scriptAtual&&<span style={{color:C.teal}}>— {scriptAtual.label}</span>}
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+            {SCRIPTS_CLUB.map(s=>(
+              <button key={s.id} onClick={()=>setScriptSel(s.id)}
+                style={{padding:"3px 8px",borderRadius:6,fontSize:10,fontWeight:500,cursor:"pointer",
+                  background:scriptSel===s.id?C.purple:"var(--color-background-secondary)",
+                  color:scriptSel===s.id?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(scriptSel===s.id?C.purple:"var(--color-border-tertiary)")}}>
+                {s.label.split("—")[0].trim()}
+              </button>
+            ))}
+          </div>
+          {textoScript&&(
+            <div>
+              <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",fontSize:13,color:"var(--color-text-primary)",lineHeight:1.8,whiteSpace:"pre-line",fontFamily:"inherit",borderLeft:"3px solid "+C.teal,marginBottom:8}}>
+                {textoScript}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>copiar(textoScript,"script")}
+                  style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
+                    background:copiadoId==="script"?C.green:C.tealL,color:copiadoId==="script"?"#fff":C.tealD,
+                    border:"0.5px solid "+C.teal,transition:"all 0.2s"}}>
+                  {copiadoId==="script"?"✓ Copiado!":"📋 Copiar mensagem"}
+                </button>
+                {c.telefone&&(
+                  <button onClick={()=>abrirWhatsApp(c,scriptSel)}
+                    style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
+                      background:"#25D366",color:"#fff",border:"none"}}>
+                    💬 Enviar no WhatsApp
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Campos de registro */}
+        <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Registro da abordagem</div>
+
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Plano recomendado</div>
+            <div style={{display:"flex",gap:6}}>
+              {PLANOS.map(p=>(
+                <button key={p} onClick={()=>saveCliente({...c,planoRec:p})}
+                  style={{flex:1,padding:"6px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
+                    background:c.planoRec===p?C.purple:"var(--color-background-primary)",
+                    color:c.planoRec===p?"#fff":"var(--color-text-secondary)",
+                    border:"0.5px solid "+(c.planoRec===p?C.purple:"var(--color-border-tertiary)")}}>
+                  {p}
+                </button>
+              ))}
+            </div>
+            {!c.planoRec&&<div style={{fontSize:10,color:C.amber,marginTop:4}}>Sugestão automática: {planoRec}</div>}
+          </div>
+
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Principal objeção</div>
+            <select value={c.objClub||""} onChange={e=>saveCliente({...c,objClub:e.target.value})}
+              style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)"}}>
+              <option value="">— Nenhuma objeção ainda —</option>
+              {OBJECTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Próximo follow-up</div>
+            <input type="date" value={c.proximoFollowup||""} onChange={e=>saveCliente({...c,proximoFollowup:e.target.value})}
+              style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)"}}/>
+            <div style={{display:"flex",gap:4,marginTop:4}}>
+              {[["Amanhã",1],["2d",2],["7d",7],["14d",14]].map(([l,d])=>(
+                <button key={l} onClick={()=>saveCliente({...c,proximoFollowup:addDays(d)})}
+                  style={{padding:"3px 8px",borderRadius:6,fontSize:10,cursor:"pointer",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Observações</div>
+            <textarea value={c.obsClub||""} onChange={e=>saveCliente({...c,obsClub:e.target.value})} rows={2}
+              placeholder="Contexto, tom da conversa, o que ela disse..."
+              style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)",outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
+          </div>
+        </div>
+
+        {/* Conversão — só aparece se fechou */}
+        {c.statusClub==="fechou"&&(
+          <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontSize:12,fontWeight:500,color:C.greenD,marginBottom:8}}>🏆 Conversão registrada</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div>
+                <div style={{fontSize:11,color:C.greenD,marginBottom:4}}>Plano fechado</div>
+                <div style={{display:"flex",gap:4}}>
+                  {PLANOS.map(p=>(
+                    <button key={p} onClick={()=>saveCliente({...c,planoFechado:p})}
+                      style={{flex:1,padding:"5px",borderRadius:6,fontSize:11,cursor:"pointer",
+                        background:c.planoFechado===p?C.green:"#fff",color:c.planoFechado===p?"#fff":C.greenD,
+                        border:"0.5px solid "+C.green}}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.greenD,marginBottom:4}}>Valor mensal</div>
+                <input type="number" value={c.valorMensalClub||""} onChange={e=>saveCliente({...c,valorMensalClub:e.target.value})}
+                  placeholder="R$"
+                  style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"0.5px solid "+C.green,fontSize:12,color:C.greenD,background:"#fff"}}/>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button onClick={()=>onAbrirPerfil&&onAbrirPerfil(c.id)}
+          style={{width:"100%",marginTop:10,padding:"8px",borderRadius:8,fontSize:12,cursor:"pointer",
+            background:"none",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)"}}>
+          Abrir perfil completo →
+        </button>
+      </div>
+    );
+  };
+
+  // ── Dashboard simples ──────────────────────────────────────────────────────
+  const DashClub = () => {
+    const todos = clientes;
+    const abordados = todos.filter(c=>c.statusClub&&c.statusClub!=="");
+    const responderam = todos.filter(c=>["respondeu","interessado","link_enviado","fechou"].includes(c.statusClub));
+    const interessados = todos.filter(c=>["interessado","link_enviado","fechou"].includes(c.statusClub));
+    const convertidos = todos.filter(c=>c.statusClub==="fechou");
+    const txResposta = abordados.length>0?Math.round(responderam.length/abordados.length*100):0;
+    const txConversao = abordados.length>0?Math.round(convertidos.length/abordados.length*100):0;
+    const objCounts = {};
+    todos.forEach(c=>{ if(c.objClub){objCounts[c.objClub]=(objCounts[c.objClub]||0)+1;}});
+    const objRanking = Object.entries(objCounts).sort((a,b)=>b[1]-a[1]);
+    return (
+      <div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+          {[
+            ["Abordados",abordados.length,C.teal,C.tealD,C.tealL],
+            ["Responderam",responderam.length,C.blue,C.blueD,C.blueL],
+            ["Interessados",interessados.length,C.green,C.greenD,C.greenL],
+            ["Convertidos",convertidos.length,C.green,C.greenD,C.greenL],
+            ["Taxa resposta",txResposta+"%",C.amber,C.amberD,C.amberL],
+            ["Taxa conversão",txConversao+"%",C.purple,C.purpleD,C.purpleL],
+          ].map(([label,val,cor,corD,corL])=>(
+            <div key={label} style={{background:corL,borderRadius:10,padding:"12px 14px",border:"0.5px solid "+cor}}>
+              <div style={{fontSize:10,color:corD,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{label}</div>
+              <div style={{fontSize:24,fontWeight:600,color:corD}}>{val}</div>
+            </div>
+          ))}
+        </div>
+        {objRanking.length>0&&(
+          <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Objeções mais comuns</div>
+            {objRanking.map(([obj,count])=>(
+              <div key={obj} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <div style={{flex:1,fontSize:12,color:"var(--color-text-primary)"}}>{obj}</div>
+                <div style={{width:`${Math.round(count/objRanking[0][1]*100)}%`,maxWidth:120,height:8,background:C.coral,borderRadius:4,minWidth:20}}/>
+                <span style={{fontSize:12,fontWeight:500,color:C.coralD,minWidth:20,textAlign:"right"}}>{count}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {convertidos.length>0&&(
+          <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginTop:12}}>
+            <div style={{fontSize:11,fontWeight:500,color:C.greenD,marginBottom:8}}>Conversões por plano</div>
+            {PLANOS.map(p=>{
+              const n=convertidos.filter(c=>c.planoFechado===p).length;
+              if(n===0) return null;
+              return <div key={p} style={{fontSize:12,color:C.greenD,marginBottom:4}}>{p}: {n} assinante{n>1?"s":""}</div>;
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Biblioteca de scripts ──────────────────────────────────────────────────
+  const Biblioteca = () => (
+    <div>
+      {SCRIPTS_CLUB.map(s=>(
+        <div key={s.id} style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)"}}>{s.label}</div>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{s.perfil}</div>
+            </div>
+          </div>
+          <div style={{background:"var(--color-background-primary)",borderRadius:8,padding:"10px 12px",fontSize:12,color:"var(--color-text-primary)",lineHeight:1.8,whiteSpace:"pre-line",fontFamily:"inherit",borderLeft:"3px solid "+C.teal,marginBottom:8}}>
+            {s.copy}
+          </div>
+          <button onClick={()=>{navigator.clipboard.writeText(s.copy).catch(()=>{});setCopiadoId(s.id);setTimeout(()=>setCopiadoId(""),2000);}}
+            style={{padding:"5px 14px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",
+              background:copiadoId===s.id?C.green:C.tealL,color:copiadoId===s.id?"#fff":C.tealD,
+              border:"0.5px solid "+C.teal,transition:"all 0.2s"}}>
+            {copiadoId===s.id?"✓ Copiado!":"📋 Copiar"}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── RENDER PRINCIPAL ───────────────────────────────────────────────────────
+  return (
+    <div>
+      {/* Abas internas */}
+      <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid var(--color-border-tertiary)"}}>
+        {[["hoje","⚡ Hoje"],["lista","📋 Lista"],["dash","📊 Dash"],["scripts","💬 Scripts"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setAba(id)}
+            style={{padding:"8px 16px",fontSize:12,fontWeight:500,background:"none",border:"none",cursor:"pointer",
+              color:aba===id?C.teal:"var(--color-text-secondary)",
+              borderBottom:aba===id?"2px solid "+C.teal:"2px solid transparent",marginBottom:-1}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ABA HOJE */}
+      {aba==="hoje"&&(
+        <div>
+          <div style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:12}}>
+            Central de operação — {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}>
+            <CardUrgencia emoji="🔔" label="Follow-ups vencidos" count={vencidos.length} cor={C.coral} corD={C.coralD} corL={C.coralL} lista={vencidos}/>
+            <CardUrgencia emoji="🔗" label="Interessados sem link" count={interessadosSemLink.length} cor={C.amber} corD={C.amberD} corL={C.amberL} lista={interessadosSemLink}/>
+            <CardUrgencia emoji="⏳" label="Link sem fechamento" count={linkSemFechamento.length} cor={C.blue} corD={C.blueD} corL={C.blueL} lista={linkSemFechamento}/>
+            <CardUrgencia emoji="🔇" label="Sem resposta 48h" count={semResposta48h.length} cor={C.amber} corD={C.amberD} corL={C.amberL} lista={semResposta48h}/>
+          </div>
+          {janeslaAberta.length>0&&(
+            <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:500,color:C.greenD,marginBottom:8}}>🛒 Janela de compra aberta ({janeslaAberta.length})</div>
+              <div style={{fontSize:12,color:C.greenD,marginBottom:10,lineHeight:1.5}}>
+                Estas clientes estão prestes a fazer um pedido avulso. Agora é o melhor momento para oferecer o Club.
+              </div>
+              {janeslaAberta.map(c=><CardLista key={c.id} c={c}/>)}
+            </div>
+          )}
+          {quentesNaoAbordados.length>0&&(
+            <div>
+              <div style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)",marginBottom:8}}>🔥 Quentes não abordadas (top {quentesNaoAbordados.length})</div>
+              {quentesNaoAbordados.map(c=><CardLista key={c.id} c={c}/>)}
+            </div>
+          )}
+          {vencidos.length===0&&janeslaAberta.length===0&&quentesNaoAbordados.length===0&&interessadosSemLink.length===0&&(
+            <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>
+              <div style={{fontSize:32,marginBottom:12}}>✅</div>
+              <div style={{fontSize:13}}>Tudo em dia! Nenhuma ação urgente no momento.</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ABA LISTA */}
+      {aba==="lista"&&(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar cliente..."
+                style={{flex:1,padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}/>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
+              <button onClick={()=>setFiltroStatus("")}
+                style={{padding:"3px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                  background:filtroStatus===""?C.teal:"var(--color-background-secondary)",
+                  color:filtroStatus===""?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(filtroStatus===""?C.teal:"var(--color-border-tertiary)")}}>
+                Todos ({clientes.length})
+              </button>
+              {STATUS_CLUB.filter(s=>s.id).map(s=>{
+                const n=clientes.filter(c=>c.statusClub===s.id).length;
+                if(n===0) return null;
+                return (
+                  <button key={s.id} onClick={()=>setFiltroStatus(s.id)}
+                    style={{padding:"3px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                      background:filtroStatus===s.id?s.cor:"var(--color-background-secondary)",
+                      color:filtroStatus===s.id?"#fff":"var(--color-text-secondary)",
+                      border:"0.5px solid "+(filtroStatus===s.id?s.cor:"var(--color-border-tertiary)")}}>
+                    {s.emoji} {s.label} ({n})
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{maxHeight:"65vh",overflowY:"auto"}}>
+              {listaFiltrada.length===0&&<div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>Nenhum cliente neste filtro</div>}
+              {listaFiltrada.map(c=><CardLista key={c.id} c={c}/>)}
+            </div>
+          </div>
+          <div style={{maxHeight:"80vh",overflowY:"auto"}}>
+            <PainelDetalhe/>
+          </div>
+        </div>
+      )}
+
+      {/* ABA DASH */}
+      {aba==="dash"&&<DashClub/>}
+
+      {/* ABA SCRIPTS */}
+      {aba==="scripts"&&<Biblioteca/>}
+    </div>
+  );
+};
+
 export default function App() {
   const [tab,setTab]=useState("kanban");
   const [clienteId,setClienteId]=useState(null);
@@ -3678,6 +4461,7 @@ export default function App() {
       </div>
       <div style={{ display:"flex",borderBottom:"0.5px solid var(--color-border-tertiary)",marginBottom:24,overflowX:"auto" }}>
         <T label="📋 Kanban" active={tab==="kanban"} color={C.green} onClick={()=>{setClienteId(null);setTab("kanban");}}/>
+        <T label="🎯 Club" active={tab==="club"} color={C.teal} onClick={()=>setTab("club")}/>
         <T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
@@ -3687,6 +4471,7 @@ export default function App() {
         <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
         <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
       </div>
+      {tab==="club"&&<FunilClub onAbrirPerfil={(id)=>{abrirClienteGlobal(id);setTab("kanban");}}/>}
       {tab==="kanban"&&(clienteId?<Perfil key={clienteId} clienteId={clienteId} onVoltar={()=>{setClienteId(null);setRefresh(r=>r+1);}}/>:
           <Kanban onAbrir={setClienteId} reloadToken={refresh}
             filtroHoje={filtroHojeApp} setFiltroHoje={setFiltroHojeApp}
