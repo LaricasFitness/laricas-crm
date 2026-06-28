@@ -842,6 +842,11 @@ const Perfil = ({ clienteId, onVoltar }) => {
       )}
       <div style={{ background:etapa.corL,border:"1px solid "+etapa.cor,borderRadius:12,padding:"12px 16px",marginBottom:12 }}>
         <div style={{ fontSize:11,color:etapa.corD,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4 }}>Etapa atual</div>
+        {c.statusClub&&c.statusClub!=="perdido"&&(
+          <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:C.tealL,borderRadius:6,padding:"3px 10px",marginBottom:6,fontSize:11,color:C.tealD,fontWeight:500 }}>
+            🎯 Funil Club: {STATUS_CLUB.find(s=>s.id===c.statusClub)?.emoji} {STATUS_CLUB.find(s=>s.id===c.statusClub)?.label}
+          </div>
+        )}
         <div style={{ fontSize:14,fontWeight:500,color:etapa.corD,marginBottom:etapa.id==="lead"?6:10 }}>{etapa.emoji} {etapa.label}</div>
         {etapa.id==="lead"&&<div style={{ fontSize:12,color:etapa.corD,background:C.purpleL,borderRadius:6,padding:"5px 8px",marginBottom:10,lineHeight:1.4 }}>Mova para <strong>Primeiro Contato</strong> após enviar a primeira mensagem.</div>}
         <div style={{ fontSize:11,color:etapa.corD,marginBottom:6 }}>Mover para:</div>
@@ -1530,6 +1535,11 @@ const Kanban = ({ onAbrir, reloadToken, filtroHoje, setFiltroHoje, filtroClub, s
         <div style={{ display:"flex",alignItems:"center",gap:4,marginBottom:cl.dataProximoContato?4:0 }}>
           <span style={{ fontSize:11,background:cl.probCor+"22",color:cl.probCor,padding:"1px 6px",borderRadius:20,fontWeight:500 }}>{cl.prob}%</span>
           <span style={{ fontSize:10,color:"var(--color-text-tertiary)" }}>{cl.p}p · {cl.cicloMedio||"?"}d</span>
+          {cl.statusClub&&cl.statusClub!=="perdido"&&(
+            <span style={{ fontSize:9,fontWeight:500,color:C.tealD,background:C.tealL,padding:"1px 5px",borderRadius:10 }}>
+              {STATUS_CLUB.find(s=>s.id===cl.statusClub)?.emoji} Club
+            </span>
+          )}
         </div>
         {cl.dataProximoContato&&<div style={{ fontSize:10,color:v?C.coralD:u||am?C.amberD:"var(--color-text-tertiary)",background:v?C.coralL:u||am?C.amberL:"transparent",padding:v||u||am?"1px 5px":0,borderRadius:4 }}>{v?"⚠ Vencida":u?"⚡ Hoje":am?"📅 Amanhã":"📅"} {!u&&!am&&new Date(cl.dataProximoContato+"T12:00:00").toLocaleDateString("pt-BR")}</div>}
         {cl.lista&&<div style={{ fontSize:10,color:C.purpleD,marginTop:3 }}>{cl.lista}</div>}
@@ -3789,7 +3799,11 @@ const calcScoreClub = (c) => {
   const hoje = new Date();
   const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
   const diasUlt = dtU ? Math.round((hoje-dtU)/86400000) : 999;
-  const diasParaProxima = dtU && ciclo < 999 ? ciclo - diasUlt : 999;
+  const inativa = diasUlt > 90;
+  const muitoInativa = diasUlt > 180;
+  // Ciclo válido só se cliente comprou recentemente (dentro de 3 ciclos)
+  const cicloValido = ciclo < 120 && diasUlt < ciclo * 3;
+  const diasParaProxima = dtU && cicloValido ? ciclo - diasUlt : null;
 
   let score = 0;
   // Pedidos (max 30)
@@ -3797,24 +3811,34 @@ const calcScoreClub = (c) => {
   else if (p >= 3) score += 22;
   else if (p === 2) score += 12;
   else score += 4;
-  // Ciclo (max 25)
-  if (ciclo <= 20) score += 25;
-  else if (ciclo <= 30) score += 20;
-  else if (ciclo <= 45) score += 14;
-  else if (ciclo <= 60) score += 8;
-  else if (ciclo <= 90) score += 3;
-  // Janela de compra (max 20) — SINAL MAIS PODEROSO
-  if (diasParaProxima >= -3 && diasParaProxima <= 5) score += 20; // está comprando agora
-  else if (diasParaProxima <= 10) score += 14;
-  else if (diasParaProxima <= 14) score += 8;
-  // Gasto (max 15)
+  // Ciclo histórico (max 22)
+  if (ciclo <= 20) score += 22;
+  else if (ciclo <= 30) score += 18;
+  else if (ciclo <= 45) score += 12;
+  else if (ciclo <= 60) score += 6;
+  else if (ciclo <= 90) score += 2;
+  // Janela de compra — só conta se ativa (max 20)
+  if (!inativa && diasParaProxima !== null) {
+    if (diasParaProxima >= -3 && diasParaProxima <= 5) score += 20;
+    else if (diasParaProxima <= 10) score += 14;
+    else if (diasParaProxima <= 14) score += 8;
+  }
+  // Gasto total (max 15)
   if (gasto > 1500) score += 15;
   else if (gasto > 800) score += 10;
   else if (gasto > 400) score += 6;
   else if (gasto > 150) score += 3;
   // Fora SP (max 10)
   if (fora) score += 10;
-  return Math.min(100, score);
+
+  // Penalidade por inatividade — FATOR DETERMINANTE
+  if (muitoInativa) score = Math.round(score * 0.05);        // >180d: score quase zero
+  else if (diasUlt > 120) score = Math.round(score * 0.15);  // 120-180d: muito baixo
+  else if (inativa) score = Math.round(score * 0.30);        // 90-120d: baixo
+  else if (diasUlt > 60) score = Math.round(score * 0.60);   // 60-90d: moderado
+  else if (diasUlt > 45) score = Math.round(score * 0.80);   // 45-60d: leve penalidade
+
+  return { score: Math.min(100, score), diasUlt, diasParaProxima, inativa, muitoInativa };
 };
 
 const sugerirScript = (c) => {
@@ -3882,7 +3906,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
         c.etapa !== "encerrado" &&
         c.statusClub !== "fechou" &&
         c.statusClub !== "perdido"
-      ).map(c => ({ ...c, _score: calcScoreClub(c) }))
+      ).map(c => { const sc=calcScoreClub(c); return {...c,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; })
         .sort((a,b) => b._score - a._score);
       setClientes(candidatos);
       setLoading(false);
@@ -3892,8 +3916,8 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const saveCliente = async (atualizado) => {
     setSalvando(true);
     await dbSave(atualizado);
-    setClientes(prev => prev.map(c => c.id === atualizado.id ? {...atualizado, _score: calcScoreClub(atualizado)} : c));
-    setSel({...atualizado, _score: calcScoreClub(atualizado)});
+    setClientes(prev => prev.map(c => { if(c.id!==atualizado.id) return c; const sc=calcScoreClub(atualizado); return {...atualizado,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; }));
+    const scSel=calcScoreClub(atualizado); setSel({...atualizado,_score:scSel.score,_diasUlt:scSel.diasUlt,_diasParaProxima:scSel.diasParaProxima,_inativa:scSel.inativa,_muitoInativa:scSel.muitoInativa});
     setOk("Salvo!");
     setTimeout(() => setOk(""), 1500);
     setSalvando(false);
@@ -3950,15 +3974,11 @@ const FunilClub = ({ onAbrirPerfil }) => {
   });
   const janeslaAberta = clientes.filter(c => {
     if (c.statusClub) return false;
-    const score = c._score||0;
-    if (score < 50) return false;
-    const ciclo = c.cicloMedio||999;
-    const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
-    const diasUlt = dtU ? Math.round((new Date()-dtU)/86400000) : 999;
-    const diasParaProxima = dtU && ciclo < 999 ? ciclo - diasUlt : 999;
-    return diasParaProxima <= 7;
+    if (c._inativa || c._muitoInativa) return false;
+    return c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -3 && c._diasParaProxima <= 7;
   });
-  const quentesNaoAbordados = clientes.filter(c => !c.statusClub && (c._score||0) >= 65).slice(0, 10);
+  const quentesNaoAbordados = clientes.filter(c => !c.statusClub && (c._score||0) >= 65 && !c._inativa).slice(0, 10);
+  const reativarPrimeiro = clientes.filter(c => c._inativa && !c.statusClub).slice(0, 5);
 
   // ── Filtro da lista ────────────────────────────────────────────────────────
   const listaFiltrada = clientes.filter(c => {
@@ -3991,10 +4011,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const CardLista = ({c}) => {
     const st = statusInfo(c.statusClub);
     const ciclo = c.cicloMedio||0;
-    const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
-    const diasUlt = dtU ? Math.round((new Date()-dtU)/86400000) : null;
-    const diasParaProxima = dtU && ciclo > 0 ? ciclo - diasUlt : null;
-    const janelaAberta = diasParaProxima !== null && diasParaProxima >= -3 && diasParaProxima <= 7;
+    const janelaAberta = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -3 && c._diasParaProxima <= 7 && !c._inativa;
     const isSelected = sel?.id === c.id;
     return (
       <button onClick={()=>{setSel(c);setScriptSel(sugerirScript(c));setCampos({});}}
@@ -4007,9 +4024,11 @@ const FunilClub = ({ onAbrirPerfil }) => {
               <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)"}}>{c.nome}</span>
               {janelaAberta&&<span style={{fontSize:9,fontWeight:600,background:C.greenL,color:C.greenD,padding:"1px 6px",borderRadius:10}}>🛒 COMPRANDO AGORA</span>}
             </div>
-            <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>
+            <div style={{fontSize:11,color:c._inativa?"var(--color-text-tertiary)":"var(--color-text-tertiary)",marginTop:2}}>
               {c.p||0}p · R${(c.gasto||0).toFixed(0)} · ciclo {ciclo||"?"}d
-              {diasUlt!==null&&<span style={{marginLeft:6}}>· ult. {diasUlt}d atrás</span>}
+              {c._diasUlt&&<span style={{marginLeft:6,color:c._muitoInativa?C.coralD:c._inativa?C.amber:"var(--color-text-tertiary)"}}>
+                · {c._diasUlt}d sem comprar{c._muitoInativa?" ⚠":""}
+              </span>}
             </div>
           </div>
           <span style={{fontSize:10,fontWeight:500,color:st.cor,background:st.cor+"22",padding:"2px 7px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>
@@ -4036,10 +4055,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
     const st = statusInfo(c.statusClub);
     const planoRec = c.planoRec || sugerirPlano(c);
     const ciclo = c.cicloMedio||0;
-    const dtU = c.dataUltimo ? new Date(c.dataUltimo+"T12:00:00") : null;
-    const diasUlt = dtU ? Math.round((new Date()-dtU)/86400000) : null;
-    const diasParaProxima = dtU && ciclo > 0 ? ciclo - diasUlt : null;
-    const janelaAberta = diasParaProxima !== null && diasParaProxima >= -3 && diasParaProxima <= 7;
+    const janelaAberta = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -3 && c._diasParaProxima <= 7 && !c._inativa;
 
     const scriptAtual = SCRIPTS_CLUB.find(s=>s.id===scriptSel) || SCRIPTS_CLUB.find(s=>s.id===sugerirScript(c));
     const textoScript = scriptAtual ? personalizarScript(scriptAtual.copy, c) : "";
@@ -4085,9 +4101,16 @@ const FunilClub = ({ onAbrirPerfil }) => {
               🛒 Janela de compra aberta — ela está pensando em Laricas agora!
             </div>
           )}
-          {diasParaProxima!==null&&!janelaAberta&&(
+          {c._diasParaProxima!==null&&!janelaAberta&&!c._inativa&&(
             <div style={{marginTop:6,fontSize:11,color:C.teal,textAlign:"center"}}>
-              Próxima compra estimada em {diasParaProxima>0?diasParaProxima+"d":"já passou"}
+              {c._diasParaProxima>0
+                ? "Próxima compra estimada em "+c._diasParaProxima+" dias"
+                : "Próxima compra passou há "+(Math.abs(c._diasParaProxima))+" dias — momento ideal!"}
+            </div>
+          )}
+          {c._inativa&&(
+            <div style={{marginTop:6,fontSize:11,color:C.coralD,background:C.coralL,borderRadius:6,padding:"4px 8px",textAlign:"center"}}>
+              ⚠ Inativa há {c._diasUlt} dias — reativar antes de oferecer Club
             </div>
           )}
         </div>
@@ -4369,7 +4392,15 @@ const FunilClub = ({ onAbrirPerfil }) => {
               {quentesNaoAbordados.map(c=><CardLista key={c.id} c={c}/>)}
             </div>
           )}
-          {vencidos.length===0&&janeslaAberta.length===0&&quentesNaoAbordados.length===0&&interessadosSemLink.length===0&&(
+          {reativarPrimeiro.length>0&&(
+            <div style={{marginTop:16}}>
+              <div style={{fontSize:12,fontWeight:500,color:C.amberD,marginBottom:8,background:C.amberL,padding:"6px 10px",borderRadius:8}}>
+                ⚠ Reativar antes de oferecer Club ({reativarPrimeiro.length} na lista)
+              </div>
+              {reativarPrimeiro.map(c=><CardLista key={c.id} c={c}/>)}
+            </div>
+          )}
+          {vencidos.length===0&&janeslaAberta.length===0&&quentesNaoAbordados.length===0&&interessadosSemLink.length===0&&reativarPrimeiro.length===0&&(
             <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>
               <div style={{fontSize:32,marginBottom:12}}>✅</div>
               <div style={{fontSize:13}}>Tudo em dia! Nenhuma ação urgente no momento.</div>
