@@ -69,7 +69,7 @@ const dbGetAll  = async () => {
   let all = [], offset = 0;
   while (true) {
     const r = await sb("/clientes?select=id,dados&id=neq.__ultimo_import__&order=atualizado_em.desc&limit="+PAGE+"&offset="+offset);
-    const pg = (r||[]).map(x=>x.dados).filter(Boolean);
+    const pg = (r||[]).map(x=>x.dados).filter(Boolean).map(fixCliente);
     all = [...all, ...pg];
     if (pg.length < PAGE) break;
     offset += PAGE;
@@ -287,7 +287,27 @@ const corrigirObjetivo = (c) => {
   return c;
 };
 
-const inp = (ex) => ({ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:14,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none",...ex });
+const fixEncoding = (s) => {
+  if (!s || typeof s !== "string") return s;
+  try {
+    // Detecta se tem sequências típicas de UTF-8 lido como Latin-1
+    if (!/Ã|Â/.test(s)) return s;
+    const bytes = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch(e) { return s; }
+};
+
+const fixCliente = (c) => {
+  if (!c) return c;
+  return {
+    ...c,
+    nome: fixEncoding(c.nome),
+    lista: fixEncoding(c.lista),
+  };
+};
+
+ ({ width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:14,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none",...ex });
 const T = ({ label, active, color, onClick }) => ( <button onClick={onClick} style={{ padding:"8px 12px",fontSize:12,fontWeight:500,color:active?color:"var(--color-text-secondary)",borderBottom:active?"2px solid "+color:"2px solid transparent",marginBottom:-1,background:"transparent",border:"none",cursor:"pointer",whiteSpace:"nowrap" }}>{label}</button> );
 const M = ({ label, value, sub, cor }) => ( <div style={{ background:"var(--color-background-secondary)",borderRadius:8,padding:"10px 12px" }}><div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>{label}</div><div style={{ fontSize:18,fontWeight:500,color:cor||"var(--color-text-primary)" }}>{value}</div>{sub&&<div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginTop:2 }}>{sub}</div>}</div> );
 
@@ -764,7 +784,7 @@ const SeqRetencao = ({ c }) => {
 
 const Perfil = ({ clienteId, onVoltar }) => {
   const [c,setC]=useState(null); const [confirmDel,setConfirmDel]=useState(false); const [salvando,setSalvando]=useState(false); const [toast,setToast]=useState("");
-  useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(corrigirObjetivo(cl)); }); }, [clienteId]);
+  useEffect(() => { dbGetAll().then(lista => { const cl = lista.find(c=>c.id===clienteId); if(cl) setC(corrigirObjetivo(fixCliente(cl))); }); }, [clienteId]);
   const save = async (updates) => { const novo={...c,...updates}; setC(novo); try { await dbSave(novo); } catch(e) {} };
   const mover = async (etapaId) => {
     setSalvando(true);
@@ -3678,8 +3698,20 @@ const OBJECTIONS = [
 const PLANOS = ["Trimestral","Semestral","Anual"];
 
 const FOLLOW_UP_DAYS = {
-  "contatado": 2, "respondeu": 1, "interessado": 1,
-  "link_enviado": 1, "nao_agora": 7, "follow_up": 3,
+  "contatado": 2,
+  "respondeu": 1,
+  "interessado": 1,
+  "link_enviado": 2,
+  "nao_agora": 14,
+  "follow_up": 3,
+};
+const FOLLOW_UP_LABELS = {
+  "contatado": "48h para follow-up",
+  "respondeu": "Amanhã — está quente",
+  "interessado": "Amanhã — enviar link",
+  "link_enviado": "2 dias — aguardar decisão",
+  "nao_agora": "14 dias — dar espaço",
+  "follow_up": "3 dias",
 };
 
 const SCRIPTS_CLUB = [
@@ -3895,6 +3927,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const [scriptSel, setScriptSel] = useState(null);
   const [campos, setCampos] = useState({});
   const [copiadoId, setCopiadoId] = useState("");
+  const [followUpProposto, setFollowUpProposto] = useState(null); // {data, label, clienteId}
   const hoje = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
@@ -3925,17 +3958,26 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
   const atualizarStatus = async (c, novoStatus) => {
     const followUpDias = FOLLOW_UP_DAYS[novoStatus];
+    const followUpData = followUpDias ? addDays(followUpDias) : null;
     const atualizado = {
       ...c,
       statusClub: novoStatus,
       ...(novoStatus === "contatado" && !c.dataAbordagem ? { dataAbordagem: hoje } : {}),
       dataUltimoContato: hoje,
-      ...(followUpDias ? { proximoFollowup: addDays(followUpDias) } : {}),
+      ...(followUpData ? { proximoFollowup: followUpData } : {}),
+      ...(novoStatus === "fechou" ? { dataConversao: hoje } : {}),
     };
-    if (novoStatus === "fechou") {
-      atualizado.dataConversao = hoje;
-    }
     await saveCliente(atualizado);
+    // Propor follow-up com opção de editar
+    if (followUpData) {
+      setFollowUpProposto({
+        data: followUpData,
+        label: FOLLOW_UP_LABELS[novoStatus]||"",
+        clienteId: c.id,
+        status: novoStatus,
+      });
+      setTimeout(() => setFollowUpProposto(null), 8000);
+    }
   };
 
   const personalizarScript = (copy, c) => {
@@ -4140,6 +4182,27 @@ const FunilClub = ({ onAbrirPerfil }) => {
             </button>
           </div>
           {ok&&<div style={{fontSize:12,color:C.greenD,marginTop:4,textAlign:"center"}}>✓ {ok}</div>}
+          {followUpProposto&&followUpProposto.clienteId===c.id&&(
+            <div style={{background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:8,padding:"10px 12px",marginTop:8}}>
+              <div style={{fontSize:11,color:C.amberD,fontWeight:500,marginBottom:6}}>
+                🔔 Follow-up automático: {new Date(followUpProposto.data+"T12:00:00").toLocaleDateString("pt-BR")} — {followUpProposto.label}
+              </div>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input type="date" defaultValue={followUpProposto.data}
+                  onChange={e=>{
+                    const nova = e.target.value;
+                    const atualizado = {...c, proximoFollowup: nova};
+                    saveCliente(atualizado);
+                    setFollowUpProposto(null);
+                  }}
+                  style={{flex:1,padding:"4px 8px",borderRadius:6,border:"0.5px solid "+C.amber,fontSize:11,color:C.amberD,background:"#fff"}}/>
+                <button onClick={()=>setFollowUpProposto(null)}
+                  style={{padding:"4px 10px",borderRadius:6,fontSize:11,cursor:"pointer",background:C.green,color:"#fff",border:"none",fontWeight:500}}>
+                  ✓ OK
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Script sugerido */}
@@ -4366,48 +4429,128 @@ const FunilClub = ({ onAbrirPerfil }) => {
       </div>
 
       {/* ABA HOJE */}
-      {aba==="hoje"&&(
-        <div>
-          <div style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)",marginBottom:12}}>
-            Central de operação — {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}>
-            <CardUrgencia emoji="🔔" label="Follow-ups vencidos" count={vencidos.length} cor={C.coral} corD={C.coralD} corL={C.coralL} lista={vencidos}/>
-            <CardUrgencia emoji="🔗" label="Interessados sem link" count={interessadosSemLink.length} cor={C.amber} corD={C.amberD} corL={C.amberL} lista={interessadosSemLink}/>
-            <CardUrgencia emoji="⏳" label="Link sem fechamento" count={linkSemFechamento.length} cor={C.blue} corD={C.blueD} corL={C.blueL} lista={linkSemFechamento}/>
-            <CardUrgencia emoji="🔇" label="Sem resposta 48h" count={semResposta48h.length} cor={C.amber} corD={C.amberD} corL={C.amberL} lista={semResposta48h}/>
-          </div>
-          {janeslaAberta.length>0&&(
-            <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginBottom:16}}>
-              <div style={{fontSize:13,fontWeight:500,color:C.greenD,marginBottom:8}}>🛒 Janela de compra aberta ({janeslaAberta.length})</div>
-              <div style={{fontSize:12,color:C.greenD,marginBottom:10,lineHeight:1.5}}>
-                Estas clientes estão prestes a fazer um pedido avulso. Agora é o melhor momento para oferecer o Club.
+      {aba==="hoje"&&(()=>{
+        // Apenas clientes prontas para Club (ativas, 2+ pedidos, não assinantes)
+        const prontas = clientes.filter(c =>
+          (c.p||0) >= 2 &&
+          (c._diasUlt||999) < 90 &&
+          !c._muitoInativa
+        );
+
+        // 1. AÇÃO IMEDIATA — já estão no funil e precisam de resposta agora
+        const acaoImediata = prontas.filter(c =>
+          c.statusClub === "interessado" ||
+          (c.statusClub === "respondeu") ||
+          (c.statusClub === "contatado" && c.dataUltimoContato === hoje) ||
+          (c.proximoFollowup && c.proximoFollowup <= hoje)
+        ).sort((a,b) => {
+          const prioA = a.statusClub==="interessado"?0:a.statusClub==="respondeu"?1:2;
+          const prioB = b.statusClub==="interessado"?0:b.statusClub==="respondeu"?1:2;
+          return prioA - prioB;
+        });
+
+        // 2. JANELA DE COMPRA — prestes a pedir avulso, interceptar agora
+        const janelaHoje = prontas.filter(c =>
+          !c.statusClub &&
+          c._diasParaProxima !== null &&
+          c._diasParaProxima !== undefined &&
+          c._diasParaProxima >= -2 &&
+          c._diasParaProxima <= 5
+        ).sort((a,b) => (a._diasParaProxima||0) - (b._diasParaProxima||0));
+
+        // 3. PRIMEIRO CONTATO — score alto, prontas, nunca abordadas
+        const primeiroContato = prontas.filter(c =>
+          !c.statusClub &&
+          (c._score||0) >= 55 &&
+          (c._diasUlt||999) <= 45
+        ).sort((a,b) => (b._score||0) - (a._score||0)).slice(0, 8);
+
+        // 4. LINK SEM FECHAMENTO — enviou link, aguardando
+        const aguardandoFechamento = prontas.filter(c => c.statusClub === "link_enviado");
+
+        const nada = acaoImediata.length===0 && janelaHoje.length===0 && primeiroContato.length===0 && aguardandoFechamento.length===0;
+
+        return (
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)"}}>
+                  {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
+                </div>
+                <div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>
+                  {acaoImediata.length + janelaHoje.length + primeiroContato.length} clientes para contatar hoje
+                </div>
               </div>
-              {janeslaAberta.map(c=><CardLista key={c.id} c={c}/>)}
-            </div>
-          )}
-          {quentesNaoAbordados.length>0&&(
-            <div>
-              <div style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)",marginBottom:8}}>🔥 Quentes não abordadas (top {quentesNaoAbordados.length})</div>
-              {quentesNaoAbordados.map(c=><CardLista key={c.id} c={c}/>)}
-            </div>
-          )}
-          {reativarPrimeiro.length>0&&(
-            <div style={{marginTop:16}}>
-              <div style={{fontSize:12,fontWeight:500,color:C.amberD,marginBottom:8,background:C.amberL,padding:"6px 10px",borderRadius:8}}>
-                ⚠ Reativar antes de oferecer Club ({reativarPrimeiro.length} na lista)
+              <div style={{display:"flex",gap:6}}>
+                {[
+                  {label:"Ação imediata",count:acaoImediata.length,cor:C.coral},
+                  {label:"Janela aberta",count:janelaHoje.length,cor:C.green},
+                  {label:"1° contato",count:primeiroContato.length,cor:C.teal},
+                ].map(item=>item.count>0&&(
+                  <div key={item.label} style={{textAlign:"center",background:item.cor+"18",borderRadius:8,padding:"6px 10px",border:"0.5px solid "+item.cor}}>
+                    <div style={{fontSize:18,fontWeight:600,color:item.cor}}>{item.count}</div>
+                    <div style={{fontSize:9,color:item.cor,textTransform:"uppercase",letterSpacing:"0.06em"}}>{item.label}</div>
+                  </div>
+                ))}
               </div>
-              {reativarPrimeiro.map(c=><CardLista key={c.id} c={c}/>)}
             </div>
-          )}
-          {vencidos.length===0&&janeslaAberta.length===0&&quentesNaoAbordados.length===0&&interessadosSemLink.length===0&&reativarPrimeiro.length===0&&(
-            <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>
-              <div style={{fontSize:32,marginBottom:12}}>✅</div>
-              <div style={{fontSize:13}}>Tudo em dia! Nenhuma ação urgente no momento.</div>
-            </div>
-          )}
-        </div>
-      )}
+
+            {acaoImediata.length>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                  <span style={{fontSize:16}}>🔥</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.coralD}}>Ação imediata</span>
+                  <span style={{fontSize:11,color:C.coralD,background:C.coralL,padding:"1px 8px",borderRadius:20}}>{acaoImediata.length}</span>
+                </div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>Responderam, estão interessadas ou têm follow-up vencido — prioridade máxima.</div>
+                {acaoImediata.map(c=><CardLista key={c.id} c={c}/>)}
+              </div>
+            )}
+
+            {janelaHoje.length>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                  <span style={{fontSize:16}}>🛒</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.greenD}}>Janela de compra aberta</span>
+                  <span style={{fontSize:11,color:C.greenD,background:C.greenL,padding:"1px 8px",borderRadius:20}}>{janelaHoje.length}</span>
+                </div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>Estão prestes a fazer um pedido avulso. Interceptar agora com proposta do Club.</div>
+                {janelaHoje.map(c=><CardLista key={c.id} c={c}/>)}
+              </div>
+            )}
+
+            {aguardandoFechamento.length>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                  <span style={{fontSize:16}}>🔗</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.blueD}}>Link enviado — aguardando fechamento</span>
+                  <span style={{fontSize:11,color:C.blueD,background:C.blueL,padding:"1px 8px",borderRadius:20}}>{aguardandoFechamento.length}</span>
+                </div>
+                {aguardandoFechamento.map(c=><CardLista key={c.id} c={c}/>)}
+              </div>
+            )}
+
+            {primeiroContato.length>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                  <span style={{fontSize:16}}>📤</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.tealD}}>Primeiro contato</span>
+                  <span style={{fontSize:11,color:C.tealD,background:C.tealL,padding:"1px 8px",borderRadius:20}}>{primeiroContato.length}</span>
+                </div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>Score alto, compras recentes, nunca foram abordadas para o Club.</div>
+                {primeiroContato.map(c=><CardLista key={c.id} c={c}/>)}
+              </div>
+            )}
+
+            {nada&&(
+              <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>
+                <div style={{fontSize:32,marginBottom:12}}>✅</div>
+                <div style={{fontSize:13}}>Nenhuma ação urgente hoje. A lista está em dia!</div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ABA LISTA */}
       {aba==="lista"&&(
