@@ -2029,8 +2029,7 @@ const ImportarLista = ({ onSalvo }) => {
               ...(reativarClub ? {
                 statusClub: "follow_up",
                 proximoFollowup: new Date().toISOString().split("T")[0],
-                obsClub: (existente.obsClub||"")+(existente.obsClub?"
-":"")+"⚡ Fez novo pedido avulso em "+novaDataU+" — abordar agora!",
+                obsClub: (existente.obsClub||"")+(existente.obsClub?"\n":"")+"⚡ Fez novo pedido avulso em "+novaDataU+" — abordar agora!",
               } : {}),
               ...(tr ? {
                 objetivo: tr.obj, objetivoLabel: tr.label,
