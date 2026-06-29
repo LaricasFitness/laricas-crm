@@ -4040,7 +4040,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
     dbGetAll().then(lista => {
       // Só clientes com pedidos (potenciais Club) e que não são assinantes
       const candidatos = lista.filter(c =>
-        (c.p||0) >= 1 &&
+        (c.p||0) >= 2 &&
         c.etapa !== "experiencia" &&
         c.etapa !== "encerrado" &&
         c.statusClub !== "fechou" &&
@@ -4160,6 +4160,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
       if (c.statusClub) return false;
       if ((c._score||0) < 40) return false;
       if ((c._diasUlt||999) > 45) return false;
+      if (c._inativa || c._muitoInativa) return false;
     } else if (filtroStatus) {
       if (c.statusClub !== filtroStatus) return false;
     }
