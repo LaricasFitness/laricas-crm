@@ -4082,7 +4082,11 @@ const FunilClub = ({ onAbrirPerfil }) => {
       if (!(c.nome||"").toLowerCase().includes(q) && !(c.telefone||"").includes(q)) return false;
     }
     return true;
-  }).sort((a,b) => prioClub(b) - prioClub(a));
+  }).sort((a,b) => {
+    const pa = prioClub(a), pb = prioClub(b);
+    if (pb !== pa) return pb - pa;
+    return (b._score||0) - (a._score||0); // desempate pelo score Club
+  });
 
   if (loading) return <div style={{textAlign:"center",padding:60,color:"var(--color-text-tertiary)"}}>Carregando funil Club...</div>;
 
