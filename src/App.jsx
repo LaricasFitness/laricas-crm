@@ -3775,7 +3775,7 @@ const ARVORE = {
   ],
   "obj_pensar": [
     { label:"Voltou interessada",              emoji:"🔥", proximoScript:"fechamento", novoStatus:"interessado" },
-    { label:"Quer mais tempo",                 emoji:"⏳", proximoScript:"followup_7d", novoStatus:"follow_up" },
+    { label:"Quer mais tempo",                 emoji:"⏳", proximoScript:"condicao_especial", novoStatus:"follow_up" },
     { label:"Não quer mais",                   emoji:"❌", proximoScript:null, novoStatus:"perdido" },
   ],
   "followup_48h": [
@@ -3786,7 +3786,12 @@ const ARVORE = {
   ],
   "followup_7d": [
     { label:"Respondeu interessada",           emoji:"🔥", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Ainda em dúvida",                 emoji:"🤔", proximoScript:"condicao_especial", novoStatus:"follow_up" },
     { label:"Não respondeu / ignorou",         emoji:"🔇", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "condicao_especial": [
+    { label:"Aceitou! Quer o link",            emoji:"🏆", proximoScript:null, novoStatus:"link_enviado" },
+    { label:"Mesmo assim não quer",            emoji:"❌", proximoScript:null, novoStatus:"perdido" },
   ],
 };
 
@@ -3865,6 +3870,17 @@ Quer que eu te explique rapidinho como funciona? 😊`,
     copy:`Última mensagem sobre isso, prometo! 😄
 
 Se em algum momento você quiser receber Laricas todo mês com desconto e frete grátis, me chama que te ajudo a escolher o melhor plano.`,
+  },
+  {
+    id:"condicao_especial", label:"L — Condição especial (gatilho final)", tag:"fechamento",
+    perfil:"Clientes em dúvida após follow-up — última oferta antes de perder",
+    copy:`[Nome], não costumo fazer isso, mas queria te dar uma condição especial 😊
+
+O plano Anual do Club já tem 20% de desconto em relação ao site. Para você, vou garantir mais 10% — ou seja, 30% de desconto durante o primeiro ano.
+
+É a melhor entrada que tenho para oferecer.
+
+Quer que eu te mande o link?`,
   },
   {
     id:"obj_caro", label:"H — Objeção: caro", tag:"objecao",
