@@ -3722,6 +3722,74 @@ const FOLLOW_UP_LABELS = {
   "follow_up": "3 dias",
 };
 
+
+// Árvore de decisão: script enviado → respostas possíveis → próximo script + status
+const ARVORE = {
+  "recorrente": [
+    { label:"Ficou curiosa / quer saber mais", emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
+    { label:"Não quer fidelidade",             emoji:"🔓", proximoScript:"obj_fidelidade", novoStatus:"respondeu" },
+    { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
+    { label:"Não respondeu",                   emoji:"🔇", proximoScript:"followup_48h", novoStatus:"contatado" },
+  ],
+  "ticket_alto": [
+    { label:"Ficou curiosa / quer saber mais", emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
+    { label:"Não quer fidelidade",             emoji:"🔓", proximoScript:"obj_fidelidade", novoStatus:"respondeu" },
+    { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
+    { label:"Não respondeu",                   emoji:"🔇", proximoScript:"followup_48h", novoStatus:"contatado" },
+  ],
+  "kit": [
+    { label:"Ficou curiosa / quer saber mais", emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
+    { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
+    { label:"Não respondeu",                   emoji:"🔇", proximoScript:"followup_48h", novoStatus:"contatado" },
+  ],
+  "planos": [
+    { label:"Animada / quer o link",           emoji:"🔥", proximoScript:"fechamento", novoStatus:"interessado" },
+    { label:"Medo de enjoar",                  emoji:"😰", proximoScript:"obj_enjoar", novoStatus:"respondeu" },
+    { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
+    { label:"Não quer fidelidade",             emoji:"🔓", proximoScript:"obj_fidelidade", novoStatus:"respondeu" },
+    { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
+  ],
+  "fechamento": [
+    { label:"Sim! Quero o link",               emoji:"✅", proximoScript:null, novoStatus:"link_enviado" },
+    { label:"Ainda com dúvida de preço",       emoji:"💸", proximoScript:"obj_caro", novoStatus:"interessado" },
+    { label:"Quer mais tempo",                 emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"interessado" },
+    { label:"Desistiu",                        emoji:"❌", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "obj_caro": [
+    { label:"Entendeu e quer continuar",       emoji:"😊", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Ainda resistente",                emoji:"😐", proximoScript:"followup_7d", novoStatus:"follow_up" },
+    { label:"Não quer mais",                   emoji:"❌", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "obj_fidelidade": [
+    { label:"Aceitou o trimestral",            emoji:"✅", proximoScript:"fechamento", novoStatus:"interessado" },
+    { label:"Ainda indecisa",                  emoji:"🤔", proximoScript:"followup_7d", novoStatus:"follow_up" },
+    { label:"Não quer mais",                   emoji:"❌", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "obj_enjoar": [
+    { label:"Ficou tranquila / quer continuar",emoji:"😊", proximoScript:"fechamento", novoStatus:"interessado" },
+    { label:"Ainda com medo",                  emoji:"😰", proximoScript:"followup_7d", novoStatus:"follow_up" },
+    { label:"Não quer mais",                   emoji:"❌", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "obj_pensar": [
+    { label:"Voltou interessada",              emoji:"🔥", proximoScript:"fechamento", novoStatus:"interessado" },
+    { label:"Quer mais tempo",                 emoji:"⏳", proximoScript:"followup_7d", novoStatus:"follow_up" },
+    { label:"Não quer mais",                   emoji:"❌", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "followup_48h": [
+    { label:"Respondeu com interesse",         emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
+    { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
+    { label:"Não respondeu de novo",           emoji:"🔇", proximoScript:"followup_7d", novoStatus:"follow_up" },
+  ],
+  "followup_7d": [
+    { label:"Respondeu interessada",           emoji:"🔥", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Não respondeu / ignorou",         emoji:"🔇", proximoScript:null, novoStatus:"perdido" },
+  ],
+};
+
 const SCRIPTS_CLUB = [
   {
     id:"recorrente", label:"A — Cliente recorrente", tag:"recorrente",
@@ -3994,6 +4062,8 @@ const FunilClub = ({ onAbrirPerfil }) => {
       ...(novoStatus === "fechou" ? { dataConversao: hoje } : {}),
     };
     await saveCliente(atualizado);
+    // Atualizar script sugerido automaticamente
+    setScriptSel(sugerirScript(atualizado));
     // Propor follow-up com opção de editar
     if (followUpData) {
       setFollowUpProposto({
@@ -4083,9 +4153,13 @@ const FunilClub = ({ onAbrirPerfil }) => {
     }
     return true;
   }).sort((a,b) => {
+    // Filtro por status específico → ordenar direto pelo score Club
+    const filtroEspecifico = filtroStatus && filtroStatus !== "hoje" && filtroStatus !== "primeiro_contato";
+    if (filtroEspecifico) return (b._score||0) - (a._score||0);
+    // Sem filtro ou filtros de contexto → prioClub + score como desempate
     const pa = prioClub(a), pb = prioClub(b);
     if (pb !== pa) return pb - pa;
-    return (b._score||0) - (a._score||0); // desempate pelo score Club
+    return (b._score||0) - (a._score||0);
   });
 
   if (loading) return <div style={{textAlign:"center",padding:60,color:"var(--color-text-tertiary)"}}>Carregando funil Club...</div>;
@@ -4332,6 +4406,58 @@ const FunilClub = ({ onAbrirPerfil }) => {
                   </button>
                 )}
               </div>
+
+              {/* Respostas possíveis */}
+              {ARVORE[scriptSel||sugerirScript(c)]&&(
+                <div style={{marginTop:10}}>
+                  <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
+                    Como ela respondeu?
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {(ARVORE[scriptSel||sugerirScript(c)]||[]).map((op,i)=>(
+                      <button key={i} onClick={async()=>{
+                        // Registrar no log
+                        const logEntry = {
+                          texto:"Resposta: "+op.label+" → "+((op.proximoScript&&SCRIPTS_CLUB.find(s=>s.id===op.proximoScript)?.label)||op.novoStatus),
+                          data:new Date().toLocaleDateString("pt-BR"),
+                          hora:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
+                          resp:c.responsavel||"",
+                        };
+                        const atualizado={
+                          ...c,
+                          statusClub:op.novoStatus,
+                          ...(op.novoStatus==="contatado"&&!c.dataAbordagem?{dataAbordagem:hoje}:{}),
+                          dataUltimoContato:hoje,
+                          ...(FOLLOW_UP_DAYS[op.novoStatus]?{proximoFollowup:addDays(FOLLOW_UP_DAYS[op.novoStatus])}:{}),
+                          ...(op.novoStatus==="fechou"?{dataConversao:hoje}:{}),
+                          ...(op.novoStatus==="contatado"?{tentativasClub:(c.tentativasClub||0)+1}:{}),
+                          logAtividade:[logEntry,...(c.logAtividade||[])].slice(0,30),
+                        };
+                        await saveCliente(atualizado);
+                        if(op.proximoScript) setScriptSel(op.proximoScript);
+                        else if(op.novoStatus==="perdido"||op.novoStatus==="link_enviado") setScriptSel(null);
+                        if(FOLLOW_UP_DAYS[op.novoStatus]){
+                          setFollowUpProposto({data:addDays(FOLLOW_UP_DAYS[op.novoStatus]),label:FOLLOW_UP_LABELS[op.novoStatus]||"",clienteId:c.id,status:op.novoStatus});
+                          setTimeout(()=>setFollowUpProposto(null),8000);
+                        }
+                      }}
+                        style={{width:"100%",textAlign:"left",padding:"8px 12px",borderRadius:8,fontSize:12,cursor:"pointer",
+                          background:op.novoStatus==="perdido"?C.coralL:op.novoStatus==="link_enviado"||op.novoStatus==="interessado"?C.greenL:"var(--color-background-primary)",
+                          border:"0.5px solid "+(op.novoStatus==="perdido"?C.coral:op.novoStatus==="link_enviado"||op.novoStatus==="interessado"?C.green:"var(--color-border-tertiary)"),
+                          color:op.novoStatus==="perdido"?C.coralD:op.novoStatus==="link_enviado"||op.novoStatus==="interessado"?C.greenD:"var(--color-text-primary)",
+                          display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:16,flexShrink:0}}>{op.emoji}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:500}}>{op.label}</div>
+                          {op.proximoScript&&<div style={{fontSize:10,color:"var(--color-text-tertiary)",marginTop:1}}>
+                            → {SCRIPTS_CLUB.find(s=>s.id===op.proximoScript)?.label||op.proximoScript}
+                          </div>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
