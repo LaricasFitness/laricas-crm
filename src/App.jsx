@@ -2016,6 +2016,8 @@ const ImportarLista = ({ onSalvo }) => {
             const dp = existente.dataPrimeiro||p.dataPrimeiro||"";
             const temDados = !!(dp && existente.fora !== null && novoP >= 1);
             const tr = temDados ? runTriagem(novoP, dp, novaDataU||dp, existente.fora, novoTotal) : null;
+            // Se estava como "nao_agora" e fez nova compra → auto-reativar para follow_up
+            const reativarClub = existente.statusClub === "nao_agora" && novosOrdens.length > 0;
             atualizados.push({
               ...existente,
               gasto: novoTotal,
@@ -2024,6 +2026,12 @@ const ImportarLista = ({ onSalvo }) => {
               dataPrimeiro: dp,
               email: existente.email || p.email,
               pedidosImportados: todosPedidos,
+              ...(reativarClub ? {
+                statusClub: "follow_up",
+                proximoFollowup: new Date().toISOString().split("T")[0],
+                obsClub: (existente.obsClub||"")+(existente.obsClub?"
+":"")+"⚡ Fez novo pedido avulso em "+novaDataU+" — abordar agora!",
+              } : {}),
               ...(tr ? {
                 objetivo: tr.obj, objetivoLabel: tr.label,
                 objetivoCor: tr.cor, objetivoCorD: tr.corD, objetivoAlerta: tr.alerta,
@@ -3883,8 +3891,21 @@ const sugerirScript = (c) => {
   if (c.statusClub === "nao_agora" || c.statusClub === "follow_up") return "followup_7d";
   if (gasto / Math.max(p, 1) > 200) return "ticket_alto";
   if (p >= 3) return "recorrente";
-  if (p >= 2) return "recorrente";
   return "recorrente";
+};
+
+const razaoScript = (c) => {
+  const gasto = c.gasto || 0;
+  const p = c.p || 0;
+  const ticketMedio = Math.round(gasto / Math.max(p, 1));
+  if (c.statusClub === "respondeu") return "Respondeu — apresentar planos agora";
+  if (c.statusClub === "interessado") return "Está interessada — fechar com planos";
+  if (c.statusClub === "link_enviado") return "Link enviado — push final para fechar";
+  if (c.statusClub === "contatado") return "Sem resposta em 48h — follow-up leve";
+  if (c.statusClub === "nao_agora" || c.statusClub === "follow_up") return "Estava fria — última tentativa";
+  if (gasto / Math.max(p, 1) > 200) return "Ticket médio R$"+ticketMedio+" — abordagem de volume";
+  if (p >= 3) return p+"p · ciclo "+(c.cicloMedio||"?")+"d — hábito formado";
+  return p+" pedidos · potencial de conversão";
 };
 
 const sugerirPlano = (c) => {
@@ -3928,7 +3949,8 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const [scriptSel, setScriptSel] = useState(null);
   const [campos, setCampos] = useState({});
   const [copiadoId, setCopiadoId] = useState("");
-  const [followUpProposto, setFollowUpProposto] = useState(null); // {data, label, clienteId}
+  const [followUpProposto, setFollowUpProposto] = useState(null);
+  const [metaDiaria] = useState(12); // abordagens por dia
   const hoje = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
@@ -3960,9 +3982,13 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const atualizarStatus = async (c, novoStatus) => {
     const followUpDias = FOLLOW_UP_DAYS[novoStatus];
     const followUpData = followUpDias ? addDays(followUpDias) : null;
+    const tentativas = novoStatus === "contatado"
+      ? (c.tentativasClub||0) + 1
+      : (c.tentativasClub||0);
     const atualizado = {
       ...c,
       statusClub: novoStatus,
+      tentativasClub: tentativas,
       ...(novoStatus === "contatado" && !c.dataAbordagem ? { dataAbordagem: hoje } : {}),
       dataUltimoContato: hoje,
       ...(followUpData ? { proximoFollowup: followUpData } : {}),
@@ -4024,14 +4050,40 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const reativarPrimeiro = clientes.filter(c => c._inativa && !c.statusClub).slice(0, 5);
 
   // ── Filtro da lista ────────────────────────────────────────────────────────
+  // Ordenação por prioridade — mesma lógica do Hoje
+  const prioClub = (c) => {
+    const dtU = c.dataUltimoContato ? new Date(c.dataUltimoContato+"T12:00:00") : null;
+    const diasSemContato = dtU ? Math.round((new Date()-dtU)/86400000) : 999;
+    let p = 0;
+    if (c.statusClub === "interessado") p += 100;
+    else if (c.statusClub === "respondeu") p += 80;
+    else if (c.proximoFollowup && c.proximoFollowup <= hoje) p += 70;
+    else if (c.statusClub === "link_enviado") p += 60;
+    else if (c.statusClub === "contatado" && diasSemContato >= 2) p += 50;
+    else if (!c.statusClub && c._diasParaProxima !== null && c._diasParaProxima <= 5) p += 90;
+    p += (c._score||0) * 0.3;
+    return p;
+  };
+
   const listaFiltrada = clientes.filter(c => {
-    if (filtroStatus && c.statusClub !== filtroStatus) return false;
+    if (filtroStatus === "hoje") {
+      // Janela de compra aberta ou ação imediata
+      const janelaOk = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -2 && c._diasParaProxima <= 5;
+      const acaoOk = ["interessado","respondeu","link_enviado"].includes(c.statusClub) || (c.proximoFollowup && c.proximoFollowup <= hoje);
+      if (!janelaOk && !acaoOk) return false;
+    } else if (filtroStatus === "primeiro_contato") {
+      if (c.statusClub) return false;
+      if ((c._score||0) < 40) return false;
+      if ((c._diasUlt||999) > 45) return false;
+    } else if (filtroStatus) {
+      if (c.statusClub !== filtroStatus) return false;
+    }
     if (busca) {
       const q = busca.toLowerCase();
       if (!(c.nome||"").toLowerCase().includes(q) && !(c.telefone||"").includes(q)) return false;
     }
     return true;
-  });
+  }).sort((a,b) => prioClub(b) - prioClub(a));
 
   if (loading) return <div style={{textAlign:"center",padding:60,color:"var(--color-text-tertiary)"}}>Carregando funil Club...</div>;
 
@@ -4079,9 +4131,30 @@ const FunilClub = ({ onAbrirPerfil }) => {
           </span>
         </div>
         <ScoreBar score={c._score||0}/>
-        {c.proximoFollowup&&c.proximoFollowup<=hoje&&(
-          <div style={{fontSize:10,color:C.coralD,marginTop:4}}>⚠ Follow-up vencido: {new Date(c.proximoFollowup+"T12:00:00").toLocaleDateString("pt-BR")}</div>
-        )}
+        <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
+          {c._diasParaProxima!==null&&c._diasParaProxima!==undefined&&!c._inativa&&(
+            <span style={{fontSize:10,fontWeight:500,
+              color:c._diasParaProxima<=2?C.greenD:c._diasParaProxima<=7?C.amberD:"var(--color-text-tertiary)",
+              background:c._diasParaProxima<=2?C.greenL:c._diasParaProxima<=7?C.amberL:"var(--color-background-primary)",
+              padding:"1px 6px",borderRadius:10}}>
+              {c._diasParaProxima<=0?"🛒 Comprando agora":c._diasParaProxima<=7?"📅 Em "+c._diasParaProxima+"d":"🗓 Em "+c._diasParaProxima+"d"}
+            </span>
+          )}
+          {c.dataUltimoContato&&c.statusClub&&c.statusClub!=="fechou"&&(()=>{
+            const dias=Math.round((new Date()-new Date(c.dataUltimoContato+"T12:00:00"))/86400000);
+            return <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>Contatada há {dias}d</span>;
+          })()}
+          {(c.tentativasClub||0)>0&&c.statusClub!=="fechou"&&(
+            <span style={{fontSize:10,color:(c.tentativasClub||0)>=3?C.coralD:C.amber,
+              background:(c.tentativasClub||0)>=3?C.coralL:C.amberL,
+              padding:"1px 6px",borderRadius:10,fontWeight:500}}>
+              {c.tentativasClub}ª tentativa{(c.tentativasClub||0)>=3?" ⚠":""}
+            </span>
+          )}
+          {c.proximoFollowup&&c.proximoFollowup<=hoje&&(
+            <span style={{fontSize:10,color:C.coralD,background:C.coralL,padding:"1px 6px",borderRadius:10}}>⚠ Follow-up vencido</span>
+          )}
+        </div>
       </button>
     );
   };
@@ -4160,7 +4233,20 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
         {/* Status rápido */}
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Status no funil</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",flex:1}}>Status no funil</div>
+            {(c.tentativasClub||0)>0&&<span style={{fontSize:10,fontWeight:500,
+              color:(c.tentativasClub||0)>=3?C.coralD:C.amberD,
+              background:(c.tentativasClub||0)>=3?C.coralL:C.amberL,
+              padding:"2px 8px",borderRadius:20}}>
+              {c.tentativasClub}ª tentativa{(c.tentativasClub||0)>=3?" — considerar encerrar":""}
+            </span>}
+          </div>
+          {(c.tentativasClub||0)>=3&&c.statusClub!=="fechou"&&(
+            <div style={{background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:C.coralD}}>
+              ⚠ 3 tentativas sem resposta. Marcar como Perdido e focar em quem está mais quente?
+            </div>
+          )}
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {STATUS_CLUB.filter(s=>s.id!=="fechou"&&s.id!=="perdido").map(s=>(
               <button key={s.id} onClick={()=>atualizarStatus(c,s.id)} disabled={salvando}
@@ -4208,9 +4294,10 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
         {/* Script sugerido */}
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
+          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>
             Script {scriptAtual&&<span style={{color:C.teal}}>— {scriptAtual.label}</span>}
           </div>
+          {scriptAtual&&<div style={{fontSize:10,color:C.amber,marginBottom:6}}>💡 {razaoScript(c)}</div>}
           <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
             {SCRIPTS_CLUB.map(s=>(
               <button key={s.id} onClick={()=>setScriptSel(s.id)}
@@ -4481,6 +4568,21 @@ const FunilClub = ({ onAbrirPerfil }) => {
                 <div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>
                   {acaoImediata.length + janelaHoje.length + primeiroContato.length} clientes para contatar hoje
                 </div>
+                {(()=>{
+                  const abordadasHoje = prontas.filter(c=>c.dataUltimoContato===hoje).length;
+                  const pct = Math.min(100, Math.round(abordadasHoje/metaDiaria*100));
+                  return (
+                    <div style={{marginTop:6}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                        <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>Meta diária</span>
+                        <span style={{fontSize:10,fontWeight:500,color:pct>=100?C.greenD:C.teal}}>{abordadasHoje}/{metaDiaria}</span>
+                      </div>
+                      <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2,overflow:"hidden"}}>
+                        <div style={{width:pct+"%",height:"100%",background:pct>=100?C.green:C.teal,borderRadius:2,transition:"width 0.3s"}}/>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <div style={{display:"flex",gap:6}}>
                 {[
@@ -4495,6 +4597,39 @@ const FunilClub = ({ onAbrirPerfil }) => {
                 ))}
               </div>
             </div>
+
+            {(()=>{
+              // Melhor candidata do dia — janela aberta + no funil
+              const melhor = prontas.find(c =>
+                c._diasParaProxima!==null && c._diasParaProxima!==undefined &&
+                c._diasParaProxima>=-2 && c._diasParaProxima<=3 &&
+                c.statusClub && c.statusClub!=="fechou" && c.statusClub!=="perdido"
+              ) || janelaHoje[0] || acaoImediata[0];
+              if (!melhor) return null;
+              const sc = calcScoreClub(melhor);
+              return (
+                <div style={{background:"linear-gradient(135deg,"+C.greenL+" 0%,"+C.tealL+" 100%)",border:"1.5px solid "+C.teal,borderRadius:12,padding:"14px 16px",marginBottom:20}}>
+                  <div style={{fontSize:11,fontWeight:600,color:C.tealD,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>⭐ Melhor candidata hoje</div>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)",marginBottom:2}}>{melhor.nome}</div>
+                      <div style={{fontSize:12,color:"var(--color-text-secondary)"}}>
+                        {melhor.p}p · R${(melhor.gasto||0).toFixed(0)} · ciclo {melhor.cicloMedio||"?"}d
+                        {melhor._diasParaProxima!==null&&melhor._diasParaProxima!==undefined&&(
+                          <span style={{color:C.greenD,fontWeight:500}}> · {melhor._diasParaProxima<=0?"🛒 comprando agora":"em "+melhor._diasParaProxima+"d"}</span>
+                        )}
+                      </div>
+                    </div>
+                    {melhor.telefone&&(
+                      <button onClick={()=>{setSel(melhor);setScriptSel(sugerirScript(melhor));setAba("lista");}}
+                        style={{padding:"8px 16px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",background:C.teal,color:"#fff",border:"none",whiteSpace:"nowrap"}}>
+                        Abrir →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {acaoImediata.length>0&&(
               <div style={{marginBottom:20}}>
@@ -4568,6 +4703,20 @@ const FunilClub = ({ onAbrirPerfil }) => {
                   color:filtroStatus===""?"#fff":"var(--color-text-secondary)",
                   border:"0.5px solid "+(filtroStatus===""?C.teal:"var(--color-border-tertiary)")}}>
                 Todos ({clientes.length})
+              </button>
+              <button onClick={()=>setFiltroStatus("hoje")}
+                style={{padding:"3px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                  background:filtroStatus==="hoje"?C.coral:"var(--color-background-secondary)",
+                  color:filtroStatus==="hoje"?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(filtroStatus==="hoje"?C.coral:"var(--color-border-tertiary)")}}>
+                ⚡ Hoje
+              </button>
+              <button onClick={()=>setFiltroStatus("primeiro_contato")}
+                style={{padding:"3px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                  background:filtroStatus==="primeiro_contato"?C.teal:"var(--color-background-secondary)",
+                  color:filtroStatus==="primeiro_contato"?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(filtroStatus==="primeiro_contato"?C.teal:"var(--color-border-tertiary)")}}>
+                📤 1° contato
               </button>
               {STATUS_CLUB.filter(s=>s.id).map(s=>{
                 const n=clientes.filter(c=>c.statusClub===s.id).length;
