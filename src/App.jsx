@@ -3889,13 +3889,15 @@ Posso te mandar as opções?`,
   {
     id:"planos", label:"D — Explicação dos planos", tag:"planos",
     perfil:"Após interesse confirmado",
-    copy:`Hoje temos 3 opções:
+    copy:`O Laricas Club funciona assim: você monta uma caixa com seus produtos favoritos e recebe todo mês, direto na sua casa, sem precisar lembrar de pedir.
+
+Com desconto em relação ao site e frete grátis para SP 😊
+
+Hoje temos 3 opções de plano:
 
 *Trimestral:* para quem quer testar o Club com menor compromisso.
 *Semestral:* bom meio-termo para quem quer manter Laricas na rotina.
 *Anual:* melhor condição, com maior desconto e benefícios.
-
-Você monta sua caixa com produtos Laricas e recebe todos os meses.
 
 Pelo seu perfil, eu recomendaria começar pelo plano [plano recomendado], porque [motivo].`,
   },
