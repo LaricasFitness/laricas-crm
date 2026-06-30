@@ -5040,13 +5040,15 @@ const hashSenha = async (senha) => {
 
 const dbGetUsuarios = async () => {
   try {
-    const r = await sb("/usuarios?select=*&order=nome.asc");
+    const r = await sb("/usuarios?select=id,email,nome,perfil,senha_hash,ativo&order=email.asc");
     return r || [];
   } catch(e) { return []; }
 };
 
 const dbSaveUsuario = async (u) => {
-  await sb("/usuarios", { method:"POST", pref:"resolution=merge-duplicates", body:u });
+  // Não envia abas_permitidas — campo de outro sistema, não mexer
+  const payload = { id:u.id, email:u.email, nome:u.nome, perfil:u.perfil, senha_hash:u.senha_hash, ativo:u.ativo };
+  await sb("/usuarios", { method:"POST", pref:"resolution=merge-duplicates", body:payload });
 };
 
 const dbDeleteUsuario = async (id) => {
@@ -5077,19 +5079,26 @@ const Login = ({ onLogin }) => {
   const [carregando, setCarregando] = useState(false);
 
   const entrar = async () => {
-    if (!usuario.trim() || !senha.trim()) { setErro("Preencha usuário e senha."); return; }
+    if (!usuario.trim() || !senha.trim()) { setErro("Preencha email e senha."); return; }
     setCarregando(true);
     setErro("");
     try {
       const usuarios = await dbGetUsuarios();
       const hash = await hashSenha(senha);
-      const u = usuarios.find(x => x.usuario.toLowerCase() === usuario.trim().toLowerCase() && x.senha_hash === hash && x.ativo !== false);
+      const emailBusca = usuario.trim().toLowerCase();
+      const u = usuarios.find(x => (x.email||"").toLowerCase() === emailBusca && x.ativo !== false);
       if (!u) {
-        setErro("Usuário ou senha incorretos.");
+        setErro("Usuário não encontrado ou inativo.");
         setCarregando(false);
         return;
       }
-      const sessao = { id:u.id, usuario:u.usuario, nome:u.nome, nivel:u.nivel };
+      if (u.senha_hash !== hash) {
+        setErro("Senha incorreta. (Se o usuário foi criado em outro sistema, o algoritmo de hash pode ser diferente — avise o administrador.)");
+        setCarregando(false);
+        return;
+      }
+      const isAdminUser = (u.perfil||"").toLowerCase() === "admin";
+      const sessao = { id:u.id, usuario:u.email, nome:u.nome, nivel: isAdminUser ? "admin" : "operador", perfilOriginal:u.perfil };
       saveSession(sessao);
       onLogin(sessao);
     } catch(e) {
@@ -5106,9 +5115,9 @@ const Login = ({ onLogin }) => {
           <div style={{ fontSize:20,fontWeight:600,color:"var(--color-text-primary)" }}>CRM de Conversão</div>
         </div>
         <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Usuário</div>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email</div>
           <input value={usuario} onChange={e=>setUsuario(e.target.value)} onKeyDown={e=>e.key==="Enter"&&entrar()}
-            style={inp()} placeholder="seu.usuario" autoFocus/>
+            style={inp()} placeholder="seu.email" autoFocus/>
         </div>
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Senha</div>
@@ -5125,6 +5134,12 @@ const Login = ({ onLogin }) => {
   );
 };
 
+// Perfis do CRM Laricas — mapeiam para a coluna "perfil" compartilhada com outro sistema.
+// Qualquer perfil diferente de "admin" é tratado como operador no CRM Laricas.
+const PERFIS_CRM = [
+  { id:"admin", label:"Admin", desc:"Acesso total ao CRM Laricas" },
+  { id:"Operador", label:"Operador (CRM Laricas)", desc:"Sem acesso a Config, Backup e Importar" },
+];
 const NIVEIS = [
   { id:"admin", label:"Admin", desc:"Acesso total ao sistema" },
   { id:"operador", label:"Operador", desc:"Sem acesso a Config, Backup e Importar" },
@@ -5133,7 +5148,7 @@ const NIVEIS = [
 const GerenciarUsuarios = () => {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editando, setEditando] = useState(null); // usuário sendo editado ou {} para novo
+  const [editando, setEditando] = useState(null);
   const [novaSenha, setNovaSenha] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -5142,20 +5157,20 @@ const GerenciarUsuarios = () => {
   const carregar = () => { dbGetUsuarios().then(u=>{setUsuarios(u);setLoading(false);}); };
   useEffect(carregar, []);
 
-  const abrirNovo = () => { setEditando({ usuario:"", nome:"", nivel:"operador", ativo:true }); setNovaSenha(""); setErro(""); };
+  const abrirNovo = () => { setEditando({ email:"", nome:"", perfil:"Operador", ativo:true }); setNovaSenha(""); setErro(""); };
   const abrirEdicao = (u) => { setEditando({...u}); setNovaSenha(""); setErro(""); };
 
   const salvar = async () => {
-    if (!editando.usuario.trim() || !editando.nome.trim()) { setErro("Preencha usuário e nome."); return; }
+    if (!editando.email.trim() || !editando.nome.trim()) { setErro("Preencha email e nome."); return; }
     if (!editando.id && !novaSenha.trim()) { setErro("Defina uma senha para o novo usuário."); return; }
     setSalvando(true);
     setErro("");
     try {
       const payload = {
-        id: editando.id || "u_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
-        usuario: editando.usuario.trim().toLowerCase(),
+        id: editando.id || crypto.randomUUID(),
+        email: editando.email.trim().toLowerCase(),
         nome: editando.nome.trim(),
-        nivel: editando.nivel,
+        perfil: editando.perfil,
         ativo: editando.ativo !== false,
       };
       if (novaSenha.trim()) {
@@ -5175,7 +5190,7 @@ const GerenciarUsuarios = () => {
   };
 
   const remover = async (u) => {
-    if (!window.confirm("Remover acesso de "+u.nome+"?")) return;
+    if (!window.confirm("Remover acesso de "+u.nome+"? Atenção: esta tabela é compartilhada com outro sistema — confirme que este usuário não é usado lá também.")) return;
     await dbDeleteUsuario(u.id);
     carregar();
   };
@@ -5184,6 +5199,9 @@ const GerenciarUsuarios = () => {
 
   return (
     <div style={{ maxWidth:600 }}>
+      <div style={{ background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:C.amberD,lineHeight:1.5 }}>
+        ⚠ Esta tabela de usuários é compartilhada com outro sistema (produção). Crie usuários novos para o CRM Laricas com cuidado — apenas o perfil "admin" dá acesso total aqui; qualquer outro perfil vira operador no CRM Laricas.
+      </div>
       {ok&&<div style={{ fontSize:13,color:C.greenD,background:C.greenL,borderRadius:8,padding:"8px 12px",marginBottom:12 }}>{ok}</div>}
 
       {!editando&&(
@@ -5193,14 +5211,16 @@ const GerenciarUsuarios = () => {
             + Novo usuário
           </button>
           {usuarios.length===0&&<div style={{textAlign:"center",padding:30,color:"var(--color-text-tertiary)",fontSize:13}}>Nenhum usuário cadastrado ainda.</div>}
-          {usuarios.map(u=>(
+          {usuarios.map(u=>{
+            const isAdminU = (u.perfil||"").toLowerCase()==="admin";
+            return (
             <div key={u.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:"var(--color-background-secondary)",borderRadius:10,marginBottom:8,opacity:u.ativo===false?0.5:1 }}>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)" }}>{u.nome}</div>
-                <div style={{ fontSize:12,color:"var(--color-text-tertiary)" }}>@{u.usuario}</div>
+                <div style={{ fontSize:12,color:"var(--color-text-tertiary)" }}>{u.email}</div>
               </div>
-              <span style={{ fontSize:11,fontWeight:500,color:u.nivel==="admin"?C.purpleD:C.tealD,background:u.nivel==="admin"?C.purpleL:C.tealL,padding:"2px 10px",borderRadius:20 }}>
-                {NIVEIS.find(n=>n.id===u.nivel)?.label||u.nivel}
+              <span style={{ fontSize:11,fontWeight:500,color:isAdminU?C.purpleD:C.tealD,background:isAdminU?C.purpleL:C.tealL,padding:"2px 10px",borderRadius:20 }}>
+                {u.perfil} {!isAdminU&&"(= operador no CRM)"}
               </span>
               {u.ativo===false&&<span style={{ fontSize:11,color:C.coralD,background:C.coralL,padding:"2px 10px",borderRadius:20 }}>Inativo</span>}
               <button onClick={()=>abrirEdicao(u)}
@@ -5212,7 +5232,7 @@ const GerenciarUsuarios = () => {
                 Remover
               </button>
             </div>
-          ))}
+          );})}
         </div>
       )}
 
@@ -5226,8 +5246,8 @@ const GerenciarUsuarios = () => {
             <input value={editando.nome} onChange={e=>setEditando({...editando,nome:e.target.value})} style={inp()} placeholder="Maria Cecília"/>
           </div>
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Usuário (login)</div>
-            <input value={editando.usuario} onChange={e=>setEditando({...editando,usuario:e.target.value})} style={inp()} placeholder="ceci"/>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email (login)</div>
+            <input value={editando.email} onChange={e=>setEditando({...editando,email:e.target.value})} style={inp()} placeholder="ceci@laricas.com"/>
           </div>
           <div style={{ marginBottom:10 }}>
             <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>
@@ -5236,17 +5256,20 @@ const GerenciarUsuarios = () => {
             <input value={novaSenha} onChange={e=>setNovaSenha(e.target.value)} type="password" style={inp()} placeholder="••••••••"/>
           </div>
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nível de acesso</div>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Perfil de acesso no CRM Laricas</div>
             <div style={{ display:"flex",gap:8 }}>
-              {NIVEIS.map(n=>(
-                <button key={n.id} onClick={()=>setEditando({...editando,nivel:n.id})}
+              {PERFIS_CRM.map(n=>(
+                <button key={n.id} onClick={()=>setEditando({...editando,perfil:n.id})}
                   style={{ flex:1,padding:"10px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                    background:editando.nivel===n.id?C.purpleL:"var(--color-background-primary)",
-                    border:"0.5px solid "+(editando.nivel===n.id?C.purple:"var(--color-border-tertiary)") }}>
-                  <div style={{ fontSize:13,fontWeight:500,color:editando.nivel===n.id?C.purpleD:"var(--color-text-primary)" }}>{n.label}</div>
+                    background:editando.perfil===n.id?C.purpleL:"var(--color-background-primary)",
+                    border:"0.5px solid "+(editando.perfil===n.id?C.purple:"var(--color-border-tertiary)") }}>
+                  <div style={{ fontSize:13,fontWeight:500,color:editando.perfil===n.id?C.purpleD:"var(--color-text-primary)" }}>{n.label}</div>
                   <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginTop:2 }}>{n.desc}</div>
                 </button>
               ))}
+            </div>
+            <div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginTop:6 }}>
+              Atenção: este campo "perfil" é compartilhado com outro sistema. Use exatamente "admin" para acesso total, ou "Operador" para acesso restrito no CRM Laricas.
             </div>
           </div>
           {editando.id&&(
