@@ -287,6 +287,46 @@ const corrigirObjetivo = (c) => {
   return c;
 };
 
+
+// Lookup de cidade/estado por prefixo de CEP
+const CEP_CIDADES = {
+  "01":"São Paulo/SP","02":"São Paulo/SP","03":"São Paulo/SP","04":"São Paulo/SP","05":"São Paulo/SP",
+  "06":"Osasco/SP","07":"Guarulhos/SP","08":"São Paulo/SP","09":"Santo André/SP",
+  "10":"Santos/SP","11":"Santos/SP","12":"São José dos Campos/SP","13":"Campinas/SP",
+  "14":"Ribeirão Preto/SP","15":"São José do Rio Preto/SP","16":"Araçatuba/SP","17":"Bauru/SP",
+  "18":"Sorocaba/SP","19":"Presidente Prudente/SP",
+  "20":"Rio de Janeiro/RJ","21":"Rio de Janeiro/RJ","22":"Rio de Janeiro/RJ","23":"Rio de Janeiro/RJ",
+  "24":"Niterói/RJ","25":"Duque de Caxias/RJ","26":"Nova Iguaçu/RJ","27":"Campos/RJ",
+  "28":"Campos/RJ","29":"Vitória/ES",
+  "30":"Belo Horizonte/MG","31":"Belo Horizonte/MG","32":"Contagem/MG","33":"Belo Horizonte/MG",
+  "34":"Belo Horizonte/MG","35":"Ipatinga/MG","36":"Juiz de Fora/MG","37":"Poços de Caldas/MG",
+  "38":"Uberaba/MG","39":"Montes Claros/MG",
+  "40":"Salvador/BA","41":"Salvador/BA","42":"Feira de Santana/BA","43":"Ilhéus/BA",
+  "44":"Feira de Santana/BA","45":"Vitória da Conquista/BA","46":"Jequié/BA","47":"Barreiras/BA",
+  "48":"Paulo Afonso/BA","49":"Aracaju/SE",
+  "50":"Recife/PE","51":"Recife/PE","52":"Recife/PE","53":"Olinda/PE","54":"Caruaru/PE",
+  "55":"Caruaru/PE","56":"Petrolina/PE","57":"Maceió/AL","58":"João Pessoa/PB","59":"Natal/RN",
+  "60":"Fortaleza/CE","61":"Fortaleza/CE","62":"Fortaleza/CE","63":"Juazeiro do Norte/CE",
+  "64":"Teresina/PI","65":"São Luís/MA","66":"Belém/PA","67":"Campo Grande/MS",
+  "68":"Santarém/PA","69":"Manaus/AM",
+  "70":"Brasília/DF","71":"Brasília/DF","72":"Brasília/DF","73":"Brasília/DF",
+  "74":"Goiânia/GO","75":"Anápolis/GO","76":"Rio Verde/GO","77":"Palmas/TO",
+  "78":"Cuiabá/MT","79":"Campo Grande/MS",
+  "80":"Curitiba/PR","81":"Curitiba/PR","82":"Curitiba/PR","83":"Curitiba/PR",
+  "84":"Ponta Grossa/PR","85":"Cascavel/PR","86":"Londrina/PR","87":"Maringá/PR",
+  "88":"Florianópolis/SC","89":"Joinville/SC",
+  "90":"Porto Alegre/RS","91":"Porto Alegre/RS","92":"Canoas/RS","93":"Porto Alegre/RS",
+  "94":"Porto Alegre/RS","95":"Caxias do Sul/RS","96":"Pelotas/RS","97":"Santa Maria/RS",
+  "98":"Santa Maria/RS","99":"Passo Fundo/RS",
+};
+
+const getCidade = (cep) => {
+  if (!cep) return null;
+  const num = (cep||"").replace(/\D/g,"");
+  if (num.length < 2) return null;
+  return CEP_CIDADES[num.substring(0,2)] || null;
+};
+
 const fixEncoding = (s) => {
   if (!s || typeof s !== "string") return s;
   try {
@@ -902,6 +942,17 @@ const Perfil = ({ clienteId, onVoltar }) => {
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nome</div><input style={inp()} value={c.nome} onChange={e=>setC({...c,nome:e.target.value})} onBlur={()=>save({nome:c.nome})} /></div>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Telefone / WhatsApp</div><input style={inp()} value={c.telefone||""} onChange={e=>setC({...c,telefone:e.target.value})} onBlur={()=>save({telefone:c.telefone})} placeholder="11 9XXXX-XXXX"/></div>
+        </div>
+        {(getCidade(c.cep)||c.fora!==null)&&(
+          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"7px 12px",background:"var(--color-background-secondary)",borderRadius:8,fontSize:12 }}>
+            <span style={{ fontSize:16 }}>{c.fora?"🌎":"📍"}</span>
+            <span style={{ color:"var(--color-text-primary)",fontWeight:500 }}>{getCidade(c.cep)||"—"}</span>
+            {c.fora&&<span style={{ fontSize:10,color:C.amberD,background:C.amberL,padding:"1px 6px",borderRadius:10,fontWeight:500 }}>Fora de SP</span>}
+            {c.cep&&<span style={{ fontSize:11,color:"var(--color-text-tertiary)",marginLeft:4 }}>CEP {c.cep}</span>}
+          </div>
+        )}
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
+          <div style={{display:"none"}}></div>
         </div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email Shopify</div><input style={inp()} value={c.email||""} onChange={e=>setC({...c,email:e.target.value})} onBlur={()=>save({email:c.email})} placeholder="email da conta Shopify" type="email"/></div>
@@ -4106,14 +4157,35 @@ const FunilClub = ({ onAbrirPerfil }) => {
       .replace(/Aqui é o Lucas/g, "Aqui é "+artigo+" "+operador);
   };
 
+  const registrarEnvio = async (c, scriptId) => {
+    const s = SCRIPTS_CLUB.find(s=>s.id===scriptId);
+    if (!s) return;
+    const logEntry = {
+      texto:"Script enviado: "+s.label,
+      data:new Date().toLocaleDateString("pt-BR"),
+      hora:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
+      resp:c.responsavel||"",
+    };
+    const scriptsEnviados = [...(c.scriptsEnviados||[]), {id:scriptId, data:hoje, converteu:false}];
+    const atualizado = {
+      ...c,
+      scriptsEnviados,
+      scriptUsado: scriptId,
+      logAtividade:[logEntry,...(c.logAtividade||[])].slice(0,30),
+    };
+    await saveCliente(atualizado);
+    if (!c.dataAbordagem) atualizarStatus(atualizado, "contatado");
+  };
+
   const abrirWhatsApp = (c, scriptId) => {
-    const s = SCRIPTS_CLUB.find(s=>s.id===(scriptId||sugerirScript(c)));
+    const id = scriptId||sugerirScript(c);
+    const s = SCRIPTS_CLUB.find(s=>s.id===id);
     if (!s || !c.telefone) return;
     const texto = personalizarScript(s.copy, c);
     const tel = (c.telefone||"").replace(/\D/g,"");
     const url = `https://wa.me/55${tel}?text=${encodeURIComponent(texto)}`;
     window.open(url, "_blank");
-    if (!c.dataAbordagem) atualizarStatus(c, "contatado");
+    registrarEnvio(c, id);
   };
 
   // ── Segmentos para o painel Hoje ──────────────────────────────────────────
@@ -4618,6 +4690,41 @@ const FunilClub = ({ onAbrirPerfil }) => {
             })}
           </div>
         )}
+
+        {(()=>{
+          // Taxa de conversão por script
+          const scriptStats = {};
+          todos.forEach(c => {
+            (c.scriptsEnviados||[]).forEach(s => {
+              if(!scriptStats[s.id]) scriptStats[s.id]={label:SCRIPTS_CLUB.find(sc=>sc.id===s.id)?.label||s.id, enviados:0, convertidos:0};
+              scriptStats[s.id].enviados++;
+            });
+            if(c.statusClub==="fechou"&&c.scriptUsado) {
+              if(scriptStats[c.scriptUsado]) scriptStats[c.scriptUsado].convertidos++;
+            }
+          });
+          const stats = Object.values(scriptStats).filter(s=>s.enviados>0).sort((a,b)=>b.enviados-a.enviados);
+          if(stats.length===0) return null;
+          return (
+            <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:12}}>
+              <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>📊 Conversão por script</div>
+              {stats.map(s=>{
+                const tx = s.enviados>0?Math.round(s.convertidos/s.enviados*100):0;
+                return (
+                  <div key={s.label} style={{marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{fontSize:11,color:"var(--color-text-primary)",fontWeight:500}}>{s.label}</span>
+                      <span style={{fontSize:11,color:tx>=10?C.greenD:tx>=5?C.amberD:C.coralD,fontWeight:500}}>{tx}% ({s.convertidos}/{s.enviados})</span>
+                    </div>
+                    <div style={{height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{width:tx+"%",height:"100%",background:tx>=10?C.green:tx>=5?C.amber:C.coral,borderRadius:3}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -4879,8 +4986,33 @@ const FunilClub = ({ onAbrirPerfil }) => {
               })}
             </div>
             <div style={{maxHeight:"65vh",overflowY:"auto"}}>
-              {listaFiltrada.length===0&&<div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>Nenhum cliente neste filtro</div>}
-              {listaFiltrada.map(c=><CardLista key={c.id} c={c}/>)}
+              {filtroStatus==="hoje"?(()=>{
+                const prontas2 = clientes.filter(c=>(c.p||0)>=2&&(c._diasUlt||999)<90&&!c._muitoInativa);
+                const ai = prontas2.filter(c=>c.statusClub==="interessado"||(c.statusClub==="respondeu")||(c.proximoFollowup&&c.proximoFollowup<=hoje));
+                const jh = prontas2.filter(c=>!c.statusClub&&c._diasParaProxima!=null&&c._diasParaProxima>=-2&&c._diasParaProxima<=5);
+                const lf = prontas2.filter(c=>c.statusClub==="link_enviado");
+                const pc = prontas2.filter(c=>!c.statusClub&&(c._score||0)>=55&&(c._diasUlt||999)<=45).slice(0,8);
+                return (
+                  <div>
+                    {[["🔥 Ação imediata",ai,C.coralD],[" 🛒 Janela aberta",jh,C.greenD],["🔗 Link enviado",lf,C.blueD],["📤 1° contato",pc,C.tealD]].map(([titulo,lista,cor])=>
+                      lista.length>0&&(
+                        <div key={titulo} style={{marginBottom:12}}>
+                          <div style={{fontSize:11,fontWeight:600,color:cor,marginBottom:6}}>{titulo} ({lista.length})</div>
+                          {lista.map(c=><CardLista key={c.id} c={c}/>)}
+                        </div>
+                      )
+                    )}
+                    {ai.length===0&&jh.length===0&&lf.length===0&&pc.length===0&&(
+                      <div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>Nenhuma ação urgente hoje</div>
+                    )}
+                  </div>
+                );
+              })():(
+                <>
+                  {listaFiltrada.length===0&&<div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>Nenhum cliente neste filtro</div>}
+                  {listaFiltrada.map(c=><CardLista key={c.id} c={c}/>)}
+                </>
+              )}
             </div>
           </div>
           <div style={{maxHeight:"80vh",overflowY:"auto"}}>
@@ -4898,6 +5030,248 @@ const FunilClub = ({ onAbrirPerfil }) => {
   );
 };
 
+
+// ── AUTENTICAÇÃO ───────────────────────────────────────────────────────────
+const hashSenha = async (senha) => {
+  const enc = new TextEncoder().encode(senha);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+};
+
+const dbGetUsuarios = async () => {
+  try {
+    const r = await sb("/usuarios?select=*&order=nome.asc");
+    return r || [];
+  } catch(e) { return []; }
+};
+
+const dbSaveUsuario = async (u) => {
+  await sb("/usuarios", { method:"POST", pref:"resolution=merge-duplicates", body:u });
+};
+
+const dbDeleteUsuario = async (id) => {
+  await sb("/usuarios?id=eq."+id, { method:"DELETE" });
+};
+
+const SESSION_KEY = "laricas_session";
+
+const loadSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+};
+
+const saveSession = (user) => {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+};
+
+const clearSession = () => {
+  localStorage.removeItem(SESSION_KEY);
+};
+
+const Login = ({ onLogin }) => {
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+
+  const entrar = async () => {
+    if (!usuario.trim() || !senha.trim()) { setErro("Preencha usuário e senha."); return; }
+    setCarregando(true);
+    setErro("");
+    try {
+      const usuarios = await dbGetUsuarios();
+      const hash = await hashSenha(senha);
+      const u = usuarios.find(x => x.usuario.toLowerCase() === usuario.trim().toLowerCase() && x.senha_hash === hash && x.ativo !== false);
+      if (!u) {
+        setErro("Usuário ou senha incorretos.");
+        setCarregando(false);
+        return;
+      }
+      const sessao = { id:u.id, usuario:u.usuario, nome:u.nome, nivel:u.nivel };
+      saveSession(sessao);
+      onLogin(sessao);
+    } catch(e) {
+      setErro("Erro ao conectar: "+(e.message||"tente novamente"));
+    }
+    setCarregando(false);
+  };
+
+  return (
+    <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-background-primary)" }}>
+      <div style={{ width:340,padding:"32px 28px",background:"var(--color-background-secondary)",borderRadius:16,boxShadow:"0 4px 24px rgba(0,0,0,0.08)" }}>
+        <div style={{ textAlign:"center",marginBottom:24 }}>
+          <div style={{ fontSize:11,fontWeight:600,color:C.purple,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4 }}>Laricas Fitness</div>
+          <div style={{ fontSize:20,fontWeight:600,color:"var(--color-text-primary)" }}>CRM de Conversão</div>
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Usuário</div>
+          <input value={usuario} onChange={e=>setUsuario(e.target.value)} onKeyDown={e=>e.key==="Enter"&&entrar()}
+            style={inp()} placeholder="seu.usuario" autoFocus/>
+        </div>
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Senha</div>
+          <input value={senha} onChange={e=>setSenha(e.target.value)} onKeyDown={e=>e.key==="Enter"&&entrar()}
+            type="password" style={inp()} placeholder="••••••••"/>
+        </div>
+        {erro&&<div style={{ fontSize:12,color:C.coralD,background:C.coralL,borderRadius:8,padding:"8px 12px",marginBottom:12 }}>{erro}</div>}
+        <button onClick={entrar} disabled={carregando}
+          style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:14,fontWeight:500,cursor:carregando?"default":"pointer",background:C.purple,color:"#fff",border:"none",opacity:carregando?0.6:1 }}>
+          {carregando?"Entrando...":"Entrar"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const NIVEIS = [
+  { id:"admin", label:"Admin", desc:"Acesso total ao sistema" },
+  { id:"operador", label:"Operador", desc:"Sem acesso a Config, Backup e Importar" },
+];
+
+const GerenciarUsuarios = () => {
+  const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editando, setEditando] = useState(null); // usuário sendo editado ou {} para novo
+  const [novaSenha, setNovaSenha] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [ok, setOk] = useState("");
+
+  const carregar = () => { dbGetUsuarios().then(u=>{setUsuarios(u);setLoading(false);}); };
+  useEffect(carregar, []);
+
+  const abrirNovo = () => { setEditando({ usuario:"", nome:"", nivel:"operador", ativo:true }); setNovaSenha(""); setErro(""); };
+  const abrirEdicao = (u) => { setEditando({...u}); setNovaSenha(""); setErro(""); };
+
+  const salvar = async () => {
+    if (!editando.usuario.trim() || !editando.nome.trim()) { setErro("Preencha usuário e nome."); return; }
+    if (!editando.id && !novaSenha.trim()) { setErro("Defina uma senha para o novo usuário."); return; }
+    setSalvando(true);
+    setErro("");
+    try {
+      const payload = {
+        id: editando.id || "u_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
+        usuario: editando.usuario.trim().toLowerCase(),
+        nome: editando.nome.trim(),
+        nivel: editando.nivel,
+        ativo: editando.ativo !== false,
+      };
+      if (novaSenha.trim()) {
+        payload.senha_hash = await hashSenha(novaSenha.trim());
+      } else {
+        payload.senha_hash = editando.senha_hash;
+      }
+      await dbSaveUsuario(payload);
+      setOk("✓ Salvo!");
+      setEditando(null);
+      carregar();
+      setTimeout(()=>setOk(""),2000);
+    } catch(e) {
+      setErro("Erro: "+(e.message||"tente novamente"));
+    }
+    setSalvando(false);
+  };
+
+  const remover = async (u) => {
+    if (!window.confirm("Remover acesso de "+u.nome+"?")) return;
+    await dbDeleteUsuario(u.id);
+    carregar();
+  };
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>Carregando...</div>;
+
+  return (
+    <div style={{ maxWidth:600 }}>
+      {ok&&<div style={{ fontSize:13,color:C.greenD,background:C.greenL,borderRadius:8,padding:"8px 12px",marginBottom:12 }}>{ok}</div>}
+
+      {!editando&&(
+        <div>
+          <button onClick={abrirNovo}
+            style={{ marginBottom:16,padding:"9px 18px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.purple,color:"#fff",border:"none" }}>
+            + Novo usuário
+          </button>
+          {usuarios.length===0&&<div style={{textAlign:"center",padding:30,color:"var(--color-text-tertiary)",fontSize:13}}>Nenhum usuário cadastrado ainda.</div>}
+          {usuarios.map(u=>(
+            <div key={u.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:"var(--color-background-secondary)",borderRadius:10,marginBottom:8,opacity:u.ativo===false?0.5:1 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)" }}>{u.nome}</div>
+                <div style={{ fontSize:12,color:"var(--color-text-tertiary)" }}>@{u.usuario}</div>
+              </div>
+              <span style={{ fontSize:11,fontWeight:500,color:u.nivel==="admin"?C.purpleD:C.tealD,background:u.nivel==="admin"?C.purpleL:C.tealL,padding:"2px 10px",borderRadius:20 }}>
+                {NIVEIS.find(n=>n.id===u.nivel)?.label||u.nivel}
+              </span>
+              {u.ativo===false&&<span style={{ fontSize:11,color:C.coralD,background:C.coralL,padding:"2px 10px",borderRadius:20 }}>Inativo</span>}
+              <button onClick={()=>abrirEdicao(u)}
+                style={{ padding:"5px 12px",borderRadius:8,fontSize:12,cursor:"pointer",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)" }}>
+                Editar
+              </button>
+              <button onClick={()=>remover(u)}
+                style={{ padding:"5px 12px",borderRadius:8,fontSize:12,cursor:"pointer",background:"none",border:"0.5px solid "+C.coral,color:C.coralD }}>
+                Remover
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editando&&(
+        <div style={{ background:"var(--color-background-secondary)",borderRadius:12,padding:"20px" }}>
+          <div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:16 }}>
+            {editando.id?"Editar usuário":"Novo usuário"}
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nome completo</div>
+            <input value={editando.nome} onChange={e=>setEditando({...editando,nome:e.target.value})} style={inp()} placeholder="Maria Cecília"/>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Usuário (login)</div>
+            <input value={editando.usuario} onChange={e=>setEditando({...editando,usuario:e.target.value})} style={inp()} placeholder="ceci"/>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>
+              {editando.id?"Nova senha (deixe em branco para manter)":"Senha"}
+            </div>
+            <input value={novaSenha} onChange={e=>setNovaSenha(e.target.value)} type="password" style={inp()} placeholder="••••••••"/>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nível de acesso</div>
+            <div style={{ display:"flex",gap:8 }}>
+              {NIVEIS.map(n=>(
+                <button key={n.id} onClick={()=>setEditando({...editando,nivel:n.id})}
+                  style={{ flex:1,padding:"10px",borderRadius:10,cursor:"pointer",textAlign:"left",
+                    background:editando.nivel===n.id?C.purpleL:"var(--color-background-primary)",
+                    border:"0.5px solid "+(editando.nivel===n.id?C.purple:"var(--color-border-tertiary)") }}>
+                  <div style={{ fontSize:13,fontWeight:500,color:editando.nivel===n.id?C.purpleD:"var(--color-text-primary)" }}>{n.label}</div>
+                  <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginTop:2 }}>{n.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          {editando.id&&(
+            <div style={{ marginBottom:14,display:"flex",alignItems:"center",gap:8 }}>
+              <input type="checkbox" checked={editando.ativo!==false} onChange={e=>setEditando({...editando,ativo:e.target.checked})} id="ativoCheck"/>
+              <label htmlFor="ativoCheck" style={{ fontSize:13,color:"var(--color-text-primary)",cursor:"pointer" }}>Usuário ativo</label>
+            </div>
+          )}
+          {erro&&<div style={{ fontSize:12,color:C.coralD,background:C.coralL,borderRadius:8,padding:"8px 12px",marginBottom:12 }}>{erro}</div>}
+          <div style={{ display:"flex",gap:8 }}>
+            <button onClick={()=>setEditando(null)}
+              style={{ flex:1,padding:"10px",borderRadius:10,fontSize:13,cursor:"pointer",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)" }}>
+              Cancelar
+            </button>
+            <button onClick={salvar} disabled={salvando}
+              style={{ flex:2,padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:salvando?"default":"pointer",background:C.purple,color:"#fff",border:"none",opacity:salvando?0.6:1 }}>
+              {salvando?"Salvando...":"Salvar"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   const [tab,setTab]=useState("kanban");
   const [clienteId,setClienteId]=useState(null);
@@ -4910,15 +5284,24 @@ export default function App() {
   const [filtroPedidosApp,setFiltroPedidosApp]=useState("");
   const [cfgOk,setCfgOk]=useState(false);
   const [cfgLoad,setCfgLoad]=useState(true);
+  const [sessao,setSessao]=useState(null);
+  const [sessaoLoad,setSessaoLoad]=useState(true);
   useEffect(()=>{ loadCfg().then(cfg=>{ setCfgOk(!!(cfg.url&&cfg.key)); setCfgLoad(false); }); },[]);
+  useEffect(()=>{ if(cfgOk){ setSessao(loadSession()); setSessaoLoad(false); } },[cfgOk]);
   const onSalvo = () => { setTab("kanban"); setRefresh(r=>r+1); };
   const onRestore = () => { setTab("kanban"); setRefresh(r=>r+1); };
+  const sair = () => { clearSession(); setSessao(null); };
+  const isAdmin = sessao?.nivel === "admin";
+
   if (cfgLoad) return <div style={{ textAlign:"center",padding:"60px 0",color:"var(--color-text-tertiary)",fontFamily:"var(--font-sans)" }}>Carregando...</div>;
   if (!cfgOk) return (
     <div style={{ maxWidth:900,margin:"0 auto",padding:"0 20px 40px",fontFamily:"var(--font-sans)",color:"var(--color-text-primary)" }}>
       <ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); }}/>
     </div>
   );
+  if (sessaoLoad) return <div style={{ textAlign:"center",padding:"60px 0",color:"var(--color-text-tertiary)",fontFamily:"var(--font-sans)" }}>Carregando...</div>;
+  if (!sessao) return <Login onLogin={setSessao}/>;
+
   return (
     <div style={{ maxWidth:900,margin:"0 auto",padding:"0 0 40px",fontFamily:"var(--font-sans)",color:"var(--color-text-primary)" }}>
       <div style={{ display:"flex",alignItems:"center",gap:12,padding:"20px 0 8px" }}>
@@ -4928,18 +5311,29 @@ export default function App() {
           <div style={{ fontSize:13,color:"var(--color-text-secondary)",marginTop:4 }}>Lead → Contato → Conversa → Proposta → Convertido</div>
         </div>
         <GlobalSearch onAbrir={abrirClienteGlobal}/>
+        <div style={{ display:"flex",alignItems:"center",gap:8,flexShrink:0 }}>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:12,fontWeight:500,color:"var(--color-text-primary)" }}>{sessao.nome}</div>
+            <div style={{ fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase" }}>{NIVEIS.find(n=>n.id===sessao.nivel)?.label}</div>
+          </div>
+          <button onClick={sair} title="Sair"
+            style={{ padding:"6px 10px",borderRadius:8,fontSize:12,cursor:"pointer",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)" }}>
+            Sair
+          </button>
+        </div>
       </div>
       <div style={{ display:"flex",borderBottom:"0.5px solid var(--color-border-tertiary)",marginBottom:24,overflowX:"auto" }}>
         <T label="📋 Kanban" active={tab==="kanban"} color={C.green} onClick={()=>{setClienteId(null);setTab("kanban");}}/>
         <T label="🎯 Club" active={tab==="club"} color={C.teal} onClick={()=>setTab("club")}/>
-        <T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>
+        {isAdmin&&<T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>}
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
         <T label="📈 Dash Club" active={tab==="dashclub"} color={C.green} onClick={()=>setTab("dashclub")}/>
         <T label="🔗 Unificar" active={tab==="unificar"} color={C.amber} onClick={()=>setTab("unificar")}/>
         <T label="📖 Guia" active={tab==="guia"} color={C.teal} onClick={()=>setTab("guia")}/>
-        <T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>
-        <T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>
+        {isAdmin&&<T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>}
+        {isAdmin&&<T label="👥 Usuários" active={tab==="usuarios"} color={C.purple} onClick={()=>setTab("usuarios")}/>}
+        {isAdmin&&<T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>}
       </div>
       {tab==="club"&&<FunilClub onAbrirPerfil={(id)=>{abrirClienteGlobal(id);setTab("kanban");}}/>}
       {tab==="kanban"&&(clienteId?<Perfil key={clienteId} clienteId={clienteId} onVoltar={()=>{setClienteId(null);setRefresh(r=>r+1);}}/>:
@@ -4949,7 +5343,7 @@ export default function App() {
             filtroProb={filtroProbApp} setFiltroProb={setFiltroProbApp}
             filtroPedidos={filtroPedidosApp} setFiltroPedidos={setFiltroPedidosApp}
           />)}
-      {tab==="import"&&<ImportarLista onSalvo={onSalvo}/>}
+      {tab==="import"&&isAdmin&&<ImportarLista onSalvo={onSalvo}/>}
       {tab==="triagem"&&(
         <div>
           <CadastroRapido onSalvo={onSalvo}/>
@@ -4965,8 +5359,10 @@ export default function App() {
       {tab==="unificar"&&<Unificar onSalvo={()=>setRefresh(r=>r+1)}/>}
       {tab==="dashclub"&&<LTV onAbrir={(id)=>{abrirClienteGlobal(id);setTab("kanban");}}/>}
       {tab==="guia"&&<Guia/>}
-      {tab==="backup"&&<Backup onRestore={onRestore}/>}
-      {tab==="config"&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
+      {tab==="backup"&&isAdmin&&<Backup onRestore={onRestore}/>}
+      {tab==="usuarios"&&isAdmin&&<GerenciarUsuarios/>}
+      {tab==="config"&&isAdmin&&<ConfigSupabase onSalvo={()=>{ loadCfg().then(()=>setCfgOk(true)); setTab("kanban"); }}/>}
     </div>
   );
 }
+
