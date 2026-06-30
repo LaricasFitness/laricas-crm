@@ -3889,9 +3889,9 @@ Posso te mandar as opções?`,
   {
     id:"planos", label:"D — Explicação dos planos", tag:"planos",
     perfil:"Após interesse confirmado",
-    copy:`O Laricas Club funciona assim: você monta uma caixa com seus produtos favoritos e recebe todo mês, direto na sua casa, sem precisar lembrar de pedir.
+    copy:`O Laricas Club funciona assim: você escolhe de 7 a 15 doces por mês, monta sua caixa do jeito que quiser, e recebe direto na sua casa, sem precisar lembrar de pedir.
 
-Com desconto em relação ao site e frete grátis para SP 😊
+Pode trocar os sabores todo mês, se quiser variar — com desconto em relação ao site e frete grátis para SP 😊
 
 Hoje temos 3 opções de plano:
 
@@ -3899,7 +3899,7 @@ Hoje temos 3 opções de plano:
 *Semestral:* bom meio-termo para quem quer manter Laricas na rotina.
 *Anual:* melhor condição, com maior desconto e benefícios.
 
-Pelo seu perfil, eu recomendaria começar pelo plano [plano recomendado], porque [motivo].`,
+Pelo seu perfil, eu recomendaria começar pelo plano [plano recomendado], porque [motivo]. Faz sentido pra você?`,
   },
   {
     id:"fechamento", label:"E — Fechamento", tag:"fechamento",
@@ -3922,7 +3922,9 @@ Quer que eu te explique rapidinho como funciona? 😊`,
     perfil:"Última tentativa após 7 dias",
     copy:`Última mensagem sobre isso, prometo! 😄
 
-Se em algum momento você quiser receber Laricas todo mês com desconto e frete grátis, me chama que te ajudo a escolher o melhor plano.`,
+Se em algum momento você quiser receber Laricas todo mês com desconto e frete grátis, me chama que te ajudo a escolher o melhor plano.
+
+Posso deixar reservada uma condição especial pra você?`,
   },
   {
     id:"condicao_especial", label:"L — Condição especial (gatilho final)", tag:"fechamento",
@@ -3942,28 +3944,36 @@ Quer que eu te mande o link?`,
 
 O Club faz mais sentido para quem já compraria Laricas ao longo do mês. A diferença é que você recebe com desconto, frete grátis e não precisa fazer pedidos avulsos.
 
-Para quem compra com frequência, normalmente acaba ficando mais vantajoso 😊`,
+Para quem compra com frequência, normalmente acaba ficando mais vantajoso 😊
+
+Faz sentido pra você nesse formato?`,
   },
   {
     id:"obj_enjoar", label:"I — Objeção: medo de enjoar", tag:"objecao",
     perfil:"Com medo de enjoar",
     copy:`Total, entendo! Por isso a ideia não é receber sempre a mesma coisa.
 
-Você pode montar uma caixa variada com produtos diferentes da Laricas e ir ajustando conforme sua rotina 😄`,
+Você pode montar uma caixa variada com produtos diferentes da Laricas, escolhendo de 7 a 15 doces, e trocar os sabores todo mês se quiser 😄
+
+Isso muda sua visão sobre o Club?`,
   },
   {
     id:"obj_fidelidade", label:"J — Objeção: não quer fidelidade", tag:"objecao",
     perfil:"Não quer compromisso longo",
     copy:`Entendo! Nesse caso, talvez o trimestral seja o melhor começo.
 
-Ele tem o menor compromisso e serve justamente para testar se o Club faz sentido na sua rotina 😊`,
+Ele tem o menor compromisso e serve justamente para testar se o Club faz sentido na sua rotina 😊
+
+Quer começar assim, sem compromisso longo?`,
   },
   {
     id:"obj_pensar", label:"K — Objeção: quer pensar", tag:"objecao",
     perfil:"Disse que vai pensar",
     copy:`Claro, sem pressão! 😊
 
-Só para te ajudar: o Club faz mais sentido para quem já sabe que vai comprar Laricas de novo. Não é uma compra nova — é transformar a recompra em algo mais prático e com condição melhor.`,
+Só para te ajudar: o Club faz mais sentido para quem já sabe que vai comprar Laricas de novo. Não é uma compra nova — é transformar a recompra em algo mais prático e com condição melhor.
+
+Posso te chamar de novo em alguns dias?`,
   },
 ];
 
