@@ -714,6 +714,24 @@ const TriagemForm = ({ onSalvo, lista }) => {
 
 
 
+
+// Detecção de gênero do operador para artigo correto (a/o) nos scripts
+const GENERO_NOMES = {
+  "lucas":"m","pedro":"m","joao":"m","gabriel":"m","gustavo":"m","rafael":"m","felipe":"m",
+  "bruno":"m","diego":"m","thiago":"m","marcelo":"m","andre":"m","fernando":"m","ricardo":"m",
+  "ceci":"f","cecilia":"f","luana":"f","maria":"f","ana":"f","julia":"f","marcia":"f",
+  "camila":"f","fernanda":"f","beatriz":"f","carolina":"f","leticia":"f","patricia":"f","amanda":"f",
+};
+const detectarGenero = (nomeOperador) => {
+  const n = (nomeOperador||"").toLowerCase().trim().split(" ")[0].normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  if (!n) return "m";
+  if (GENERO_NOMES[n]) return GENERO_NOMES[n];
+  // Heurística: nomes terminados em "a" geralmente femininos (com exceções comuns)
+  const excecoesMasculinas = ["luca","joshua","nathan","kauã","davi"];
+  if (excecoesMasculinas.includes(n)) return "m";
+  return n.endsWith("a") ? "f" : "m";
+};
+
 const personalizarCopy = (texto, cliente) => {
   if (!texto || !cliente) return texto;
   const primeiroNome = (cliente.nome||"").split(" ")[0] || "cliente";
@@ -721,8 +739,7 @@ const personalizarCopy = (texto, cliente) => {
   const gasto = (cliente.gasto||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0});
   const responsavel = (cliente.responsavel||"").trim();
   const operador = responsavel.split(" ")[0] || "Lucas";
-  // Se responsavel preenchido, usa "a" (operadoras); se vazio mantém "o Lucas" original
-  const artigo = responsavel ? "a" : "o";
+  const artigo = responsavel ? (detectarGenero(operador)==="f"?"a":"o") : "o";
 
   return texto
     .replace(/\[Nome\]/g, primeiroNome)
@@ -943,16 +960,11 @@ const Perfil = ({ clienteId, onVoltar }) => {
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Nome</div><input style={inp()} value={c.nome} onChange={e=>setC({...c,nome:e.target.value})} onBlur={()=>save({nome:c.nome})} /></div>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Telefone / WhatsApp</div><input style={inp()} value={c.telefone||""} onChange={e=>setC({...c,telefone:e.target.value})} onBlur={()=>save({telefone:c.telefone})} placeholder="11 9XXXX-XXXX"/></div>
         </div>
-        {(getCidade(c.cep)||c.fora!==null)&&(
-          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"7px 12px",background:"var(--color-background-secondary)",borderRadius:8,fontSize:12 }}>
-            <span style={{ fontSize:16 }}>{c.fora?"🌎":"📍"}</span>
-            <span style={{ color:"var(--color-text-primary)",fontWeight:500 }}>{getCidade(c.cep)||"—"}</span>
-            {c.fora&&<span style={{ fontSize:10,color:C.amberD,background:C.amberL,padding:"1px 6px",borderRadius:10,fontWeight:500 }}>Fora de SP</span>}
-            {c.cep&&<span style={{ fontSize:11,color:"var(--color-text-tertiary)",marginLeft:4 }}>CEP {c.cep}</span>}
-          </div>
-        )}
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
-          <div style={{display:"none"}}></div>
+        <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"7px 12px",background:"var(--color-background-secondary)",borderRadius:8,fontSize:12 }}>
+          <span style={{ fontSize:16 }}>{c.fora?"🌎":"📍"}</span>
+          <span style={{ color:"var(--color-text-primary)",fontWeight:500 }}>{getCidade(c.cep)||"Cidade não identificada"}</span>
+          {c.fora&&<span style={{ fontSize:10,color:C.amberD,background:C.amberL,padding:"1px 6px",borderRadius:10,fontWeight:500 }}>Fora de SP</span>}
+          {c.cep?<span style={{ fontSize:11,color:"var(--color-text-tertiary)",marginLeft:4 }}>CEP {c.cep}</span>:<span style={{ fontSize:11,color:"var(--color-text-tertiary)",marginLeft:4 }}>(sem CEP cadastrado)</span>}
         </div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
           <div><div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email Shopify</div><input style={inp()} value={c.email||""} onChange={e=>setC({...c,email:e.target.value})} onBlur={()=>save({email:c.email})} placeholder="email da conta Shopify" type="email"/></div>
@@ -3778,6 +3790,7 @@ const FOLLOW_UP_LABELS = {
 const ARVORE = {
   "recorrente": [
     { label:"Ficou curiosa / quer saber mais", emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Já pediu o link direto",          emoji:"🔗", proximoScript:"link_direto", novoStatus:"interessado" },
     { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
     { label:"Não quer fidelidade",             emoji:"🔓", proximoScript:"obj_fidelidade", novoStatus:"respondeu" },
     { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
@@ -3785,6 +3798,7 @@ const ARVORE = {
   ],
   "ticket_alto": [
     { label:"Ficou curiosa / quer saber mais", emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Já pediu o link direto",          emoji:"🔗", proximoScript:"link_direto", novoStatus:"interessado" },
     { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
     { label:"Não quer fidelidade",             emoji:"🔓", proximoScript:"obj_fidelidade", novoStatus:"respondeu" },
     { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
@@ -3792,6 +3806,7 @@ const ARVORE = {
   ],
   "kit": [
     { label:"Ficou curiosa / quer saber mais", emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Já pediu o link direto",          emoji:"🔗", proximoScript:"link_direto", novoStatus:"interessado" },
     { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
     { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
     { label:"Não respondeu",                   emoji:"🔇", proximoScript:"followup_48h", novoStatus:"contatado" },
@@ -3807,6 +3822,11 @@ const ARVORE = {
     { label:"Sim! Quero o link",               emoji:"✅", proximoScript:null, novoStatus:"link_enviado" },
     { label:"Ainda com dúvida de preço",       emoji:"💸", proximoScript:"obj_caro", novoStatus:"interessado" },
     { label:"Quer mais tempo",                 emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"interessado" },
+    { label:"Desistiu",                        emoji:"❌", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "link_direto": [
+    { label:"Confirmou o plano — enviar link", emoji:"✅", proximoScript:null, novoStatus:"link_enviado" },
+    { label:"Quer outro plano",                emoji:"🔄", proximoScript:"planos", novoStatus:"interessado" },
     { label:"Desistiu",                        emoji:"❌", proximoScript:null, novoStatus:"perdido" },
   ],
   "obj_caro": [
@@ -3852,11 +3872,11 @@ const SCRIPTS_CLUB = [
     perfil:"3+ pedidos com ciclo regular",
     copy:`Oi [Nome]! 😊 Aqui é a [Operador] da Laricas.
 
-Vi que você já comprou com a gente [N° pedidos]x e queria te apresentar o Laricas Club, nossa assinatura mensal.
+Vi que você já é cliente de carteirinha [N° pedidos]x — e isso me deixou pensando em você.
 
-A ideia é simples: você monta uma caixa com seus produtos favoritos, recebe todo mês em casa com desconto e frete grátis para SP.
+Queria te apresentar o Laricas Club: é basicamente garantir que você sempre tenha aquele momento de prazer sem precisar pensar nisso. Sem culpa, sem ficar adiando.
 
-Como você já conhece a Laricas, acho que pode fazer sentido para não precisar ficar fazendo pedido avulso toda vez.
+Você escolhe seus produtos favoritos, recebe todo mês com desconto e frete grátis para SP.
 
 Posso te mandar as opções de planos?`,
   },
@@ -3865,55 +3885,60 @@ Posso te mandar as opções de planos?`,
     perfil:"Gasto acima de R$300 no último pedido",
     copy:`Oi [Nome]! 😊 Aqui é a [Operador] da Laricas.
 
-Vi que no seu último pedido você comprou uma quantidade legal de produtos e queria te apresentar o Laricas Club.
+Vi seu último pedido e pensei: você já decidiu que merece esse momento — só ainda não tem isso garantido todo mês.
 
-Ele funciona como uma caixa mensal: você escolhe seus produtos favoritos, recebe todo mês em casa com desconto e frete grátis para SP.
+O Laricas Club resolve exatamente isso: sua rotina de prazer já vem pronta, sem precisar lembrar de pedir, com desconto e frete grátis.
 
-Para quem já costuma comprar Laricas em maior volume, normalmente fica mais prático e mais vantajoso.
-
-Posso te explicar rapidinho os planos?`,
+Quer que eu te explique rapidinho os planos?`,
   },
   {
     id:"kit", label:"C — Comprou kit", tag:"kit",
     perfil:"Comprou kit ou seleção ampla de produtos",
     copy:`Oi [Nome]! 😊 Aqui é a [Operador] da Laricas.
 
-Vi que você já comprou um dos nossos kits e queria te apresentar o Laricas Club.
+Vi que você já experimentou um pouco de tudo com a gente — e isso me fez pensar que talvez você já saiba o que gosta.
 
-A ideia é parecida com deixar seu estoque do mês garantido: você monta uma caixa com seus produtos favoritos e recebe todo mês em casa com desconto e frete grátis para SP.
-
-Como você já comprou uma seleção maior de produtos, acho que pode fazer sentido.
+O Laricas Club é exatamente isso: sua seleção favorita, garantida todo mês, sem precisar escolher de novo toda vez.
 
 Posso te mandar as opções?`,
   },
   {
     id:"planos", label:"D — Explicação dos planos", tag:"planos",
     perfil:"Após interesse confirmado",
-    copy:`O Laricas Club funciona assim: você escolhe de 7 a 15 doces por mês, monta sua caixa do jeito que quiser, e recebe direto na sua casa, sem precisar lembrar de pedir.
+    copy:`O Laricas Club existe para uma coisa simples: garantir que você sempre tenha o seu momento de prazer, sem culpa e sem depender de lembrar.
 
-Pode trocar os sabores todo mês, se quiser variar — com desconto em relação ao site e frete grátis para SP 😊
+Você escolhe de 7 a 15 doces por mês, monta sua caixa do jeito que quiser, e pode trocar os sabores todo mês se quiser variar — com desconto em relação ao site e frete grátis para SP.
 
 Hoje temos 3 opções de plano:
 
-*Trimestral:* para quem quer testar o Club com menor compromisso.
-*Semestral:* bom meio-termo para quem quer manter Laricas na rotina.
-*Anual:* melhor condição, com maior desconto e benefícios.
+*Trimestral:* para quem quer testar com menor compromisso.
+*Semestral:* bom meio-termo para manter a rotina.
+*Anual:* melhor condição, com maior desconto.
 
 Pelo seu perfil, eu recomendaria começar pelo plano [plano recomendado], porque [motivo]. Faz sentido pra você?`,
   },
   {
     id:"fechamento", label:"E — Fechamento", tag:"fechamento",
     perfil:"Cliente quente, pronta para fechar",
-    copy:`Acho que para você faz bastante sentido, principalmente porque você já compra Laricas e no Club fica mais prático e mais econômico.
+    copy:`Acho que para você faz todo sentido — você já decidiu que merece esse momento, agora é só deixar ele garantido todo mês, sem esforço.
 
 Quer que eu te mande o link direto para montar sua caixa?`,
   },
   {
+    id:"link_direto", label:"M — Link direto (cliente pediu)", tag:"fechamento",
+    perfil:"Cliente pulou etapas e já pediu o link",
+    copy:`Show, [Nome]! 😄
+
+Vou te mandar o link certinho. Só confirma rapidinho: pode ser o plano [plano recomendado]?
+
+Assim que confirmar, te mando o link na hora!`,
+  },
+  {
     id:"followup_48h", label:"F — Follow-up 48h", tag:"follow_up",
     perfil:"Sem resposta após 48h",
-    copy:`Oi [Nome], passando só para não deixar perdido.
+    copy:`Oi [Nome], passando só para não deixar pelo caminho.
 
-Te mandei sobre o Laricas Club porque, pelo seu histórico, achei que poderia fazer sentido.
+Pensei em você porque seu perfil combina muito com o Club — ter aquele momento de prazer garantido, sem culpa e sem precisar pensar.
 
 Quer que eu te explique rapidinho como funciona? 😊`,
   },
@@ -3922,7 +3947,7 @@ Quer que eu te explique rapidinho como funciona? 😊`,
     perfil:"Última tentativa após 7 dias",
     copy:`Última mensagem sobre isso, prometo! 😄
 
-Se em algum momento você quiser receber Laricas todo mês com desconto e frete grátis, me chama que te ajudo a escolher o melhor plano.
+Só queria deixar a porta aberta: quando você quiser garantir seu momento de prazer sem culpa todo mês, com desconto e frete grátis, me chama.
 
 Posso deixar reservada uma condição especial pra você?`,
   },
@@ -3931,9 +3956,9 @@ Posso deixar reservada uma condição especial pra você?`,
     perfil:"Clientes em dúvida após follow-up — última oferta antes de perder",
     copy:`[Nome], não costumo fazer isso, mas queria te dar uma condição especial 😊
 
-O plano Anual do Club já tem 20% de desconto em relação ao site. Para você, vou garantir mais 10% — ou seja, 30% de desconto durante o primeiro ano.
+O plano Anual já tem 20% de desconto em relação ao site. Para você, vou garantir mais 10% — 30% de desconto no primeiro ano.
 
-É a melhor entrada que tenho para oferecer.
+É a forma mais fácil de garantir seu momento de prazer sem culpa, com a melhor condição que tenho.
 
 Quer que eu te mande o link?`,
   },
@@ -3942,27 +3967,27 @@ Quer que eu te mande o link?`,
     perfil:"Disse que é caro",
     copy:`Entendo totalmente!
 
-O Club faz mais sentido para quem já compraria Laricas ao longo do mês. A diferença é que você recebe com desconto, frete grátis e não precisa fazer pedidos avulsos.
+Pensa assim: você já se permite esse prazer de vez em quando — o Club só garante que isso aconteça sem você precisar decidir toda vez, e ainda com desconto e frete grátis.
 
-Para quem compra com frequência, normalmente acaba ficando mais vantajoso 😊
+Para quem já tem esse hábito, normalmente sai mais em conta.
 
 Faz sentido pra você nesse formato?`,
   },
   {
     id:"obj_enjoar", label:"I — Objeção: medo de enjoar", tag:"objecao",
     perfil:"Com medo de enjoar",
-    copy:`Total, entendo! Por isso a ideia não é receber sempre a mesma coisa.
+    copy:`Total, entendo! Por isso a ideia não é repetir sempre a mesma coisa.
 
-Você pode montar uma caixa variada com produtos diferentes da Laricas, escolhendo de 7 a 15 doces, e trocar os sabores todo mês se quiser 😄
+Você escolhe de 7 a 15 doces por mês e pode trocar os sabores quando quiser — seu momento de prazer continua sendo surpresa, não repetição 😄
 
 Isso muda sua visão sobre o Club?`,
   },
   {
     id:"obj_fidelidade", label:"J — Objeção: não quer fidelidade", tag:"objecao",
     perfil:"Não quer compromisso longo",
-    copy:`Entendo! Nesse caso, talvez o trimestral seja o melhor começo.
+    copy:`Entendo! Nesse caso, o trimestral é o melhor jeito de começar.
 
-Ele tem o menor compromisso e serve justamente para testar se o Club faz sentido na sua rotina 😊
+Você testa esse momento de prazer garantido sem se comprometer por muito tempo 😊
 
 Quer começar assim, sem compromisso longo?`,
   },
@@ -3971,11 +3996,13 @@ Quer começar assim, sem compromisso longo?`,
     perfil:"Disse que vai pensar",
     copy:`Claro, sem pressão! 😊
 
-Só para te ajudar: o Club faz mais sentido para quem já sabe que vai comprar Laricas de novo. Não é uma compra nova — é transformar a recompra em algo mais prático e com condição melhor.
+Só uma reflexão: você já decidiu que se permite esse prazer de vez em quando. O Club só transforma isso em rotina garantida, sem culpa e sem esforço.
 
 Posso te chamar de novo em alguns dias?`,
   },
 ];
+
+
 
 // Score de calor Club (0-100)
 const calcScoreClub = (c) => {
@@ -4085,6 +4112,7 @@ const ScoreBar = ({ score }) => {
 
 const FunilClub = ({ onAbrirPerfil }) => {
   const [clientes, setClientes] = useState([]);
+  const [clientesDash, setClientesDash] = useState([]); // inclui fechou/perdido — só para estatísticas
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState(null);
   const [aba, setAba] = useState("hoje");
@@ -4101,16 +4129,19 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
   useEffect(() => {
     dbGetAll().then(lista => {
-      // Só clientes com pedidos (potenciais Club) e que não são assinantes
-      const candidatos = lista.filter(c =>
-        (c.p||0) >= 2 &&
+      const comScore = lista.filter(c => (c.p||0) >= 2)
+        .map(c => { const sc=calcScoreClub(c); return {...c,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; });
+      // Lista operacional: só candidatos ativos (exclui fechou/perdido/assinantes)
+      const candidatos = comScore.filter(c =>
         c.etapa !== "experiencia" &&
         c.etapa !== "encerrado" &&
         c.statusClub !== "fechou" &&
         c.statusClub !== "perdido"
-      ).map(c => { const sc=calcScoreClub(c); return {...c,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; })
-        .sort((a,b) => b._score - a._score);
+      ).sort((a,b) => b._score - a._score);
       setClientes(candidatos);
+      // Lista para Dash: inclui TODOS que já entraram no funil (mesmo fechou/perdido/experiencia)
+      const paraDash = comScore.filter(c => c.statusClub || c.etapa === "experiencia");
+      setClientesDash(paraDash);
       setLoading(false);
     });
   }, []);
@@ -4118,7 +4149,22 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const saveCliente = async (atualizado) => {
     setSalvando(true);
     await dbSave(atualizado);
-    setClientes(prev => prev.map(c => { if(c.id!==atualizado.id) return c; const sc=calcScoreClub(atualizado); return {...atualizado,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; }));
+    const sc0=calcScoreClub(atualizado);
+    const comScore0 = {...atualizado,_score:sc0.score,_diasUlt:sc0.diasUlt,_diasParaProxima:sc0.diasParaProxima,_inativa:sc0.inativa,_muitoInativa:sc0.muitoInativa};
+    setClientes(prev => {
+      // Se virou fechou/perdido/experiencia, remove da lista operacional; senão atualiza/mantém
+      if (comScore0.statusClub==="fechou" || comScore0.statusClub==="perdido" || comScore0.etapa==="experiencia") {
+        return prev.filter(c=>c.id!==atualizado.id);
+      }
+      return prev.map(c => c.id!==atualizado.id ? c : comScore0);
+    });
+    setClientesDash(prev => {
+      const existe = prev.find(c=>c.id===atualizado.id);
+      if (existe) return prev.map(c=>c.id===atualizado.id?comScore0:c);
+      // Se agora tem statusClub ou virou experiencia, inclui no Dash
+      if (comScore0.statusClub || comScore0.etapa==="experiencia") return [...prev, comScore0];
+      return prev;
+    });
     const scSel=calcScoreClub(atualizado); setSel({...atualizado,_score:scSel.score,_diasUlt:scSel.diasUlt,_diasParaProxima:scSel.diasParaProxima,_inativa:scSel.inativa,_muitoInativa:scSel.muitoInativa});
     setOk("Salvo!");
     setTimeout(() => setOk(""), 1500);
@@ -4127,10 +4173,26 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
   const atualizarStatus = async (c, novoStatus) => {
     const followUpDias = FOLLOW_UP_DAYS[novoStatus];
-    const followUpData = followUpDias ? addDays(followUpDias) : null;
+    let followUpData = followUpDias ? addDays(followUpDias) : null;
     const tentativas = novoStatus === "contatado"
       ? (c.tentativasClub||0) + 1
       : (c.tentativasClub||0);
+
+    // Conversão: mover para Experiência no Kanban + follow-up alinhado ao onboarding (R1, até 3 dias)
+    let dadosConversao = {};
+    if (novoStatus === "fechou") {
+      const hist = (c.historicoEtapas || []).slice(-9);
+      hist.push({ etapa: c.etapa, data: new Date().toLocaleDateString("pt-BR"), hora: new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) });
+      followUpData = addDays(3); // R1 — Onboarding: até 3 dias após início
+      dadosConversao = {
+        etapa: "experiencia",
+        historicoEtapas: hist,
+        tipoAssinatura: c.planoFechado || c.planoRec || "trimestral",
+        dataInicioAssinatura: c.dataInicioAssinatura || hoje,
+        valorMensal: c.valorMensalClub || "",
+      };
+    }
+
     const atualizado = {
       ...c,
       statusClub: novoStatus,
@@ -4139,6 +4201,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
       dataUltimoContato: hoje,
       ...(followUpData ? { proximoFollowup: followUpData } : {}),
       ...(novoStatus === "fechou" ? { dataConversao: hoje } : {}),
+      ...dadosConversao,
     };
     await saveCliente(atualizado);
     // Atualizar script sugerido automaticamente
@@ -4147,7 +4210,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
     if (followUpData) {
       setFollowUpProposto({
         data: followUpData,
-        label: FOLLOW_UP_LABELS[novoStatus]||"",
+        label: novoStatus==="fechou" ? "Onboarding (R1) — até 3 dias após início" : (FOLLOW_UP_LABELS[novoStatus]||""),
         clienteId: c.id,
         status: novoStatus,
       });
@@ -4158,7 +4221,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const personalizarScript = (copy, c) => {
     const nome = (c.nome||"").split(" ")[0] || "cliente";
     const operador = (c.responsavel||"Lucas").split(" ")[0];
-    const artigo = c.responsavel ? "a" : "o";
+    const artigo = c.responsavel ? (detectarGenero(operador)==="f"?"a":"o") : "o";
     const planoRec = c.planoRec || sugerirPlano(c);
     return copy
       .replace(/\[Nome\]/g, nome)
@@ -4245,6 +4308,8 @@ const FunilClub = ({ onAbrirPerfil }) => {
       if ((c._score||0) < 40) return false;
       if ((c._diasUlt||999) > 45) return false;
       if (c._inativa || c._muitoInativa) return false;
+      // Se tem ciclo bem definido e faltam mais de 7 dias, não é "primeiro contato" ainda — aguardar janela
+      if (c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima > 7) return false;
     } else if (filtroStatus) {
       if (c.statusClub !== filtroStatus) return false;
     }
@@ -4653,7 +4718,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
   // ── Dashboard simples ──────────────────────────────────────────────────────
   const DashClub = () => {
-    const todos = clientes;
+    const todos = clientesDash;
     const abordados = todos.filter(c=>c.statusClub&&c.statusClub!=="");
     const responderam = todos.filter(c=>["respondeu","interessado","link_enviado","fechou"].includes(c.statusClub));
     const interessados = todos.filter(c=>["interessado","link_enviado","fechou"].includes(c.statusClub));
@@ -4815,7 +4880,9 @@ const FunilClub = ({ onAbrirPerfil }) => {
         const primeiroContato = prontas.filter(c =>
           !c.statusClub &&
           (c._score||0) >= 55 &&
-          (c._diasUlt||999) <= 45
+          (c._diasUlt||999) <= 45 &&
+          // Excluir quem tem ciclo bem definido e ainda faltam mais de 7 dias para a próxima compra
+          !(c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima > 7)
         ).sort((a,b) => (b._score||0) - (a._score||0)).slice(0, 8);
 
         // 4. LINK SEM FECHAMENTO — enviou link, aguardando
@@ -5003,7 +5070,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
                 const ai = prontas2.filter(c=>c.statusClub==="interessado"||(c.statusClub==="respondeu")||(c.proximoFollowup&&c.proximoFollowup<=hoje));
                 const jh = prontas2.filter(c=>!c.statusClub&&c._diasParaProxima!=null&&c._diasParaProxima>=-2&&c._diasParaProxima<=5);
                 const lf = prontas2.filter(c=>c.statusClub==="link_enviado");
-                const pc = prontas2.filter(c=>!c.statusClub&&(c._score||0)>=55&&(c._diasUlt||999)<=45).slice(0,8);
+                const pc = prontas2.filter(c=>!c.statusClub&&(c._score||0)>=55&&(c._diasUlt||999)<=45&&!(c._diasParaProxima!=null&&c._diasParaProxima>7)).slice(0,8);
                 return (
                   <div>
                     {[["🔥 Ação imediata",ai,C.coralD],[" 🛒 Janela aberta",jh,C.greenD],["🔗 Link enviado",lf,C.blueD],["📤 1° contato",pc,C.tealD]].map(([titulo,lista,cor])=>
