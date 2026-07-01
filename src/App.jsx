@@ -3786,14 +3786,28 @@ const MOTIVOS_NAO_PODE = [
 // Ao enviar um script, avança automaticamente o próximo follow-up
 // sem precisar revisitar o perfil no final do dia
 const SCRIPT_AUTO_FOLLOWUP = {
-  "followup_48h": { dias: 5,  proximo: "followup_2",  label: "Aguardando — F2 em 5 dias" },
-  "followup_2":   { dias: 7,  proximo: "followup_3",  label: "Aguardando — F3 em 7 dias" },
-  "followup_3":   { dias: 10, proximo: "followup_4",  label: "Aguardando — F4 em 10 dias" },
-  "followup_4":   { dias: 14, proximo: null,           label: "Última checagem em 14 dias" },
-  "planos":       { dias: 2,  proximo: "fp1",          label: "Aguardando resposta — FP1 em 2 dias" },
-  "fechamento":   { dias: 2,  proximo: "fp2",          label: "Aguardando resposta — FP2 em 2 dias" },
-  "link_direto":  { dias: 2,  proximo: "fp2",          label: "Aguardando resposta — FP2 em 2 dias" },
+  "recorrente":   { dias: 2,  label: "48h — aguardando resposta" },
+  "ticket_alto":  { dias: 2,  label: "48h — aguardando resposta" },
+  "kit":          { dias: 2,  label: "48h — aguardando resposta" },
+  "followup_48h": { dias: 5,  label: "Aguardando — F2 em 5 dias" },
+  "followup_2":   { dias: 7,  label: "Aguardando — F3 em 7 dias" },
+  "followup_3":   { dias: 10, label: "Aguardando — F4 em 10 dias" },
+  "followup_4":   { dias: 14, label: "Última checagem em 14 dias" },
+  "planos":       { dias: 2,  label: "Aguardando resposta — FP1 em 2 dias" },
+  "fechamento":   { dias: 2,  label: "Aguardando resposta — FP2 em 2 dias" },
+  "link_direto":  { dias: 2,  label: "Aguardando resposta — FP2 em 2 dias" },
+  "fp1":          { dias: 2,  label: "Aguardando resposta — 2 dias" },
+  "fp2":          { dias: 2,  label: "Aguardando resposta — 2 dias" },
+  "obj_caro":     { dias: 2,  label: "Aguardando resposta — 2 dias" },
+  "obj_enjoar":   { dias: 2,  label: "Aguardando resposta — 2 dias" },
+  "obj_fidelidade":{ dias: 2, label: "Aguardando resposta — 2 dias" },
+  "obj_pensar":   { dias: 3,  label: "Aguardando resposta — 3 dias" },
+  "obj_nao_pode_agora": { dias: 3, label: "Aguardando motivo — 3 dias" },
+  "condicao_especial":  { dias: 2, label: "Gatilho final enviado — 2 dias" },
+  "followup_7d":  { dias: 3,  label: "Follow-up final — 3 dias" },
 };
+// Padrão para scripts não mapeados — toda cópia gera follow-up de 2 dias
+const SCRIPT_AUTO_FOLLOWUP_DEFAULT = { dias: 2, label: "Aguardando resposta — 2 dias" };
 
 const FOLLOW_UP_DAYS = {
   "contatado": 2,
@@ -4350,10 +4364,10 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const registrarEnvio = async (c, scriptId) => {
     const s = SCRIPTS_CLUB.find(s=>s.id===scriptId);
     if (!s) return;
-    // Avanço automático de follow-up ao enviar script de follow-up ou planos/fechamento
-    const autoFU = SCRIPT_AUTO_FOLLOWUP[scriptId];
+    // Avanço automático de follow-up — mapeado ou padrão de 2 dias
+    const autoFU = SCRIPT_AUTO_FOLLOWUP[scriptId] || SCRIPT_AUTO_FOLLOWUP_DEFAULT;
     const logEntry = {
-      texto:"Script enviado: "+s.label+(autoFU?" — próximo follow-up em "+autoFU.dias+"d":""),
+      texto:"Script enviado: "+s.label+" — próximo follow-up em "+autoFU.dias+"d",
       data:new Date().toLocaleDateString("pt-BR"),
       hora:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
       resp:c.responsavel||"",
@@ -4364,21 +4378,22 @@ const FunilClub = ({ onAbrirPerfil }) => {
       scriptsEnviados,
       scriptUsado: scriptId,
       logAtividade:[logEntry,...(c.logAtividade||[])].slice(0,30),
-      // Avança follow-up automaticamente se script tem mapeamento
-      ...(autoFU ? { proximoFollowup: addDays(autoFU.dias) } : {}),
+      proximoFollowup: addDays(autoFU.dias),
+      dataUltimoContato: hoje,
+      // Marcar data de abordagem se for o primeiro contato
+      ...(c.dataAbordagem ? {} : { dataAbordagem: hoje }),
+      // Marcar como contatado se ainda não estava no funil
+      ...(c.statusClub ? {} : { statusClub: "contatado", tentativasClub: (c.tentativasClub||0)+1 }),
     };
     await saveCliente(atualizado);
-    // Mostrar confirmação do avanço automático
-    if (autoFU) {
-      setFollowUpProposto({
-        data: addDays(autoFU.dias),
-        label: autoFU.label,
-        clienteId: c.id,
-        status: c.statusClub,
-      });
-      setTimeout(() => setFollowUpProposto(null), 8000);
-    }
-    if (!c.dataAbordagem) atualizarStatus(atualizado, "contatado");
+    // Mostrar banner de confirmação do follow-up
+    setFollowUpProposto({
+      data: addDays(autoFU.dias),
+      label: autoFU.label,
+      clienteId: c.id,
+      status: atualizado.statusClub,
+    });
+    setTimeout(() => setFollowUpProposto(null), 8000);
   };
 
   const abrirWhatsApp = (c, scriptId) => {
