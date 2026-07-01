@@ -4727,9 +4727,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
                           statusClub:op.novoStatus,
                           ...(op.novoStatus==="contatado"&&!c.dataAbordagem?{dataAbordagem:hoje}:{}),
                           dataUltimoContato:hoje,
-                          // followUpDias pode vir da opção (customizado) ou do status padrão
-                          const fuDias = op.followUpDias !== undefined ? op.followUpDias : FOLLOW_UP_DAYS[op.novoStatus];
-                          ...(fuDias ? {proximoFollowup:addDays(fuDias)} : {}),
+                          ...(( op.followUpDias !== undefined ? op.followUpDias : FOLLOW_UP_DAYS[op.novoStatus] ) ? {proximoFollowup:addDays(op.followUpDias !== undefined ? op.followUpDias : FOLLOW_UP_DAYS[op.novoStatus])} : {}),
                           ...(op.novoStatus==="fechou"?{dataConversao:hoje}:{}),
                           ...(op.novoStatus==="contatado"?{tentativasClub:(c.tentativasClub||0)+1}:{}),
                           logAtividade:[logEntry,...(c.logAtividade||[])].slice(0,30),
