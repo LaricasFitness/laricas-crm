@@ -4450,7 +4450,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
     } else if (filtroStatus === "primeiro_contato") {
       if (c.statusClub) return false;
       if ((c._score||0) < 40) return false;
-      if ((c._diasUlt||999) > 45) return false;
+      if ((c._diasUlt||999) > 60) return false;
       if (c._inativa || c._muitoInativa) return false;
       // Se tem ciclo bem definido e faltam mais de 7 dias, não é "primeiro contato" ainda — aguardar janela
       if (c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima > 7) return false;
@@ -5061,7 +5061,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
         const janelaIds = new Set(janelaHoje.map(c=>c.id));
         const novosContatos = prontas.filter(c =>
           !c.statusClub && !janelaIds.has(c.id) &&
-          (c._score||0)>=55 && (c._diasUlt||999)<=45 &&
+          (c._score||0)>=40 && (c._diasUlt||999)<=60 &&
           !(c._diasParaProxima!=null && c._diasParaProxima>7)
         ).sort((a,b)=>(b._score||0)-(a._score||0));
 
@@ -5240,7 +5240,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
                 const ai = prontas2.filter(c=>c.statusClub==="interessado"||(c.statusClub==="respondeu")||(c.proximoFollowup&&c.proximoFollowup<=hoje));
                 const jh = prontas2.filter(c=>!c.statusClub&&c._diasParaProxima!=null&&c._diasParaProxima>=-2&&c._diasParaProxima<=5);
                 const lf = prontas2.filter(c=>c.statusClub==="link_enviado");
-                const pc = prontas2.filter(c=>!c.statusClub&&(c._score||0)>=55&&(c._diasUlt||999)<=45&&!(c._diasParaProxima!=null&&c._diasParaProxima>7)).slice(0,8);
+                const pc = prontas2.filter(c=>!c.statusClub&&(c._score||0)>=40&&(c._diasUlt||999)<=60&&!(c._diasParaProxima!=null&&c._diasParaProxima>7)).slice(0,8);
                 return (
                   <div>
                     {[["🔥 Ação imediata",ai,C.coralD],[" 🛒 Janela aberta",jh,C.greenD],["🔗 Link enviado",lf,C.blueD],["📤 1° contato",pc,C.tealD]].map(([titulo,lista,cor])=>
