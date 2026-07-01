@@ -5034,172 +5034,156 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
       {/* ABA HOJE */}
       {aba==="hoje"&&(()=>{
-        // Apenas clientes prontas para Club (ativas, 2+ pedidos, não assinantes)
         const prontas = clientes.filter(c =>
-          (c.p||0) >= 2 &&
-          (c._diasUlt||999) < 90 &&
-          !c._muitoInativa
+          (c.p||0) >= 2 && (c._diasUlt||999) < 90 && !c._muitoInativa
         );
 
-        // 1. AÇÃO IMEDIATA — já estão no funil e precisam de resposta agora
+        // Follow-ups: clientes já no funil
         const acaoImediata = prontas.filter(c =>
-          c.statusClub === "interessado" ||
-          (c.statusClub === "respondeu") ||
-          (c.statusClub === "contatado" && c.dataUltimoContato === hoje) ||
-          (c.proximoFollowup && c.proximoFollowup <= hoje)
-        ).sort((a,b) => {
-          const prioA = a.statusClub==="interessado"?0:a.statusClub==="respondeu"?1:2;
-          const prioB = b.statusClub==="interessado"?0:b.statusClub==="respondeu"?1:2;
-          return prioA - prioB;
-        });
+          c.statusClub==="interessado" || c.statusClub==="respondeu"
+        ).sort((a,b) => a.statusClub==="interessado"?-1:1);
 
-        // 2. JANELA DE COMPRA — prestes a pedir avulso, interceptar agora
+        const aguardandoFechamento = prontas.filter(c => c.statusClub==="link_enviado");
+
+        const followUpsHoje = prontas.filter(c =>
+          c.statusClub &&
+          c.statusClub!=="interessado" && c.statusClub!=="respondeu" &&
+          c.statusClub!=="link_enviado" && c.statusClub!=="fechou" && c.statusClub!=="perdido" &&
+          c.proximoFollowup && c.proximoFollowup<=hoje
+        ).sort((a,b)=>(a.proximoFollowup||"")>(b.proximoFollowup||"")?1:-1);
+
+        // Novos contatos: nunca abordadas
         const janelaHoje = prontas.filter(c =>
           !c.statusClub &&
-          c._diasParaProxima !== null &&
-          c._diasParaProxima !== undefined &&
-          c._diasParaProxima >= -2 &&
-          c._diasParaProxima <= 5
-        ).sort((a,b) => (a._diasParaProxima||0) - (b._diasParaProxima||0));
+          c._diasParaProxima!=null && c._diasParaProxima>=-2 && c._diasParaProxima<=5
+        ).sort((a,b)=>(a._diasParaProxima||0)-(b._diasParaProxima||0));
 
-        // 3. PRIMEIRO CONTATO — score alto, prontas, nunca abordadas
-        const primeiroContato = prontas.filter(c =>
-          !c.statusClub &&
-          (c._score||0) >= 55 &&
-          (c._diasUlt||999) <= 45 &&
-          // Excluir quem tem ciclo bem definido e ainda faltam mais de 7 dias para a próxima compra
-          !(c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima > 7)
-        ).sort((a,b) => (b._score||0) - (a._score||0)).slice(0, 8);
+        const janelaIds = new Set(janelaHoje.map(c=>c.id));
+        const novosContatos = prontas.filter(c =>
+          !c.statusClub && !janelaIds.has(c.id) &&
+          (c._score||0)>=55 && (c._diasUlt||999)<=45 &&
+          !(c._diasParaProxima!=null && c._diasParaProxima>7)
+        ).sort((a,b)=>(b._score||0)-(a._score||0));
 
-        // 4. LINK SEM FECHAMENTO — enviou link, aguardando
-        const aguardandoFechamento = prontas.filter(c => c.statusClub === "link_enviado");
+        const novosRestantes = Math.max(0, metaDiaria - janelaHoje.length);
+        const primeiroContato = novosContatos.slice(0, novosRestantes);
 
-        const nada = acaoImediata.length===0 && janelaHoje.length===0 && primeiroContato.length===0 && aguardandoFechamento.length===0;
+        const novosContatadosHoje = prontas.filter(c=>!c.statusClub&&c.dataUltimoContato===hoje).length;
+        const followUpsFeitos = prontas.filter(c=>c.statusClub&&c.dataUltimoContato===hoje).length;
+        const pctNovos = Math.min(100,Math.round(novosContatadosHoje/metaDiaria*100));
+        const totalFU = acaoImediata.length+aguardandoFechamento.length+followUpsHoje.length;
+        const totalNovos = janelaHoje.length+primeiroContato.length;
+        const nada = totalFU===0 && totalNovos===0;
 
         return (
           <div>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
               <div style={{flex:1}}>
                 <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)"}}>
                   {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
                 </div>
-                <div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>
-                  {acaoImediata.length + janelaHoje.length + primeiroContato.length} clientes para contatar hoje
-                </div>
-                {(()=>{
-                  const abordadasHoje = prontas.filter(c=>c.dataUltimoContato===hoje).length;
-                  const pct = Math.min(100, Math.round(abordadasHoje/metaDiaria*100));
-                  return (
-                    <div style={{marginTop:6}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-                        <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>Meta diária</span>
-                        <span style={{fontSize:10,fontWeight:500,color:pct>=100?C.greenD:C.teal}}>{abordadasHoje}/{metaDiaria}</span>
-                      </div>
-                      <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2,overflow:"hidden"}}>
-                        <div style={{width:pct+"%",height:"100%",background:pct>=100?C.green:C.teal,borderRadius:2,transition:"width 0.3s"}}/>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-              <div style={{display:"flex",gap:6}}>
-                {[
-                  {label:"Ação imediata",count:acaoImediata.length,cor:C.coral},
-                  {label:"Janela aberta",count:janelaHoje.length,cor:C.green},
-                  {label:"1° contato",count:primeiroContato.length,cor:C.teal},
-                ].map(item=>item.count>0&&(
-                  <div key={item.label} style={{textAlign:"center",background:item.cor+"18",borderRadius:8,padding:"6px 10px",border:"0.5px solid "+item.cor}}>
-                    <div style={{fontSize:18,fontWeight:600,color:item.cor}}>{item.count}</div>
-                    <div style={{fontSize:9,color:item.cor,textTransform:"uppercase",letterSpacing:"0.06em"}}>{item.label}</div>
+                <div style={{marginTop:6}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                    <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>Novos contatos hoje</span>
+                    <span style={{fontSize:10,fontWeight:500,color:pctNovos>=100?C.greenD:C.teal}}>{novosContatadosHoje}/{metaDiaria}</span>
                   </div>
-                ))}
+                  <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2,overflow:"hidden"}}>
+                    <div style={{width:pctNovos+"%",height:"100%",background:pctNovos>=100?C.green:C.teal,borderRadius:2,transition:"width 0.3s"}}/>
+                  </div>
+                </div>
+                {followUpsFeitos>0&&<div style={{fontSize:10,color:C.greenD,marginTop:4}}>✓ {followUpsFeitos} follow-up{followUpsFeitos>1?"s":""} realizados hoje</div>}
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                {totalFU>0&&<div style={{textAlign:"center",background:C.coral+"18",borderRadius:8,padding:"6px 10px",border:"0.5px solid "+C.coral}}>
+                  <div style={{fontSize:18,fontWeight:600,color:C.coralD}}>{totalFU}</div>
+                  <div style={{fontSize:9,color:C.coralD,textTransform:"uppercase"}}>Follow-ups</div>
+                </div>}
+                {totalNovos>0&&<div style={{textAlign:"center",background:C.teal+"18",borderRadius:8,padding:"6px 10px",border:"0.5px solid "+C.teal}}>
+                  <div style={{fontSize:18,fontWeight:600,color:C.tealD}}>{totalNovos}</div>
+                  <div style={{fontSize:9,color:C.tealD,textTransform:"uppercase"}}>Novos</div>
+                </div>}
               </div>
             </div>
 
-            {(()=>{
-              // Melhor candidata do dia — janela aberta + no funil
-              const melhor = prontas.find(c =>
-                c._diasParaProxima!==null && c._diasParaProxima!==undefined &&
-                c._diasParaProxima>=-2 && c._diasParaProxima<=3 &&
-                c.statusClub && c.statusClub!=="fechou" && c.statusClub!=="perdido"
-              ) || janelaHoje[0] || acaoImediata[0];
-              if (!melhor) return null;
-              const sc = calcScoreClub(melhor);
+            {/* Melhor candidata */}
+            {(acaoImediata[0]||janelaHoje[0]||followUpsHoje[0])&&(()=>{
+              const melhor = acaoImediata[0]||janelaHoje[0]||followUpsHoje[0];
               return (
-                <div style={{background:"linear-gradient(135deg,"+C.greenL+" 0%,"+C.tealL+" 100%)",border:"1.5px solid "+C.teal,borderRadius:12,padding:"14px 16px",marginBottom:20}}>
-                  <div style={{fontSize:11,fontWeight:600,color:C.tealD,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>⭐ Melhor candidata hoje</div>
-                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{background:"linear-gradient(135deg,"+C.greenL+" 0%,"+C.tealL+" 100%)",border:"1.5px solid "+C.teal,borderRadius:12,padding:"12px 14px",marginBottom:16}}>
+                  <div style={{fontSize:10,fontWeight:600,color:C.tealD,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>⭐ Melhor candidata hoje</div>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)",marginBottom:2}}>{melhor.nome}</div>
-                      <div style={{fontSize:12,color:"var(--color-text-secondary)"}}>
-                        {melhor.p}p · R${(melhor.gasto||0).toFixed(0)} · ciclo {melhor.cicloMedio||"?"}d
-                        {melhor._diasParaProxima!==null&&melhor._diasParaProxima!==undefined&&(
-                          <span style={{color:C.greenD,fontWeight:500}}> · {melhor._diasParaProxima<=0?"🛒 comprando agora":"em "+melhor._diasParaProxima+"d"}</span>
-                        )}
+                      <div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{melhor.nome}</div>
+                      <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>
+                        {melhor.p}p · R${(melhor.gasto||0).toFixed(0)} · {STATUS_CLUB.find(s=>s.id===melhor.statusClub)?.label||"Não abordada"}
+                        {melhor._diasParaProxima!=null&&<span style={{color:C.greenD,fontWeight:500}}> · {melhor._diasParaProxima<=0?"🛒 comprando agora":"janela em "+melhor._diasParaProxima+"d"}</span>}
                       </div>
                     </div>
-                    {melhor.telefone&&(
-                      <button onClick={()=>{setSel(melhor);setScriptSel(sugerirScript(melhor));setAba("lista");}}
-                        style={{padding:"8px 16px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",background:C.teal,color:"#fff",border:"none",whiteSpace:"nowrap"}}>
-                        Abrir →
-                      </button>
-                    )}
+                    <button onClick={()=>{setSel(melhor);setScriptSel(sugerirScript(melhor));setAba("lista");}}
+                      style={{padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",background:C.teal,color:"#fff",border:"none"}}>
+                      Abrir →
+                    </button>
                   </div>
                 </div>
               );
             })()}
 
-            {acaoImediata.length>0&&(
+            {/* FOLLOW-UPS */}
+            {totalFU>0&&(
               <div style={{marginBottom:20}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                  <span style={{fontSize:16}}>🔥</span>
-                  <span style={{fontSize:13,fontWeight:600,color:C.coralD}}>Ação imediata</span>
-                  <span style={{fontSize:11,color:C.coralD,background:C.coralL,padding:"1px 8px",borderRadius:20}}>{acaoImediata.length}</span>
+                <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                  <span>🔔 Follow-ups</span>
+                  <div style={{flex:1,height:1,background:"var(--color-border-tertiary)"}}/>
+                  <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{totalFU} clientes</span>
                 </div>
-                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>Responderam, estão interessadas ou têm follow-up vencido — prioridade máxima.</div>
-                {acaoImediata.map(c=><CardLista key={c.id} c={c}/>)}
+                {acaoImediata.length>0&&(
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.coralD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>🔥 Responderam ou estão interessadas</div>
+                    {acaoImediata.map(c=><CardLista key={c.id} c={c}/>)}
+                  </div>
+                )}
+                {aguardandoFechamento.length>0&&(
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.blueD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>🔗 Link enviado — aguardando fechamento</div>
+                    {aguardandoFechamento.map(c=><CardLista key={c.id} c={c}/>)}
+                  </div>
+                )}
+                {followUpsHoje.length>0&&(
+                  <div>
+                    <div style={{fontSize:10,color:C.amberD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>📅 Follow-ups agendados para hoje</div>
+                    {followUpsHoje.map(c=><CardLista key={c.id} c={c}/>)}
+                  </div>
+                )}
               </div>
             )}
 
-            {janelaHoje.length>0&&(
-              <div style={{marginBottom:20}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                  <span style={{fontSize:16}}>🛒</span>
-                  <span style={{fontSize:13,fontWeight:600,color:C.greenD}}>Janela de compra aberta</span>
-                  <span style={{fontSize:11,color:C.greenD,background:C.greenL,padding:"1px 8px",borderRadius:20}}>{janelaHoje.length}</span>
+            {/* NOVOS CONTATOS */}
+            {totalNovos>0&&(
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                  <span>📤 Novos contatos do dia</span>
+                  <div style={{flex:1,height:1,background:"var(--color-border-tertiary)"}}/>
+                  <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{totalNovos}/{metaDiaria}</span>
                 </div>
-                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>Estão prestes a fazer um pedido avulso. Interceptar agora com proposta do Club.</div>
-                {janelaHoje.map(c=><CardLista key={c.id} c={c}/>)}
-              </div>
-            )}
-
-            {aguardandoFechamento.length>0&&(
-              <div style={{marginBottom:20}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                  <span style={{fontSize:16}}>🔗</span>
-                  <span style={{fontSize:13,fontWeight:600,color:C.blueD}}>Link enviado — aguardando fechamento</span>
-                  <span style={{fontSize:11,color:C.blueD,background:C.blueL,padding:"1px 8px",borderRadius:20}}>{aguardandoFechamento.length}</span>
-                </div>
-                {aguardandoFechamento.map(c=><CardLista key={c.id} c={c}/>)}
-              </div>
-            )}
-
-            {primeiroContato.length>0&&(
-              <div style={{marginBottom:20}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                  <span style={{fontSize:16}}>📤</span>
-                  <span style={{fontSize:13,fontWeight:600,color:C.tealD}}>Primeiro contato</span>
-                  <span style={{fontSize:11,color:C.tealD,background:C.tealL,padding:"1px 8px",borderRadius:20}}>{primeiroContato.length}</span>
-                </div>
-                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>Score alto, compras recentes, nunca foram abordadas para o Club.</div>
-                {primeiroContato.map(c=><CardLista key={c.id} c={c}/>)}
+                {janelaHoje.length>0&&(
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.greenD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>🛒 Janela de compra aberta — prioridade máxima</div>
+                    {janelaHoje.map(c=><CardLista key={c.id} c={c}/>)}
+                  </div>
+                )}
+                {primeiroContato.length>0&&(
+                  <div>
+                    <div style={{fontSize:10,color:C.tealD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>⭐ Score alto — nunca abordadas</div>
+                    {primeiroContato.map(c=><CardLista key={c.id} c={c}/>)}
+                  </div>
+                )}
               </div>
             )}
 
             {nada&&(
               <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>
                 <div style={{fontSize:32,marginBottom:12}}>✅</div>
-                <div style={{fontSize:13}}>Nenhuma ação urgente hoje. A lista está em dia!</div>
+                <div style={{fontSize:13}}>Tudo em dia! Nenhuma ação urgente no momento.</div>
               </div>
             )}
           </div>
