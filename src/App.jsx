@@ -3773,15 +3773,15 @@ const FOLLOW_UP_DAYS = {
   "respondeu": 1,
   "interessado": 1,
   "link_enviado": 2,
-  "nao_agora": 14,
+  "nao_agora": 30,
   "follow_up": 3,
 };
 const FOLLOW_UP_LABELS = {
-  "contatado": "48h para follow-up",
+  "contatado": "48h — Follow-up F",
   "respondeu": "Amanhã — está quente",
   "interessado": "Amanhã — enviar link",
   "link_enviado": "2 dias — aguardar decisão",
-  "nao_agora": "14 dias — dar espaço",
+  "nao_agora": "30 dias — aguardar momento certo",
   "follow_up": "3 dias",
 };
 
@@ -3852,8 +3852,25 @@ const ARVORE = {
   "followup_48h": [
     { label:"Respondeu com interesse",         emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
     { label:"Disse que é caro",                emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
+    { label:"Não pode agora",                  emoji:"⏳", proximoScript:"obj_nao_pode_agora", novoStatus:"respondeu" },
     { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
-    { label:"Não respondeu de novo",           emoji:"🔇", proximoScript:"followup_7d", novoStatus:"follow_up" },
+    { label:"Não respondeu — F2",              emoji:"🔇", proximoScript:"followup_2", novoStatus:"follow_up" },
+  ],
+  "followup_2": [
+    { label:"Respondeu com interesse",         emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Não pode agora",                  emoji:"⏳", proximoScript:"obj_nao_pode_agora", novoStatus:"respondeu" },
+    { label:"Quer pensar",                     emoji:"🤔", proximoScript:"obj_pensar", novoStatus:"respondeu" },
+    { label:"Não respondeu — F3",              emoji:"🔇", proximoScript:"followup_3", novoStatus:"follow_up" },
+  ],
+  "followup_3": [
+    { label:"Respondeu — retomar conversa",    emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Não pode agora",                  emoji:"⏳", proximoScript:"obj_nao_pode_agora", novoStatus:"respondeu" },
+    { label:"Não respondeu — F4 (última)",     emoji:"🔇", proximoScript:"followup_4", novoStatus:"follow_up" },
+  ],
+  "followup_4": [
+    { label:"Respondeu — retomar conversa",    emoji:"🤩", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Não pode agora",                  emoji:"⏳", proximoScript:"obj_nao_pode_agora", novoStatus:"respondeu" },
+    { label:"Não respondeu — encerrar",        emoji:"🔇", proximoScript:null, novoStatus:"perdido" },
   ],
   "followup_7d": [
     { label:"Respondeu interessada",           emoji:"🔥", proximoScript:"planos", novoStatus:"respondeu" },
@@ -3863,6 +3880,11 @@ const ARVORE = {
   "condicao_especial": [
     { label:"Aceitou! Quer o link",            emoji:"🏆", proximoScript:null, novoStatus:"link_enviado" },
     { label:"Mesmo assim não quer",            emoji:"❌", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "obj_nao_pode_agora": [
+    { label:"Motivo financeiro — voltar em 30d", emoji:"💰", proximoScript:null, novoStatus:"nao_agora", followUpDias:30 },
+    { label:"Mudança de rotina — voltar em 15d", emoji:"🔄", proximoScript:null, novoStatus:"nao_agora", followUpDias:15 },
+    { label:"Outro motivo — definir data",       emoji:"📅", proximoScript:null, novoStatus:"nao_agora", followUpDias:null },
   ],
 };
 
@@ -3943,8 +3965,37 @@ Pensei em você porque seu perfil combina muito com o Club — ter aquele moment
 Quer que eu te explique rapidinho como funciona? 😊`,
   },
   {
-    id:"followup_7d", label:"G — Follow-up 7 dias", tag:"follow_up",
-    perfil:"Última tentativa após 7 dias",
+    id:"followup_2", label:"F2 — Follow-up 2 (+5 dias)", tag:"follow_up",
+    perfil:"Não respondeu o F — apresentar o Club de outro ângulo",
+    copy:`Oi [Nome]! 😊
+
+Deixa eu tentar de outro jeito.
+
+O Laricas Club é basicamente isso: você escolhe seus doces favoritos, de 7 a 15 por mês, e recebe em casa com desconto e frete grátis — sem precisar lembrar de pedir.
+
+Tem gente que chama de "meu estoque mensal de prazer sem culpa" 😄
+
+Faz sentido pra você?`,
+  },
+  {
+    id:"followup_3", label:"F3 — Follow-up 3 (+7 dias)", tag:"follow_up",
+    perfil:"Não respondeu o F2 — transparência total",
+    copy:`Oi [Nome], tô mandando essa mensagem porque genuinamente acho que o Club faz sentido pra você — mas entendo se o momento não for esse.
+
+Se não for a hora, tudo bem mesmo. Só me fala e não te incomodo mais 😊`,
+  },
+  {
+    id:"followup_4", label:"F4 — Follow-up 4 (+10 dias)", tag:"follow_up",
+    perfil:"Não respondeu o F3 — identidade e pertencimento",
+    copy:`Oi [Nome]! Uma última mensagem, prometo 😄
+
+Pensei em você porque poucas pessoas entendem o que a Laricas representa — não é só doce, é aquele momento de prazer que não sabota nada.
+
+Queria só saber: isso ainda faz sentido na sua rotina?`,
+  },
+  {
+    id:"followup_7d", label:"G — Follow-up final", tag:"follow_up",
+    perfil:"Última tentativa — condição especial reservada",
     copy:`Última mensagem sobre isso, prometo! 😄
 
 Só queria deixar a porta aberta: quando você quiser garantir seu momento de prazer sem culpa todo mês, com desconto e frete grátis, me chama.
@@ -3999,6 +4050,13 @@ Quer começar assim, sem compromisso longo?`,
 Só uma reflexão: você já decidiu que se permite esse prazer de vez em quando. O Club só transforma isso em rotina garantida, sem culpa e sem esforço.
 
 Posso te chamar de novo em alguns dias?`,
+  },
+  {
+    id:"obj_nao_pode_agora", label:"N — Objeção: não pode agora", tag:"objecao",
+    perfil:"Tem interesse genuíno mas não pode assinar no momento",
+    copy:`Faz todo sentido, [Nome]! Sem pressão mesmo 😊
+
+Só pra eu entender melhor — é mais uma questão de momento financeiro agora, ou tem alguma outra razão?`,
   },
 ];
 
@@ -4594,7 +4652,9 @@ const FunilClub = ({ onAbrirPerfil }) => {
                           statusClub:op.novoStatus,
                           ...(op.novoStatus==="contatado"&&!c.dataAbordagem?{dataAbordagem:hoje}:{}),
                           dataUltimoContato:hoje,
-                          ...(FOLLOW_UP_DAYS[op.novoStatus]?{proximoFollowup:addDays(FOLLOW_UP_DAYS[op.novoStatus])}:{}),
+                          // followUpDias pode vir da opção (customizado) ou do status padrão
+                          const fuDias = op.followUpDias !== undefined ? op.followUpDias : FOLLOW_UP_DAYS[op.novoStatus];
+                          ...(fuDias ? {proximoFollowup:addDays(fuDias)} : {}),
                           ...(op.novoStatus==="fechou"?{dataConversao:hoje}:{}),
                           ...(op.novoStatus==="contatado"?{tentativasClub:(c.tentativasClub||0)+1}:{}),
                           logAtividade:[logEntry,...(c.logAtividade||[])].slice(0,30),
@@ -4602,9 +4662,14 @@ const FunilClub = ({ onAbrirPerfil }) => {
                         await saveCliente(atualizado);
                         if(op.proximoScript) setScriptSel(op.proximoScript);
                         else if(op.novoStatus==="perdido"||op.novoStatus==="link_enviado") setScriptSel(null);
-                        if(FOLLOW_UP_DAYS[op.novoStatus]){
-                          setFollowUpProposto({data:addDays(FOLLOW_UP_DAYS[op.novoStatus]),label:FOLLOW_UP_LABELS[op.novoStatus]||"",clienteId:c.id,status:op.novoStatus});
+                        const fuDias2 = op.followUpDias !== undefined ? op.followUpDias : FOLLOW_UP_DAYS[op.novoStatus];
+                        if(fuDias2){
+                          setFollowUpProposto({data:addDays(fuDias2),label:FOLLOW_UP_LABELS[op.novoStatus]||"",clienteId:c.id,status:op.novoStatus});
                           setTimeout(()=>setFollowUpProposto(null),8000);
+                        } else if(op.followUpDias===null) {
+                          // followUpDias explicitamente null = pedir ao usuário que defina manualmente
+                          setFollowUpProposto({data:addDays(30),label:"Defina a data de retorno manualmente",clienteId:c.id,status:op.novoStatus});
+                          setTimeout(()=>setFollowUpProposto(null),15000);
                         }
                       }}
                         style={{width:"100%",textAlign:"left",padding:"8px 12px",borderRadius:8,fontSize:12,cursor:"pointer",
