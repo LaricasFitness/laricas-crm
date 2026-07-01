@@ -3782,6 +3782,19 @@ const MOTIVOS_NAO_PODE = [
   "Outro",
 ];
 
+
+// Ao enviar um script, avança automaticamente o próximo follow-up
+// sem precisar revisitar o perfil no final do dia
+const SCRIPT_AUTO_FOLLOWUP = {
+  "followup_48h": { dias: 5,  proximo: "followup_2",  label: "Aguardando — F2 em 5 dias" },
+  "followup_2":   { dias: 7,  proximo: "followup_3",  label: "Aguardando — F3 em 7 dias" },
+  "followup_3":   { dias: 10, proximo: "followup_4",  label: "Aguardando — F4 em 10 dias" },
+  "followup_4":   { dias: 14, proximo: null,           label: "Última checagem em 14 dias" },
+  "planos":       { dias: 2,  proximo: "fp1",          label: "Aguardando resposta — FP1 em 2 dias" },
+  "fechamento":   { dias: 2,  proximo: "fp2",          label: "Aguardando resposta — FP2 em 2 dias" },
+  "link_direto":  { dias: 2,  proximo: "fp2",          label: "Aguardando resposta — FP2 em 2 dias" },
+};
+
 const FOLLOW_UP_DAYS = {
   "contatado": 2,
   "respondeu": 1,
@@ -3899,6 +3912,18 @@ const ARVORE = {
     { label:"Motivo financeiro — voltar em 30d", emoji:"💰", proximoScript:null, novoStatus:"nao_agora", followUpDias:30 },
     { label:"Mudança de rotina — voltar em 15d", emoji:"🔄", proximoScript:null, novoStatus:"nao_agora", followUpDias:15 },
     { label:"Outro motivo — definir data",       emoji:"📅", proximoScript:null, novoStatus:"nao_agora", followUpDias:null },
+  ],
+  "fp1": [
+    { label:"Respondeu — tem interesse",         emoji:"🔥", proximoScript:"fechamento", novoStatus:"interessado" },
+    { label:"Disse que é caro",                  emoji:"💸", proximoScript:"obj_caro", novoStatus:"respondeu" },
+    { label:"Não pode agora",                    emoji:"⏳", proximoScript:"obj_nao_pode_agora", novoStatus:"respondeu" },
+    { label:"Não respondeu — encerrar",          emoji:"🔇", proximoScript:null, novoStatus:"perdido" },
+  ],
+  "fp2": [
+    { label:"Respondeu — enviar link",           emoji:"✅", proximoScript:null, novoStatus:"link_enviado" },
+    { label:"Tem dúvida — retomar",              emoji:"🤔", proximoScript:"planos", novoStatus:"respondeu" },
+    { label:"Não pode agora",                    emoji:"⏳", proximoScript:"obj_nao_pode_agora", novoStatus:"respondeu" },
+    { label:"Não respondeu — encerrar",          emoji:"🔇", proximoScript:null, novoStatus:"perdido" },
   ],
 };
 
@@ -4064,6 +4089,24 @@ Quer começar assim, sem compromisso longo?`,
 Só uma reflexão: você já decidiu que se permite esse prazer de vez em quando. O Club só transforma isso em rotina garantida, sem culpa e sem esforço.
 
 Posso te chamar de novo em alguns dias?`,
+  },
+  {
+    id:"fp1", label:"FP1 — Não respondeu os planos (48h)", tag:"follow_up",
+    perfil:"Recebeu os planos mas não respondeu",
+    copy:`Oi [Nome]! 😊
+
+Passando pra ver se ficou alguma dúvida sobre os planos.
+
+Qual deles pareceu fazer mais sentido pra você?`,
+  },
+  {
+    id:"fp2", label:"FP2 — Não respondeu o fechamento (48h)", tag:"follow_up",
+    perfil:"Estava prestes a fechar mas sumiu",
+    copy:`Oi [Nome]! 😊
+
+Vi que não deu tempo de responder — sem problema.
+
+Só queria saber: ficou alguma dúvida antes de montar sua caixa?`,
   },
   {
     id:"obj_nao_pode_agora", label:"N — Objeção: não pode agora", tag:"objecao",
@@ -4307,8 +4350,10 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const registrarEnvio = async (c, scriptId) => {
     const s = SCRIPTS_CLUB.find(s=>s.id===scriptId);
     if (!s) return;
+    // Avanço automático de follow-up ao enviar script de follow-up ou planos/fechamento
+    const autoFU = SCRIPT_AUTO_FOLLOWUP[scriptId];
     const logEntry = {
-      texto:"Script enviado: "+s.label,
+      texto:"Script enviado: "+s.label+(autoFU?" — próximo follow-up em "+autoFU.dias+"d":""),
       data:new Date().toLocaleDateString("pt-BR"),
       hora:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
       resp:c.responsavel||"",
@@ -4319,8 +4364,20 @@ const FunilClub = ({ onAbrirPerfil }) => {
       scriptsEnviados,
       scriptUsado: scriptId,
       logAtividade:[logEntry,...(c.logAtividade||[])].slice(0,30),
+      // Avança follow-up automaticamente se script tem mapeamento
+      ...(autoFU ? { proximoFollowup: addDays(autoFU.dias) } : {}),
     };
     await saveCliente(atualizado);
+    // Mostrar confirmação do avanço automático
+    if (autoFU) {
+      setFollowUpProposto({
+        data: addDays(autoFU.dias),
+        label: autoFU.label,
+        clienteId: c.id,
+        status: c.statusClub,
+      });
+      setTimeout(() => setFollowUpProposto(null), 8000);
+    }
     if (!c.dataAbordagem) atualizarStatus(atualizado, "contatado");
   };
 
