@@ -3768,6 +3768,20 @@ const OBJECTIONS = [
 
 const PLANOS = ["Trimestral","Semestral","Anual"];
 
+
+const MOTIVOS_NAO_PODE = [
+  "Orçamento apertado no momento",
+  "Acabou de fazer um pedido grande",
+  "Está em dieta restritiva / protocolo",
+  "Vai viajar / mudança de rotina",
+  "Quer esperar o próximo salário",
+  "Está testando outros produtos",
+  "Momento pessoal difícil",
+  "Muito caro",
+  "Site é igual ou melhor",
+  "Outro",
+];
+
 const FOLLOW_UP_DAYS = {
   "contatado": 2,
   "respondeu": 1,
@@ -4647,6 +4661,10 @@ const FunilClub = ({ onAbrirPerfil }) => {
                           hora:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
                           resp:c.responsavel||"",
                         };
+                        // Se selecionou "não pode agora" com motivo específico, pré-marcar motivoNaoPode
+                        const motivoPreenchido = op.novoStatus==="nao_agora" && op.followUpDias!==undefined && op.followUpDias!==null
+                          ? MOTIVOS_NAO_PODE.find(m=>op.label.toLowerCase().includes(m.toLowerCase().split(" ")[0].toLowerCase())) || ""
+                          : "";
                         const atualizado={
                           ...c,
                           statusClub:op.novoStatus,
@@ -4736,6 +4754,19 @@ const FunilClub = ({ onAbrirPerfil }) => {
             </div>
           </div>
 
+          {c.statusClub==="nao_agora"&&(
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Motivo — não pode agora</div>
+              <select value={c.motivoNaoPode||""} onChange={e=>saveCliente({...c,motivoNaoPode:e.target.value})}
+                style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)"}}>
+                <option value="">— Selecione o motivo —</option>
+                {MOTIVOS_NAO_PODE.map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+              {c.motivoNaoPode&&<div style={{fontSize:10,color:C.amberD,marginTop:4}}>
+                💡 Registrado — vai aparecer no Dash e no relatório diário
+              </div>}
+            </div>
+          )}
           <div>
             <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Observações</div>
             <textarea value={c.obsClub||""} onChange={e=>saveCliente({...c,obsClub:e.target.value})} rows={2}
@@ -4822,6 +4853,26 @@ const FunilClub = ({ onAbrirPerfil }) => {
             ))}
           </div>
         )}
+        {(()=>{
+          const motivoCounts = {};
+          todos.forEach(c => { if(c.motivoNaoPode) motivoCounts[c.motivoNaoPode]=(motivoCounts[c.motivoNaoPode]||0)+1; });
+          const motivoRanking = Object.entries(motivoCounts).sort((a,b)=>b[1]-a[1]);
+          if(!motivoRanking.length) return null;
+          return (
+            <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:12}}>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>
+                ⏳ Motivos — não pode agora ({todos.filter(c=>c.statusClub==="nao_agora").length} clientes)
+              </div>
+              {motivoRanking.map(([motivo,count])=>(
+                <div key={motivo} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <div style={{flex:1,fontSize:12,color:"var(--color-text-primary)"}}>{motivo}</div>
+                  <div style={{width:`${Math.round(count/motivoRanking[0][1]*100)}%`,maxWidth:120,height:8,background:C.amber,borderRadius:4,minWidth:20}}/>
+                  <span style={{fontSize:12,fontWeight:500,color:C.amberD,minWidth:20,textAlign:"right"}}>{count}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {convertidos.length>0&&(
           <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginTop:12}}>
             <div style={{fontSize:11,fontWeight:500,color:C.greenD,marginBottom:8}}>Conversões por plano</div>
