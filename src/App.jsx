@@ -4687,7 +4687,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
                 {textoScript}
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>copiar(textoScript,"script")}
+                <button onClick={()=>{ copiar(textoScript,"script"); registrarEnvio(c, scriptSel||sugerirScript(c)); }}
                   style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
                     background:copiadoId==="script"?C.green:C.tealL,color:copiadoId==="script"?"#fff":C.tealD,
                     border:"0.5px solid "+C.teal,transition:"all 0.2s"}}>
