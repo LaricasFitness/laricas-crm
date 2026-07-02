@@ -3843,8 +3843,8 @@ const SCRIPT_AUTO_FOLLOWUP = {
   "obj_nao_pode_agora": { dias: 3, label: "Aguardando motivo — 3 dias" },
   "condicao_especial":  { dias: 2, label: "Gatilho final enviado — 2 dias" },
   "followup_7d":  { dias: 3,  label: "Follow-up final — 3 dias" },
+  "reativacao":   { dias: 3,  label: "Aguardando resposta — reativação em 3 dias" },
 };
-  "reativacao":  { dias: 3,  label: "Aguardando resposta — reativação em 3 dias" },
 // Padrão para scripts não mapeados — toda cópia gera follow-up de 2 dias
 const SCRIPT_AUTO_FOLLOWUP_DEFAULT = { dias: 2, label: "Aguardando resposta — 2 dias" };
 
@@ -4652,6 +4652,12 @@ const FunilClub = ({ onAbrirPerfil }) => {
             <div style={{flex:1}}>
               <div style={{fontSize:15,fontWeight:600,color:"var(--color-text-primary)"}}>{c.nome}</div>
               <div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{c.telefone||"—"} · {c.email||"—"}</div>
+              {(getCidade(c.cep)||c.fora)&&(
+                <div style={{fontSize:11,color:C.tealD,marginTop:3}}>
+                  {c.fora?"🌎":"📍"} {getCidade(c.cep)||"Cidade não identificada"}
+                  {c.fora&&<span style={{marginLeft:4,fontSize:10,background:C.amberL,color:C.amberD,padding:"0px 5px",borderRadius:8,fontWeight:500}}>Fora de SP</span>}
+                </div>
+              )}
             </div>
             {c.telefone&&(
               <a href={"https://wa.me/55"+(c.telefone||"").replace(/\D/g,"")} target="_blank" rel="noopener noreferrer"
