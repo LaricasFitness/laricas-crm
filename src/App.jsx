@@ -3554,6 +3554,31 @@ const Unificar = ({ onSalvo }) => {
           <div style={{ fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center" }}>
             O perfil escolhido absorve listas, notas, logs e histórico do outro. O outro é removido.
           </div>
+          {preview&&(()=>{
+            const [a,b] = preview;
+            const manter = selecionados.includes(a.id)?a:b;
+            const remover = manter.id===a.id?b:a;
+            const campos = ["nome","telefone","email","emailClub","responsavel"];
+            const conflitos = campos.filter(c=>manter[c]&&remover[c]&&manter[c]!==remover[c]);
+            return (
+              <div style={{marginTop:12,background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px"}}>
+                <div style={{fontSize:12,color:C.tealD,marginBottom:6,fontWeight:500}}>
+                  📊 Pedidos: {manter.p||0} + {remover.p||0} = <strong>{(manter.p||0)+(remover.p||0)}</strong> &nbsp;·&nbsp;
+                  Gasto: R${(manter.gasto||0).toFixed(0)} + R${(remover.gasto||0).toFixed(0)} = <strong>R${((manter.gasto||0)+(remover.gasto||0)).toFixed(0)}</strong>
+                </div>
+                {conflitos.length>0&&(
+                  <div style={{fontSize:11,color:C.coralD,marginTop:6}}>
+                    <strong>⚠ Campos conflitantes — será mantido o da esquerda:</strong>
+                    {conflitos.map(f=>(
+                      <div key={f} style={{marginTop:4,background:C.coralL,borderRadius:6,padding:"4px 8px"}}>
+                        <strong>{f}:</strong> "{manter[f]}" (mantido) vs "{remover[f]}" (descartado)
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -3769,6 +3794,19 @@ const OBJECTIONS = [
 const PLANOS = ["Trimestral","Semestral","Anual"];
 
 
+const MOTIVOS_INATIVIDADE = [
+  "Preço ficou alto",
+  "Encontrou outro produto",
+  "Mudou a dieta / protocolo",
+  "Esqueceu da Laricas",
+  "Teve problema com pedido ou entrega",
+  "Estava viajando / mudança de rotina",
+  "Questão financeira",
+  "Não gostou de algum produto",
+  "Não compra mais online",
+  "Outro",
+];
+
 const MOTIVOS_NAO_PODE = [
   "Orçamento apertado no momento",
   "Acabou de fazer um pedido grande",
@@ -3806,6 +3844,7 @@ const SCRIPT_AUTO_FOLLOWUP = {
   "condicao_especial":  { dias: 2, label: "Gatilho final enviado — 2 dias" },
   "followup_7d":  { dias: 3,  label: "Follow-up final — 3 dias" },
 };
+  "reativacao":  { dias: 3,  label: "Aguardando resposta — reativação em 3 dias" },
 // Padrão para scripts não mapeados — toda cópia gera follow-up de 2 dias
 const SCRIPT_AUTO_FOLLOWUP_DEFAULT = { dias: 2, label: "Aguardando resposta — 2 dias" };
 
@@ -4105,6 +4144,17 @@ Só uma reflexão: você já decidiu que se permite esse prazer de vez em quando
 Posso te chamar de novo em alguns dias?`,
   },
   {
+    id:"reativacao", label:"R — Reativação (inativa há muito tempo)", tag:"reativacao",
+    perfil:"3+ pedidos no passado mas sem comprar há 90+ dias — entender o motivo antes de oferecer Club",
+    copy:`Oi [Nome]! 😊 Aqui é a [Operador] da Laricas.
+
+Vi que faz um tempinho que você não pede nada com a gente, e fiquei curiosa.
+
+Tudo bem por aí? Teve alguma coisa que te afastou ou foi só correria mesmo?
+
+Pergunto porque você era uma das clientes que mais gostava dos nossos produtos, e queria entender se tem algo que possa melhorar 😊`,
+  },
+  {
     id:"fp1", label:"FP1 — Não respondeu os planos (48h)", tag:"follow_up",
     perfil:"Recebeu os planos mas não respondeu",
     copy:`Oi [Nome]! 😊
@@ -4247,6 +4297,15 @@ const FunilClub = ({ onAbrirPerfil }) => {
   const [aba, setAba] = useState("hoje");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [busca, setBusca] = useState("");
+  const [sorts, setSorts] = useState([]); // [{campo, dir}] — cumulativo
+  const toggleSort = (campo) => {
+    setSorts(prev => {
+      const existing = prev.find(s=>s.campo===campo);
+      if (!existing) return [...prev, {campo, dir:"desc"}];
+      if (existing.dir==="desc") return prev.map(s=>s.campo===campo?{campo,dir:"asc"}:s);
+      return prev.filter(s=>s.campo!==campo); // remove on third click
+    });
+  };
   const [salvando, setSalvando] = useState(false);
   const [ok, setOk] = useState("");
   const [scriptSel, setScriptSel] = useState(null);
@@ -4463,10 +4522,23 @@ const FunilClub = ({ onAbrirPerfil }) => {
     }
     return true;
   }).sort((a,b) => {
-    // Filtro por status específico → ordenar direto pelo score Club
+    // Sorts cumulativos se ativos
+    if (sorts.length > 0) {
+      for (const s of sorts) {
+        let va, vb;
+        if (s.campo==="p") { va=a.p||0; vb=b.p||0; }
+        else if (s.campo==="ciclo") { va=a.cicloMedio||999; vb=b.cicloMedio||999; }
+        else if (s.campo==="dias") { va=a._diasUlt||999; vb=b._diasUlt||999; }
+        else if (s.campo==="score") { va=a._score||0; vb=b._score||0; }
+        else continue;
+        const diff = s.dir==="desc" ? vb-va : va-vb;
+        if (diff!==0) return diff;
+      }
+      return 0;
+    }
+    // Padrão: prioClub + score
     const filtroEspecifico = filtroStatus && filtroStatus !== "hoje" && filtroStatus !== "primeiro_contato";
     if (filtroEspecifico) return (b._score||0) - (a._score||0);
-    // Sem filtro ou filtros de contexto → prioClub + score como desempate
     const pa = prioClub(a), pb = prioClub(b);
     if (pb !== pa) return pb - pa;
     return (b._score||0) - (a._score||0);
@@ -4559,6 +4631,9 @@ const FunilClub = ({ onAbrirPerfil }) => {
     const planoRec = c.planoRec || sugerirPlano(c);
     const ciclo = c.cicloMedio||0;
     const janelaAberta = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -3 && c._diasParaProxima <= 7 && !c._inativa;
+    // Local state para campos de texto — evita re-render a cada tecla (bug de scroll)
+    const [obsLocal, setObsLocal] = React.useState(c.obsClub||"");
+    React.useEffect(()=>setObsLocal(c.obsClub||""), [c.id]);
 
     const scriptAtual = SCRIPTS_CLUB.find(s=>s.id===scriptSel) || SCRIPTS_CLUB.find(s=>s.id===sugerirScript(c));
     const textoScript = scriptAtual ? personalizarScript(scriptAtual.copy, c) : "";
@@ -4837,10 +4912,24 @@ const FunilClub = ({ onAbrirPerfil }) => {
               </div>}
             </div>
           )}
+          {c.scriptUsado==="reativacao"&&(
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Motivo da inatividade</div>
+              <select value={c.motivoInatividade||""} onChange={e=>saveCliente({...c,motivoInatividade:e.target.value})}
+                style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)"}}>
+                <option value="">— O que ela respondeu? —</option>
+                {MOTIVOS_INATIVIDADE.map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+              {c.motivoInatividade&&<div style={{fontSize:10,color:C.tealD,marginTop:4}}>
+                💡 Registrado — use para ajustar a abordagem de reativação
+              </div>}
+            </div>
+          )}
           <div>
             <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4}}>Observações</div>
-            <textarea value={c.obsClub||""} onChange={e=>saveCliente({...c,obsClub:e.target.value})} rows={2}
-              placeholder="Contexto, tom da conversa, o que ela disse..."
+            <textarea value={obsLocal} onChange={e=>setObsLocal(e.target.value)}
+              onBlur={()=>{ if(obsLocal!==c.obsClub) saveCliente({...c,obsClub:obsLocal}); }}
+              rows={2} placeholder="Contexto, tom da conversa, o que ela disse..."
               style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)",outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
           </div>
         </div>
@@ -4923,6 +5012,26 @@ const FunilClub = ({ onAbrirPerfil }) => {
             ))}
           </div>
         )}
+        {(()=>{
+          const inativCounts = {};
+          todos.forEach(c => { if(c.motivoInatividade) inativCounts[c.motivoInatividade]=(inativCounts[c.motivoInatividade]||0)+1; });
+          const inativRanking = Object.entries(inativCounts).sort((a,b)=>b[1]-a[1]);
+          if(!inativRanking.length) return null;
+          return (
+            <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:12}}>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>
+                🔄 Motivos de inatividade ({todos.filter(c=>c.scriptUsado==="reativacao").length} reativadas)
+              </div>
+              {inativRanking.map(([motivo,count])=>(
+                <div key={motivo} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <div style={{flex:1,fontSize:12,color:"var(--color-text-primary)"}}>{motivo}</div>
+                  <div style={{width:`${Math.round(count/inativRanking[0][1]*100)}%`,maxWidth:120,height:8,background:C.teal,borderRadius:4,minWidth:20}}/>
+                  <span style={{fontSize:12,fontWeight:500,color:C.tealD,minWidth:20,textAlign:"right"}}>{count}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {(()=>{
           const motivoCounts = {};
           todos.forEach(c => { if(c.motivoNaoPode) motivoCounts[c.motivoNaoPode]=(motivoCounts[c.motivoNaoPode]||0)+1; });
@@ -5194,9 +5303,37 @@ const FunilClub = ({ onAbrirPerfil }) => {
       {aba==="lista"&&(
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div>
-            <div style={{display:"flex",gap:8,marginBottom:10}}>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
               <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar cliente..."
                 style={{flex:1,padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}/>
+            </div>
+            {/* Sorts cumulativos */}
+            <div style={{display:"flex",gap:4,marginBottom:8,alignItems:"center"}}>
+              <span style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginRight:2}}>Ordenar:</span>
+              {[
+                {campo:"p", label:"Pedidos"},
+                {campo:"ciclo", label:"Ciclo"},
+                {campo:"dias", label:"Sem comprar"},
+                {campo:"score", label:"Score"},
+              ].map(({campo,label})=>{
+                const active = sorts.find(s=>s.campo===campo);
+                return (
+                  <button key={campo} onClick={()=>toggleSort(campo)}
+                    style={{padding:"3px 9px",borderRadius:20,fontSize:11,cursor:"pointer",fontWeight:active?500:400,
+                      background:active?C.purple:"var(--color-background-secondary)",
+                      color:active?"#fff":"var(--color-text-secondary)",
+                      border:"0.5px solid "+(active?C.purple:"var(--color-border-tertiary)")}}>
+                    {label}{active?(active.dir==="desc"?" ↓":" ↑"):""}
+                  </button>
+                );
+              })}
+              {sorts.length>0&&(
+                <button onClick={()=>setSorts([])}
+                  style={{padding:"3px 9px",borderRadius:20,fontSize:11,cursor:"pointer",
+                    background:C.coralL,color:C.coralD,border:"0.5px solid "+C.coral}}>
+                  ✕ Limpar
+                </button>
+              )}
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
               <button onClick={()=>setFiltroStatus("")}
