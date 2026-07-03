@@ -3555,23 +3555,22 @@ const Unificar = ({ onSalvo }) => {
             O perfil escolhido absorve listas, notas, logs e histórico do outro. O outro é removido.
           </div>
           {preview&&(()=>{
-            const [a,b] = preview;
-            const manter = selecionados.includes(a.id)?a:b;
-            const remover = manter.id===a.id?b:a;
+            // preview é {a, b} — desestruturação como objeto
+            const pa = preview.a, pb = preview.b;
             const campos = ["nome","telefone","email","emailClub","responsavel"];
-            const conflitos = campos.filter(c=>manter[c]&&remover[c]&&manter[c]!==remover[c]);
+            const conflitos = campos.filter(campo=>pa[campo]&&pb[campo]&&pa[campo]!==pb[campo]);
             return (
               <div style={{marginTop:12,background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px"}}>
                 <div style={{fontSize:12,color:C.tealD,marginBottom:6,fontWeight:500}}>
-                  📊 Pedidos: {manter.p||0} + {remover.p||0} = <strong>{(manter.p||0)+(remover.p||0)}</strong> &nbsp;·&nbsp;
-                  Gasto: R${(manter.gasto||0).toFixed(0)} + R${(remover.gasto||0).toFixed(0)} = <strong>R${((manter.gasto||0)+(remover.gasto||0)).toFixed(0)}</strong>
+                  📊 Pedidos somados: {(pa.p||0)+(pb.p||0)} &nbsp;·&nbsp;
+                  Gasto somado: R${((pa.gasto||0)+(pb.gasto||0)).toFixed(0)}
                 </div>
                 {conflitos.length>0&&(
                   <div style={{fontSize:11,color:C.coralD,marginTop:6}}>
-                    <strong>⚠ Campos conflitantes — será mantido o da esquerda:</strong>
-                    {conflitos.map(f=>(
-                      <div key={f} style={{marginTop:4,background:C.coralL,borderRadius:6,padding:"4px 8px"}}>
-                        <strong>{f}:</strong> "{manter[f]}" (mantido) vs "{remover[f]}" (descartado)
+                    <strong>⚠ Campos com valores diferentes — ao clicar "Manter este", o da esquerda prevalece:</strong>
+                    {conflitos.map(campo=>(
+                      <div key={campo} style={{marginTop:4,background:C.coralL,borderRadius:6,padding:"4px 8px"}}>
+                        <strong>{campo}:</strong> "{pa[campo]}" ← vs → "{pb[campo]}"
                       </div>
                     ))}
                   </div>
@@ -3771,6 +3770,122 @@ const gerarRelatorioDiario = async () => {
   setTimeout(() => win.print(), 500);
 };
 
+
+
+// ── CALENDÁRIO DE FOLLOW-UPS ───────────────────────────────────────────────
+const CalendarioFollowups = ({ clientes, onAbrirCliente }) => {
+  const hoje = new Date();
+  const [mesAtual, setMesAtual] = React.useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+
+  const diasNoMes = new Date(mesAtual.getFullYear(), mesAtual.getMonth()+1, 0).getDate();
+  const primeiroDia = mesAtual.getDay(); // 0=dom
+
+  const statusCor = (status) => {
+    if (status === "interessado") return {bg:C.greenL, text:C.greenD, border:C.green};
+    if (status === "respondeu") return {bg:C.blueL, text:C.blueD, border:C.blue};
+    if (status === "link_enviado") return {bg:C.amberL, text:C.amberD, border:C.amber};
+    if (status === "contatado") return {bg:C.tealL, text:C.tealD, border:C.teal};
+    if (status === "follow_up") return {bg:C.purpleL, text:C.purpleD, border:C.purple};
+    if (status === "nao_agora") return {bg:"#f5f5f5", text:"#888", border:"#ccc"};
+    return {bg:"var(--color-background-secondary)", text:"var(--color-text-tertiary)", border:"var(--color-border-tertiary)"};
+  };
+
+  // Agrupar clientes por data de follow-up
+  const porDia = {};
+  clientes.forEach(c => {
+    if (!c.proximoFollowup) return;
+    const [ano, mes, dia] = c.proximoFollowup.split("-").map(Number);
+    if (ano === mesAtual.getFullYear() && mes === mesAtual.getMonth()+1) {
+      if (!porDia[dia]) porDia[dia] = [];
+      porDia[dia].push(c);
+    }
+  });
+
+  const mesLabel = mesAtual.toLocaleDateString("pt-BR", {month:"long", year:"numeric"});
+  const diasSemana = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  const hojeISO = hoje.toISOString().split("T")[0];
+
+  return (
+    <div>
+      {/* Header do calendário */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+        <button onClick={()=>setMesAtual(new Date(mesAtual.getFullYear(), mesAtual.getMonth()-1, 1))}
+          style={{padding:"4px 12px",borderRadius:8,cursor:"pointer",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",fontSize:16,color:"var(--color-text-primary)"}}>‹</button>
+        <div style={{flex:1,textAlign:"center",fontSize:14,fontWeight:500,color:"var(--color-text-primary)",textTransform:"capitalize"}}>{mesLabel}</div>
+        <button onClick={()=>setMesAtual(new Date(mesAtual.getFullYear(), mesAtual.getMonth()+1, 1))}
+          style={{padding:"4px 12px",borderRadius:8,cursor:"pointer",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",fontSize:16,color:"var(--color-text-primary)"}}>›</button>
+      </div>
+
+      {/* Legenda */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+        {[
+          ["Interessado",C.greenD,C.greenL],["Respondeu",C.blueD,C.blueL],["Link enviado",C.amberD,C.amberL],
+          ["Contatado",C.tealD,C.tealL],["Follow-up",C.purpleD,C.purpleL],["Não agora","#888","#f5f5f5"],
+        ].map(([label,text,bg])=>(
+          <div key={label} style={{display:"flex",alignItems:"center",gap:4,fontSize:10}}>
+            <div style={{width:10,height:10,borderRadius:3,background:bg}}/>
+            <span style={{color:"var(--color-text-tertiary)"}}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Grade de dias */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+        {diasSemana.map(d=>(
+          <div key={d} style={{textAlign:"center",fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",padding:"4px 0"}}>{d}</div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+        {Array.from({length:primeiroDia}).map((_,i)=><div key={"e"+i}/>)}
+        {Array.from({length:diasNoMes}).map((_,i)=>{
+          const dia = i+1;
+          const diaISO = `${mesAtual.getFullYear()}-${String(mesAtual.getMonth()+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+          const isHoje = diaISO === hojeISO;
+          const isPassado = diaISO < hojeISO;
+          const clts = porDia[dia]||[];
+          return (
+            <div key={dia} style={{minHeight:60,border:"0.5px solid var(--color-border-tertiary)",borderRadius:6,padding:"4px",
+              background:isHoje?"var(--color-background-secondary)":"transparent",
+              opacity:isPassado&&clts.length===0?0.4:1}}>
+              <div style={{fontSize:10,fontWeight:isHoje?600:400,color:isHoje?C.teal:"var(--color-text-tertiary)",marginBottom:2}}>{dia}</div>
+              {clts.slice(0,3).map(c=>{
+                const cor = statusCor(c.statusClub);
+                return (
+                  <button key={c.id} onClick={()=>onAbrirCliente&&onAbrirCliente(c)}
+                    title={c.nome+" — "+STATUS_CLUB.find(s=>s.id===c.statusClub)?.label}
+                    style={{width:"100%",textAlign:"left",padding:"1px 4px",borderRadius:4,marginBottom:1,fontSize:9,fontWeight:500,
+                      background:cor.bg,color:cor.text,border:"0.5px solid "+cor.border,cursor:"pointer",
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {(c.nome||"").split(" ")[0]}
+                  </button>
+                );
+              })}
+              {clts.length>3&&<div style={{fontSize:8,color:"var(--color-text-tertiary)",textAlign:"center"}}>+{clts.length-3}</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Resumo do mês */}
+      {Object.keys(porDia).length>0&&(
+        <div style={{marginTop:16,background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px"}}>
+          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Follow-ups neste mês</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+            {Object.entries(porDia).sort(([a],[b])=>Number(a)-Number(b)).map(([dia,clts])=>(
+              <div key={dia} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",minWidth:24,textAlign:"right"}}>{String(dia).padStart(2,"0")}/{String(mesAtual.getMonth()+1).padStart(2,"0")}</div>
+                <div style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--color-text-primary)"}}>
+                  {clts.map(c=>(c.nome||"").split(" ")[0]).join(", ")}
+                </div>
+                <span style={{fontSize:10,fontWeight:500,color:C.tealD}}>{clts.length}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ── FUNIL CLUB ─────────────────────────────────────────────────────────────
 const STATUS_CLUB = [
@@ -4506,13 +4621,8 @@ const FunilClub = ({ onAbrirPerfil }) => {
       const janelaOk = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -2 && c._diasParaProxima <= 5;
       const acaoOk = ["interessado","respondeu","link_enviado"].includes(c.statusClub) || (c.proximoFollowup && c.proximoFollowup <= hoje);
       if (!janelaOk && !acaoOk) return false;
-    } else if (filtroStatus === "primeiro_contato") {
-      if (c.statusClub) return false;
-      if ((c._score||0) < 40) return false;
-      if ((c._diasUlt||999) > 60) return false;
-      if (c._inativa || c._muitoInativa) return false;
-      // Se tem ciclo bem definido e faltam mais de 7 dias, não é "primeiro contato" ainda — aguardar janela
-      if (c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima > 7) return false;
+    } else if (filtroStatus === "nao_abordado") {
+      if (c.statusClub) return false; // qualquer status = já abordado
     } else if (filtroStatus) {
       if (c.statusClub !== filtroStatus) return false;
     }
@@ -4537,7 +4647,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
       return 0;
     }
     // Padrão: prioClub + score
-    const filtroEspecifico = filtroStatus && filtroStatus !== "hoje" && filtroStatus !== "primeiro_contato";
+    const filtroEspecifico = filtroStatus && filtroStatus !== "hoje" && filtroStatus !== "nao_abordado";
     if (filtroEspecifico) return (b._score||0) - (a._score||0);
     const pa = prioClub(a), pb = prioClub(b);
     if (pb !== pa) return pb - pa;
@@ -5137,7 +5247,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
     <div>
       {/* Abas internas */}
       <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid var(--color-border-tertiary)"}}>
-        {[["hoje","⚡ Hoje"],["lista","📋 Lista"],["dash","📊 Dash"],["scripts","💬 Scripts"]].map(([id,label])=>(
+        {[["hoje","⚡ Hoje"],["lista","📋 Lista"],["calendario","📅 Calendário"],["dash","📊 Dash"],["scripts","💬 Scripts"]].map(([id,label])=>(
           <button key={id} onClick={()=>setAba(id)}
             style={{padding:"8px 16px",fontSize:12,fontWeight:500,background:"none",border:"none",cursor:"pointer",
               color:aba===id?C.teal:"var(--color-text-secondary)",
@@ -5356,12 +5466,12 @@ const FunilClub = ({ onAbrirPerfil }) => {
                   border:"0.5px solid "+(filtroStatus==="hoje"?C.coral:"var(--color-border-tertiary)")}}>
                 ⚡ Hoje
               </button>
-              <button onClick={()=>setFiltroStatus("primeiro_contato")}
+              <button onClick={()=>setFiltroStatus("nao_abordado")}
                 style={{padding:"3px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
-                  background:filtroStatus==="primeiro_contato"?C.teal:"var(--color-background-secondary)",
-                  color:filtroStatus==="primeiro_contato"?"#fff":"var(--color-text-secondary)",
-                  border:"0.5px solid "+(filtroStatus==="primeiro_contato"?C.teal:"var(--color-border-tertiary)")}}>
-                📤 1° contato
+                  background:filtroStatus==="nao_abordado"?C.teal:"var(--color-background-secondary)",
+                  color:filtroStatus==="nao_abordado"?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(filtroStatus==="nao_abordado"?C.teal:"var(--color-border-tertiary)")}}>
+                ○ Não abordado
               </button>
               {STATUS_CLUB.filter(s=>s.id).map(s=>{
                 const n=clientes.filter(c=>c.statusClub===s.id).length;
@@ -5383,7 +5493,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
                 const ai = prontas2.filter(c=>c.statusClub==="interessado"||(c.statusClub==="respondeu")||(c.proximoFollowup&&c.proximoFollowup<=hoje));
                 const jh = prontas2.filter(c=>!c.statusClub&&c._diasParaProxima!=null&&c._diasParaProxima>=-2&&c._diasParaProxima<=5);
                 const lf = prontas2.filter(c=>c.statusClub==="link_enviado");
-                const pc = prontas2.filter(c=>!c.statusClub&&(c._score||0)>=40&&(c._diasUlt||999)<=60&&!(c._diasParaProxima!=null&&c._diasParaProxima>7)).slice(0,8);
+                const pc = prontas2.filter(c=>!c.statusClub).slice(0,12);
                 return (
                   <div>
                     {[["🔥 Ação imediata",ai,C.coralD],[" 🛒 Janela aberta",jh,C.greenD],["🔗 Link enviado",lf,C.blueD],["📤 1° contato",pc,C.tealD]].map(([titulo,lista,cor])=>
@@ -5415,6 +5525,9 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
       {/* ABA DASH */}
       {aba==="dash"&&<DashClub/>}
+
+      {/* ABA CALENDÁRIO */}
+      {aba==="calendario"&&<CalendarioFollowups clientes={[...clientes,...clientesDash]} onAbrirCliente={(c)=>{setSel(c);setAba("lista");}}/>}
 
       {/* ABA SCRIPTS */}
       {aba==="scripts"&&<Biblioteca/>}
