@@ -3776,24 +3776,33 @@ const gerarRelatorioDiario = async () => {
 const CalendarioFollowups = ({ clientes, onAbrirCliente }) => {
   const hoje = new Date();
   const [mesAtual, setMesAtual] = React.useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+  const [diaSel, setDiaSel] = React.useState(null); // dia selecionado para ver todos
 
   const diasNoMes = new Date(mesAtual.getFullYear(), mesAtual.getMonth()+1, 0).getDate();
-  const primeiroDia = mesAtual.getDay(); // 0=dom
+  const primeiroDia = mesAtual.getDay();
 
   const statusCor = (status) => {
-    if (status === "interessado") return {bg:C.greenL, text:C.greenD, border:C.green};
-    if (status === "respondeu") return {bg:C.blueL, text:C.blueD, border:C.blue};
-    if (status === "link_enviado") return {bg:C.amberL, text:C.amberD, border:C.amber};
-    if (status === "contatado") return {bg:C.tealL, text:C.tealD, border:C.teal};
-    if (status === "follow_up") return {bg:C.purpleL, text:C.purpleD, border:C.purple};
-    if (status === "nao_agora") return {bg:"#f5f5f5", text:"#888", border:"#ccc"};
+    if (status === "interessado")  return {bg:C.greenL,  text:C.greenD,  border:C.green};
+    if (status === "respondeu")    return {bg:C.blueL,   text:C.blueD,   border:C.blue};
+    if (status === "link_enviado") return {bg:C.amberL,  text:C.amberD,  border:C.amber};
+    if (status === "contatado")    return {bg:C.tealL,   text:C.tealD,   border:C.teal};
+    if (status === "follow_up")    return {bg:C.purpleL, text:C.purpleD, border:C.purple};
+    if (status === "nao_agora")    return {bg:"#f5f5f5", text:"#888",    border:"#ccc"};
     return {bg:"var(--color-background-secondary)", text:"var(--color-text-tertiary)", border:"var(--color-border-tertiary)"};
   };
 
-  // Agrupar clientes por data de follow-up
+  // Deduplicar por ID antes de agrupar
+  const vistos = new Set();
+  const clientesUnicos = clientes.filter(c => {
+    if (!c.id || vistos.has(c.id)) return false;
+    vistos.add(c.id);
+    return true;
+  });
+
+  // Agrupar por data de follow-up
   const porDia = {};
-  clientes.forEach(c => {
-    if (!c.proximoFollowup) return;
+  clientesUnicos.forEach(c => {
+    if (!c.proximoFollowup || !c.statusClub) return;
     const [ano, mes, dia] = c.proximoFollowup.split("-").map(Number);
     if (ano === mesAtual.getFullYear() && mes === mesAtual.getMonth()+1) {
       if (!porDia[dia]) porDia[dia] = [];
@@ -3804,81 +3813,129 @@ const CalendarioFollowups = ({ clientes, onAbrirCliente }) => {
   const mesLabel = mesAtual.toLocaleDateString("pt-BR", {month:"long", year:"numeric"});
   const diasSemana = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
   const hojeISO = hoje.toISOString().split("T")[0];
+  const diaSelecionadoISO = diaSel ? `${mesAtual.getFullYear()}-${String(mesAtual.getMonth()+1).padStart(2,"0")}-${String(diaSel).padStart(2,"0")}` : null;
 
   return (
     <div>
-      {/* Header do calendário */}
+      {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <button onClick={()=>setMesAtual(new Date(mesAtual.getFullYear(), mesAtual.getMonth()-1, 1))}
+        <button onClick={()=>{setMesAtual(new Date(mesAtual.getFullYear(), mesAtual.getMonth()-1, 1));setDiaSel(null);}}
           style={{padding:"4px 12px",borderRadius:8,cursor:"pointer",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",fontSize:16,color:"var(--color-text-primary)"}}>‹</button>
         <div style={{flex:1,textAlign:"center",fontSize:14,fontWeight:500,color:"var(--color-text-primary)",textTransform:"capitalize"}}>{mesLabel}</div>
-        <button onClick={()=>setMesAtual(new Date(mesAtual.getFullYear(), mesAtual.getMonth()+1, 1))}
+        <button onClick={()=>{setMesAtual(new Date(mesAtual.getFullYear(), mesAtual.getMonth()+1, 1));setDiaSel(null);}}
           style={{padding:"4px 12px",borderRadius:8,cursor:"pointer",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-tertiary)",fontSize:16,color:"var(--color-text-primary)"}}>›</button>
       </div>
 
       {/* Legenda */}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-        {[
-          ["Interessado",C.greenD,C.greenL],["Respondeu",C.blueD,C.blueL],["Link enviado",C.amberD,C.amberL],
-          ["Contatado",C.tealD,C.tealL],["Follow-up",C.purpleD,C.purpleL],["Não agora","#888","#f5f5f5"],
-        ].map(([label,text,bg])=>(
+        {[["Interessado",C.greenL],["Respondeu",C.blueL],["Link enviado",C.amberL],
+          ["Contatado",C.tealL],["Follow-up",C.purpleL],["Não agora","#f5f5f5"]].map(([label,bg])=>(
           <div key={label} style={{display:"flex",alignItems:"center",gap:4,fontSize:10}}>
-            <div style={{width:10,height:10,borderRadius:3,background:bg}}/>
+            <div style={{width:10,height:10,borderRadius:3,background:bg,border:"0.5px solid #ccc"}}/>
             <span style={{color:"var(--color-text-tertiary)"}}>{label}</span>
           </div>
         ))}
       </div>
 
-      {/* Grade de dias */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-        {diasSemana.map(d=>(
-          <div key={d} style={{textAlign:"center",fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",padding:"4px 0"}}>{d}</div>
-        ))}
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-        {Array.from({length:primeiroDia}).map((_,i)=><div key={"e"+i}/>)}
-        {Array.from({length:diasNoMes}).map((_,i)=>{
-          const dia = i+1;
-          const diaISO = `${mesAtual.getFullYear()}-${String(mesAtual.getMonth()+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
-          const isHoje = diaISO === hojeISO;
-          const isPassado = diaISO < hojeISO;
-          const clts = porDia[dia]||[];
-          return (
-            <div key={dia} style={{minHeight:60,border:"0.5px solid var(--color-border-tertiary)",borderRadius:6,padding:"4px",
-              background:isHoje?"var(--color-background-secondary)":"transparent",
-              opacity:isPassado&&clts.length===0?0.4:1}}>
-              <div style={{fontSize:10,fontWeight:isHoje?600:400,color:isHoje?C.teal:"var(--color-text-tertiary)",marginBottom:2}}>{dia}</div>
-              {clts.slice(0,3).map(c=>{
-                const cor = statusCor(c.statusClub);
-                return (
-                  <button key={c.id} onClick={()=>onAbrirCliente&&onAbrirCliente(c)}
-                    title={c.nome+" — "+STATUS_CLUB.find(s=>s.id===c.statusClub)?.label}
-                    style={{width:"100%",textAlign:"left",padding:"1px 4px",borderRadius:4,marginBottom:1,fontSize:9,fontWeight:500,
-                      background:cor.bg,color:cor.text,border:"0.5px solid "+cor.border,cursor:"pointer",
-                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                    {(c.nome||"").split(" ")[0]}
-                  </button>
-                );
-              })}
-              {clts.length>3&&<div style={{fontSize:8,color:"var(--color-text-tertiary)",textAlign:"center"}}>+{clts.length-3}</div>}
+      <div style={{display:"grid",gridTemplateColumns:diaSel?"1fr 260px":"1fr",gap:12}}>
+        {/* Grade do calendário */}
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+            {diasSemana.map(d=>(
+              <div key={d} style={{textAlign:"center",fontSize:10,fontWeight:500,color:"var(--color-text-tertiary)",padding:"4px 0"}}>{d}</div>
+            ))}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+            {Array.from({length:primeiroDia}).map((_,i)=><div key={"e"+i}/>)}
+            {Array.from({length:diasNoMes}).map((_,i)=>{
+              const dia = i+1;
+              const diaISO = `${mesAtual.getFullYear()}-${String(mesAtual.getMonth()+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+              const isHoje = diaISO === hojeISO;
+              const isPassado = diaISO < hojeISO;
+              const isSel = diaSel === dia;
+              const clts = porDia[dia]||[];
+              return (
+                <div key={dia} onClick={()=>setDiaSel(isSel?null:dia)}
+                  style={{minHeight:70,border:"0.5px solid "+(isSel?C.teal:isHoje?"#aaa":"var(--color-border-tertiary)"),
+                    borderRadius:6,padding:"4px",cursor:clts.length>0?"pointer":"default",
+                    background:isSel?C.tealL:isHoje?"var(--color-background-secondary)":"transparent",
+                    opacity:isPassado&&clts.length===0?0.35:1,transition:"all 0.1s"}}>
+                  <div style={{fontSize:10,fontWeight:isHoje||isSel?600:400,
+                    color:isSel?C.tealD:isHoje?"#333":"var(--color-text-tertiary)",marginBottom:2}}>{dia}</div>
+                  {clts.slice(0,4).map(c=>{
+                    const cor = statusCor(c.statusClub);
+                    return (
+                      <div key={c.id}
+                        style={{width:"100%",padding:"1px 4px",borderRadius:4,marginBottom:1,fontSize:9,fontWeight:500,
+                          background:cor.bg,color:cor.text,border:"0.5px solid "+cor.border,
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {(c.nome||"").split(" ")[0]}
+                      </div>
+                    );
+                  })}
+                  {clts.length>4&&(
+                    <div style={{fontSize:8,color:C.tealD,fontWeight:500,textAlign:"center",
+                      background:C.tealL,borderRadius:4,padding:"1px"}}>
+                      +{clts.length-4} mais
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Painel lateral — todos do dia selecionado */}
+        {diaSel&&(
+          <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",height:"fit-content",position:"sticky",top:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <div style={{flex:1,fontSize:13,fontWeight:500,color:"var(--color-text-primary)"}}>
+                📅 {String(diaSel).padStart(2,"0")}/{String(mesAtual.getMonth()+1).padStart(2,"0")}
+              </div>
+              <button onClick={()=>setDiaSel(null)}
+                style={{fontSize:12,color:"var(--color-text-tertiary)",background:"none",border:"none",cursor:"pointer"}}>✕</button>
             </div>
-          );
-        })}
+            {(porDia[diaSel]||[]).length===0&&(
+              <div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Nenhum follow-up neste dia.</div>
+            )}
+            {(porDia[diaSel]||[]).map(c=>{
+              const cor = statusCor(c.statusClub);
+              const st = STATUS_CLUB.find(s=>s.id===c.statusClub);
+              return (
+                <button key={c.id} onClick={()=>onAbrirCliente&&onAbrirCliente(c)}
+                  style={{width:"100%",textAlign:"left",padding:"8px 10px",borderRadius:8,marginBottom:6,
+                    background:cor.bg,border:"0.5px solid "+cor.border,cursor:"pointer"}}>
+                  <div style={{fontSize:12,fontWeight:500,color:cor.text}}>{c.nome}</div>
+                  <div style={{fontSize:10,color:cor.text,opacity:0.8,marginTop:1}}>
+                    {st?.emoji} {st?.label} · {c.p||0}p · R${(c.gasto||0).toFixed(0)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Resumo do mês */}
       {Object.keys(porDia).length>0&&(
         <div style={{marginTop:16,background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Follow-ups neste mês</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>
+            Follow-ups neste mês — {Object.values(porDia).flat().length} total
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
             {Object.entries(porDia).sort(([a],[b])=>Number(a)-Number(b)).map(([dia,clts])=>(
-              <div key={dia} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
-                <div style={{fontSize:10,color:"var(--color-text-tertiary)",minWidth:24,textAlign:"right"}}>{String(dia).padStart(2,"0")}/{String(mesAtual.getMonth()+1).padStart(2,"0")}</div>
-                <div style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--color-text-primary)"}}>
+              <button key={dia} onClick={()=>setDiaSel(Number(dia))}
+                style={{display:"flex",alignItems:"center",gap:6,fontSize:11,textAlign:"left",
+                  padding:"4px 6px",borderRadius:6,border:"none",cursor:"pointer",
+                  background:diaSel===Number(dia)?C.tealL:"transparent",color:"var(--color-text-primary)"}}>
+                <div style={{fontSize:10,color:"var(--color-text-tertiary)",minWidth:32}}>
+                  {String(dia).padStart(2,"0")}/{String(mesAtual.getMonth()+1).padStart(2,"0")}
+                </div>
+                <div style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   {clts.map(c=>(c.nome||"").split(" ")[0]).join(", ")}
                 </div>
-                <span style={{fontSize:10,fontWeight:500,color:C.tealD}}>{clts.length}</span>
-              </div>
+                <span style={{fontSize:10,fontWeight:600,color:C.tealD,flexShrink:0}}>{clts.length}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -4407,6 +4464,7 @@ const ScoreBar = ({ score }) => {
 const FunilClub = ({ onAbrirPerfil }) => {
   const [clientes, setClientes] = useState([]);
   const [clientesDash, setClientesDash] = useState([]); // inclui fechou/perdido — só para estatísticas
+  const [todosParaBusca, setTodosParaBusca] = useState([]); // todos os clientes para busca global
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState(null);
   const [aba, setAba] = useState("hoje");
@@ -4432,8 +4490,11 @@ const FunilClub = ({ onAbrirPerfil }) => {
 
   useEffect(() => {
     dbGetAll().then(lista => {
-      const comScore = lista.filter(c => (c.p||0) >= 2)
-        .map(c => { const sc=calcScoreClub(c); return {...c,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; });
+      const addScore = c => { const sc=calcScoreClub(c); return {...c,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; };
+      // Todos com score para busca global
+      const todosSc = lista.map(c => fixCliente(addScore(c)));
+      setTodosParaBusca(todosSc);
+      const comScore = todosSc.filter(c => (c.p||0) >= 2);
       // Lista operacional: só candidatos ativos (exclui fechou/perdido/assinantes)
       const candidatos = comScore.filter(c =>
         c.etapa !== "experiencia" &&
@@ -4615,7 +4676,9 @@ const FunilClub = ({ onAbrirPerfil }) => {
     return p;
   };
 
-  const listaFiltrada = clientes.filter(c => {
+  // Quando há busca, pesquisa em TODOS os clientes (incluindo leads manuais com p<2)
+  const baseParaFiltro = busca ? todosParaBusca : clientes;
+  const listaFiltrada = baseParaFiltro.filter(c => {
     if (filtroStatus === "hoje") {
       // Janela de compra aberta ou ação imediata
       const janelaOk = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -2 && c._diasParaProxima <= 5;
@@ -5527,7 +5590,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
       {aba==="dash"&&<DashClub/>}
 
       {/* ABA CALENDÁRIO */}
-      {aba==="calendario"&&<CalendarioFollowups clientes={[...clientes,...clientesDash]} onAbrirCliente={(c)=>{setSel(c);setAba("lista");}}/>}
+      {aba==="calendario"&&<CalendarioFollowups clientes={clientesDash.length>0?clientesDash:[...clientes,...clientesDash].filter((c,i,arr)=>arr.findIndex(x=>x.id===c.id)===i)} onAbrirCliente={(c)=>{setSel(c);setScriptSel(sugerirScript(c));setAba("lista");}}/>}
 
       {/* ABA SCRIPTS */}
       {aba==="scripts"&&<Biblioteca/>}
