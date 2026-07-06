@@ -327,6 +327,20 @@ const getCidade = (cep) => {
   return CEP_CIDADES[num.substring(0,2)] || null;
 };
 
+
+const normalizarTelefone = (tel) => {
+  if (!tel) return "";
+  // Remove apóstrofo inicial, espaços, hífens, parênteses e outros não-dígitos exceto +
+  const limpo = tel.replace(/^'+/, "").replace(/[^\d+]/g, "");
+  // Se já tem +55, retorna como está
+  if (limpo.startsWith("+55")) return limpo;
+  // Se começa com 55 e tem 12-13 dígitos, adiciona +
+  if (limpo.startsWith("55") && limpo.length >= 12) return "+" + limpo;
+  // Se é número local (10-11 dígitos), adiciona +55
+  if (limpo.length >= 10) return "+55" + limpo;
+  return limpo;
+};
+
 const fixEncoding = (s) => {
   if (!s || typeof s !== "string") return s;
   try {
@@ -4750,6 +4764,13 @@ const FunilClub = ({ onAbrirPerfil }) => {
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
               <span style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)"}}>{c.nome}</span>
               {janelaAberta&&<span style={{fontSize:9,fontWeight:600,background:C.greenL,color:C.greenD,padding:"1px 6px",borderRadius:10}}>🛒 COMPRANDO AGORA</span>}
+              {c.telefone&&(
+                <button onClick={e=>{e.stopPropagation();const t=normalizarTelefone(c.telefone);navigator.clipboard.writeText(t).catch(()=>{});}}
+                  title={"Copiar: "+normalizarTelefone(c.telefone)}
+                  style={{fontSize:9,fontWeight:500,background:"var(--color-background-secondary)",color:"var(--color-text-tertiary)",padding:"1px 6px",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)",cursor:"pointer"}}>
+                  📋 Tel
+                </button>
+              )}
             </div>
             <div style={{fontSize:11,color:c._inativa?"var(--color-text-tertiary)":"var(--color-text-tertiary)",marginTop:2}}>
               {c.p||0}p · R${(c.gasto||0).toFixed(0)} · ciclo {ciclo||"?"}d
