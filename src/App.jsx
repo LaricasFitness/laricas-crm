@@ -1157,6 +1157,58 @@ const Perfil = ({ clienteId, onVoltar }) => {
                     </div>
                   </div>
                 )}
+                {/* PAUSA DE ASSINATURA */}
+                {!c.cancelado&&(
+                  <div style={{ marginTop:8,padding:"10px 12px",background:c.statusAssinatura==="pausado"?C.amberL:"var(--color-background-secondary)",borderRadius:8,border:"0.5px solid "+(c.statusAssinatura==="pausado"?C.amber:"var(--color-border-tertiary)") }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:c.statusAssinatura==="pausado"?10:0 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:11,fontWeight:500,color:c.statusAssinatura==="pausado"?C.amberD:"var(--color-text-primary)",marginBottom:2 }}>
+                          {c.statusAssinatura==="pausado"?"⏸ Assinatura pausada":"Marcar como pausada"}
+                        </div>
+                        {c.statusAssinatura==="pausado"&&c.dataPausaFim&&(
+                          <div style={{ fontSize:11,color:C.amberD }}>Retorno em {new Date(c.dataPausaFim+"T12:00:00").toLocaleDateString("pt-BR")}{c.motivoPausa?" · "+c.motivoPausa:""}</div>
+                        )}
+                      </div>
+                      {c.statusAssinatura!=="pausado"&&(
+                        <button onClick={()=>save({statusAssinatura:"pausado"})}
+                          style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.amber,color:"#fff",border:"none" }}>
+                          Pausar
+                        </button>
+                      )}
+                      {c.statusAssinatura==="pausado"&&(
+                        <button onClick={()=>save({statusAssinatura:"ativo",dataPausaFim:"",motivoPausa:""})}
+                          style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:"none",color:C.tealD,border:"0.5px solid "+C.teal }}>
+                          Reativar
+                        </button>
+                      )}
+                    </div>
+                    {c.statusAssinatura==="pausado"&&(
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                        <div>
+                          <div style={{ fontSize:10,color:C.amberD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Data de volta</div>
+                          <input type="date" value={c.dataPausaFim||""} onChange={e=>{
+                            save({ dataPausaFim: e.target.value, dataProximoContato: e.target.value });
+                          }}
+                            style={{ width:"100%",padding:"6px 10px",borderRadius:8,border:"0.5px solid "+C.amber,fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)" }}/>
+                          <div style={{ fontSize:9,color:C.amber,marginTop:2 }}>Vira follow-up automático</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:10,color:C.amberD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Motivo</div>
+                          <select value={c.motivoPausa||""} onChange={e=>save({motivoPausa:e.target.value})}
+                            style={{ width:"100%",padding:"6px 10px",borderRadius:8,border:"0.5px solid "+C.amber,fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)" }}>
+                            <option value="">— Selecione —</option>
+                            {["Viagem","Protocolo médico / dieta","Questão financeira","Mudança de rotina","Problema com entrega","Estoque cheio","Outro"].map(m=><option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        {c.dataPausaFim&&c.dataPausaFim<=new Date().toISOString().split("T")[0]&&(
+                          <div style={{ gridColumn:"1/-1",background:C.greenL,border:"0.5px solid "+C.green,borderRadius:8,padding:"8px 10px",fontSize:11,color:C.greenD,fontWeight:500 }}>
+                            ✅ Data de volta chegou — verificar cobrança e reativar!
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {!c.tipoAssinatura&&<div style={{ fontSize:12,color:"var(--color-text-tertiary)",textAlign:"center",padding:"8px 0" }}>Selecione o tipo de assinatura para ver os calculos automaticos.</div>}
@@ -5418,6 +5470,7 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
         {(()=>{
           const assinantes = todos.filter(c=>c.etapa==="experiencia");
           const ativos     = assinantes.filter(c=>!c.statusAssinatura||c.statusAssinatura==="ativo");
+          const totalAtivosClub = ativos.length; // ativos reais — exclui pausados, atrasados, cancelados
           const pausados   = assinantes.filter(c=>c.statusAssinatura==="pausado");
           const atrasados  = assinantes.filter(c=>c.statusAssinatura==="atrasado");
           const cancelados = assinantes.filter(c=>c.statusAssinatura==="cancelado");
@@ -5655,7 +5708,10 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
           })()).length;
           const nPausaVolta = clientesDash.filter(c=>c.statusAssinatura==="pausado"&&c.dataPausaFim&&c.dataPausaFim<=hoje2).length;
           // Meta anual
-          const totalAssinantes = clientesDash.filter(c=>c.statusClub==="fechou"||c.etapa==="experiencia").length;
+          const totalAssinantes = clientesDash.filter(c=>
+  (c.statusClub==="fechou"||c.etapa==="experiencia") &&
+  c.statusAssinatura !== "cancelado"
+).length;
           const meta = 100;
           const semanasFim = Math.max(1,Math.round((new Date("2026-12-31")-new Date())/604800000));
           const faltam = Math.max(0,meta-totalAssinantes);
