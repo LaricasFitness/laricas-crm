@@ -1201,6 +1201,40 @@ Quer que eu te explique como funciona?`).catch(()=>{}); }}
               </div>
             )}
             <SeqRetencao c={c} save={save}/>
+            {/* ASSINATURA PAUSADA */}
+            <div style={{ background:c.assinaturaPausada?C.amberL:"var(--color-background-secondary)",border:"0.5px solid "+(c.assinaturaPausada?C.amber:"var(--color-border-tertiary)"),borderRadius:10,padding:"12px 14px",marginTop:12 }}>
+              <div style={{ fontSize:12,fontWeight:500,color:c.assinaturaPausada?C.amberD:"var(--color-text-primary)",marginBottom:8 }}>
+                {c.assinaturaPausada?"⏸ Assinatura pausada":"📅 Pausa de assinatura"}
+              </div>
+              <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+                <input type="checkbox" checked={!!c.assinaturaPausada} onChange={e=>save({assinaturaPausada:e.target.checked,dataPausaFim:e.target.checked?c.dataPausaFim:"",motivoPausa:e.target.checked?c.motivoPausa:""})} id="pausaCheckPerfil" style={{cursor:"pointer"}}/>
+                <label htmlFor="pausaCheckPerfil" style={{ fontSize:13,color:"var(--color-text-primary)",cursor:"pointer" }}>Assinatura pausada</label>
+              </div>
+              {c.assinaturaPausada&&(
+                <div>
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+                    <div>
+                      <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Data de retorno</div>
+                      <input type="date" value={c.dataPausaFim||""} onChange={e=>save({dataPausaFim:e.target.value})}
+                        style={{ width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)" }}/>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Motivo</div>
+                      <select value={c.motivoPausa||""} onChange={e=>save({motivoPausa:e.target.value})}
+                        style={{ width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)" }}>
+                        <option value="">— Selecione —</option>
+                        {["Viagem","Protocolo médico / dieta restritiva","Questão financeira","Mudança de rotina","Problema com entrega","Estoque ainda cheio","Outro"].map(m=><option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {c.dataPausaFim&&new Date(c.dataPausaFim+"T12:00:00")<=new Date()&&(
+                    <div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.greenD,fontWeight:500 }}>
+                      ✅ Data de retorno chegou — verificar cobrança e reativar!
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         );
       })()}
@@ -5541,13 +5575,15 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
           const nVencidos = prontas.filter(c=>c.statusClub&&c.proximoFollowup&&c.proximoFollowup<=hoje).length;
           const nImediata = prontas.filter(c=>c.statusClub==="interessado"||c.statusClub==="respondeu").length;
           const nNovos = prontas.filter(c=>!c.statusClub&&(c._score||0)>=40).length;
+          const hoje2 = new Date().toISOString().split("T")[0];
           const nRenovacao = clientesDash.filter(c=>c.etapa==="experiencia"&&c.dataInicioAssinatura&&(()=>{
             const d=new Date(c.dataInicioAssinatura+"T12:00:00");
             const dias=Math.round((new Date()-d)/86400000);
             return dias>=25&&dias<=35;
           })()).length;
+          const nPausaVolta = clientesDash.filter(c=>c.assinaturaPausada&&c.dataPausaFim&&c.dataPausaFim<=hoje2).length;
           // Meta anual
-          const totalAssinantes = clientesDash.filter(c=>c.statusClub==="fechou"||c.etapa==="experiencia").length + 30;
+          const totalAssinantes = clientesDash.filter(c=>c.statusClub==="fechou"||c.etapa==="experiencia").length;
           const meta = 100;
           const semanasFim = Math.max(1,Math.round((new Date("2026-12-31")-new Date())/604800000));
           const faltam = Math.max(0,meta-totalAssinantes);
@@ -5601,6 +5637,11 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
                   style={{flex:1,minWidth:90,background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
                   <div style={{fontSize:18,fontWeight:600,color:C.tealD}}>{Math.min(nNovos,metaDiaria)}</div>
                   <div style={{fontSize:10,color:C.tealD}}>📤 Novos disponíveis</div>
+                </button>}
+                {nPausaVolta>0&&<button onClick={()=>setAba("dash")}
+                  style={{flex:1,minWidth:90,background:C.greenL,border:"0.5px solid "+C.green,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{fontSize:18,fontWeight:600,color:C.greenD}}>{nPausaVolta}</div>
+                  <div style={{fontSize:10,color:C.greenD}}>▶ Pausa terminou</div>
                 </button>}
               </div>}
             </div>
@@ -5742,7 +5783,15 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
       )}
 
       {/* ABA DASH */}
-      {aba==="dash"&&<DashClub/>}
+      {aba==="dash"&&(
+        <div>
+          <DashClub/>
+          <div style={{marginTop:20,borderTop:"0.5px solid var(--color-border-tertiary)",paddingTop:16}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>📈 Analytics de Assinantes</div>
+            <LTV onAbrir={(id)=>{onAbrirPerfil&&onAbrirPerfil(id);}}/>
+          </div>
+        </div>
+      )}
 
       {/* ABA CALENDÁRIO */}
       {aba==="calendario"&&<CalendarioFollowups clientes={clientesDash.length>0?clientesDash:[...clientes,...clientesDash].filter((c,i,arr)=>arr.findIndex(x=>x.id===c.id)===i)} onAbrirCliente={(c)=>{setSel(c);setScriptSel(sugerirScript(c));setAba("lista");}}/>}
@@ -6075,7 +6124,6 @@ export default function App() {
         {isAdmin&&<T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>}
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
-        <T label="📈 Dash Club" active={tab==="dashclub"} color={C.green} onClick={()=>setTab("dashclub")}/>
         <T label="🔗 Unificar" active={tab==="unificar"} color={C.amber} onClick={()=>setTab("unificar")}/>
         <T label="📖 Guia" active={tab==="guia"} color={C.teal} onClick={()=>setTab("guia")}/>
         {isAdmin&&<T label="💾 Backup" active={tab==="backup"} color={C.blue} onClick={()=>setTab("backup")}/>}
@@ -6104,7 +6152,6 @@ export default function App() {
       )}
       {tab==="historico"&&<Historico/>}
       {tab==="unificar"&&<Unificar onSalvo={()=>setRefresh(r=>r+1)}/>}
-      {tab==="dashclub"&&<LTV onAbrir={(id)=>{abrirClienteGlobal(id);setTab("kanban");}}/>}
       {tab==="guia"&&<Guia/>}
       {tab==="backup"&&isAdmin&&<Backup onRestore={onRestore}/>}
       {tab==="usuarios"&&isAdmin&&<GerenciarUsuarios/>}
