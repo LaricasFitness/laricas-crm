@@ -4826,6 +4826,7 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
           )}
         </div>
       </button>
+    </div>
     );
   };
 
