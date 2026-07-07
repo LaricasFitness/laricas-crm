@@ -4475,16 +4475,18 @@ const ScoreBar = ({ score }) => {
   );
 };
 
-const FunilClub = ({ onAbrirPerfil }) => {
+const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   const [clientes, setClientes] = useState([]);
   const [clientesDash, setClientesDash] = useState([]); // inclui fechou/perdido — só para estatísticas
   const [todosParaBusca, setTodosParaBusca] = useState([]); // todos os clientes para busca global
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState(null);
-  const [aba, setAba] = useState("hoje");
-  const [filtroStatus, setFiltroStatus] = useState("");
+  const [aba, setAba] = useState("lista");
+  const [filtroStatus, setFiltroStatus] = useState("hoje");
   const [busca, setBusca] = useState("");
   const [sorts, setSorts] = useState([]); // [{campo, dir}] — cumulativo
+  const [selecionadosLote, setSelecionadosLote] = useState(new Set()); // IDs selecionados para ação em lote
+  const [modoLote, setModoLote] = useState(false);
   const toggleSort = (campo) => {
     setSorts(prev => {
       const existing = prev.find(s=>s.campo===campo);
@@ -4517,6 +4519,15 @@ const FunilClub = ({ onAbrirPerfil }) => {
         c.statusClub !== "perdido"
       ).sort((a,b) => b._score - a._score);
       setClientes(candidatos);
+      // Emitir contagem de urgência para badge no tab
+      if (onUrgencia) {
+        const hoje0 = new Date().toISOString().split("T")[0];
+        const urgente = candidatos.filter(c =>
+          c.statusClub==="interessado" || c.statusClub==="respondeu" ||
+          (c.proximoFollowup && c.proximoFollowup <= hoje0)
+        ).length;
+        onUrgencia(urgente);
+      }
       // Lista para Dash: inclui TODOS que já entraram no funil (mesmo fechou/perdido/experiencia)
       const paraDash = comScore.filter(c => c.statusClub || c.etapa === "experiencia");
       setClientesDash(paraDash);
@@ -4755,10 +4766,16 @@ const FunilClub = ({ onAbrirPerfil }) => {
     const janelaAberta = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -3 && c._diasParaProxima <= 7 && !c._inativa;
     const isSelected = sel?.id === c.id;
     return (
-      <button onClick={()=>{setSel(c);setScriptSel(sugerirScript(c));setCampos({});}}
-        style={{ width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:10,marginBottom:6,
-          border:"1.5px solid "+(isSelected?C.teal:"var(--color-border-tertiary)"),
-          background:isSelected?C.tealL:"var(--color-background-secondary)",cursor:"pointer",transition:"all 0.15s" }}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:6,marginBottom:6}}>
+      {modoLote&&(
+        <input type="checkbox" checked={selecionadosLote.has(c.id)}
+          onChange={e=>{e.stopPropagation();setSelecionadosLote(prev=>{const n=new Set(prev);e.target.checked?n.add(c.id):n.delete(c.id);return n;});}}
+          style={{marginTop:14,flexShrink:0,cursor:"pointer",width:14,height:14}}/>
+      )}
+      <button onClick={()=>{if(modoLote){setSelecionadosLote(prev=>{const n=new Set(prev);n.has(c.id)?n.delete(c.id):n.add(c.id);return n;});return;}setSel(c);setScriptSel(sugerirScript(c));setCampos({});}}
+        style={{ flex:1,textAlign:"left",padding:"10px 12px",borderRadius:10,
+          border:"1.5px solid "+(selecionadosLote.has(c.id)?C.purple:isSelected?C.teal:"var(--color-border-tertiary)"),
+          background:selecionadosLote.has(c.id)?C.purpleL:isSelected?C.tealL:"var(--color-background-secondary)",cursor:"pointer",transition:"all 0.15s" }}>
         <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6}}>
           <div style={{flex:1}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -5056,6 +5073,20 @@ const FunilClub = ({ onAbrirPerfil }) => {
           )}
         </div>
 
+        {/* Histórico de scripts enviados */}
+        {c.logAtividade&&c.logAtividade.filter(l=>l.texto&&l.texto.startsWith("Script")).length>0&&(
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Histórico de contatos</div>
+            <div style={{maxHeight:120,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+              {c.logAtividade.filter(l=>l.texto&&(l.texto.startsWith("Script")||l.texto.startsWith("Resposta"))).map((l,i)=>(
+                <div key={i} style={{fontSize:10,color:"var(--color-text-secondary)",background:"var(--color-background-primary)",borderRadius:6,padding:"4px 8px",borderLeft:"2px solid "+(l.texto.startsWith("Resposta")?C.green:C.teal)}}>
+                  <span style={{color:"var(--color-text-tertiary)"}}>{l.data} {l.hora}</span> — {l.texto}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Campos de registro */}
         <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
           <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Registro da abordagem</div>
@@ -5162,6 +5193,26 @@ const FunilClub = ({ onAbrirPerfil }) => {
           </div>
         )}
 
+        {/* HISTÓRICO DE SCRIPTS */}
+        {(c.logAtividade||[]).filter(l=>l.texto&&l.texto.includes("Script")).length>0&&(
+          <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:10}}>
+            <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Histórico de conversas</div>
+            <div style={{maxHeight:160,overflowY:"auto"}}>
+              {(c.logAtividade||[]).filter(l=>l.texto).map((l,i)=>(
+                <div key={i} style={{display:"flex",gap:8,marginBottom:6,alignItems:"flex-start"}}>
+                  <div style={{fontSize:9,color:"var(--color-text-tertiary)",whiteSpace:"nowrap",marginTop:1,minWidth:30}}>{l.hora||""}</div>
+                  <div style={{flex:1,fontSize:11,color:"var(--color-text-primary)",lineHeight:1.4,
+                    background:l.texto.startsWith("Script")?C.tealL:l.texto.startsWith("Resposta")?C.greenL:"var(--color-background-primary)",
+                    borderRadius:6,padding:"3px 8px",
+                    borderLeft:"2px solid "+(l.texto.startsWith("Script")?C.teal:l.texto.startsWith("Resposta")?C.green:"var(--color-border-tertiary)")}}>
+                    {l.texto}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <button onClick={()=>onAbrirPerfil&&onAbrirPerfil(c.id)}
           style={{width:"100%",marginTop:10,padding:"8px",borderRadius:8,fontSize:12,cursor:"pointer",
             background:"none",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)"}}>
@@ -5213,6 +5264,42 @@ const FunilClub = ({ onAbrirPerfil }) => {
           </div>
         )}
         {(()=>{
+          // Tempo médio por etapa do funil Club
+          const temposEtapa = {"contatado":[],"respondeu":[],"interessado":[],"link_enviado":[]};
+          todos.forEach(c=>{
+            const hist = c.logAtividade||[];
+            const statusChanges = hist.filter(l=>l.texto&&(l.texto.includes("→"))).reverse();
+            for(let i=0;i<statusChanges.length-1;i++){
+              const d1=statusChanges[i].data, d2=statusChanges[i+1].data;
+              if(!d1||!d2) continue;
+              const [d1d,d1m,d1y]=d1.split("/"); const [d2d,d2m,d2y]=d2.split("/");
+              const diff=Math.abs(Math.round((new Date(`${d1y}-${d1m}-${d1d}`)-new Date(`${d2y}-${d2m}-${d2d}`))/86400000));
+              if(diff>=0&&diff<60){
+                const statusAtual=c.statusClub;
+                if(temposEtapa[statusAtual]) temposEtapa[statusAtual].push(diff);
+              }
+            }
+          });
+          const etapasComTempo = Object.entries(temposEtapa).filter(([_,v])=>v.length>0);
+          if(!etapasComTempo.length) return null;
+          return (
+            <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:12}}>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>⏱ Tempo médio por etapa</div>
+              {etapasComTempo.map(([etapa,dias])=>{
+                const media=Math.round(dias.reduce((a,b)=>a+b,0)/dias.length);
+                const label=STATUS_CLUB.find(s=>s.id===etapa)?.label||etapa;
+                return (
+                  <div key={etapa} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                    <div style={{flex:1,fontSize:12}}>{label}</div>
+                    <div style={{fontSize:12,fontWeight:500,color:media<=2?C.greenD:media<=5?C.amberD:C.coralD}}>{media}d em média</div>
+                    <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>({dias.length} casos)</div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+        {(()=>{
           const inativCounts = {};
           todos.forEach(c => { if(c.motivoInatividade) inativCounts[c.motivoInatividade]=(inativCounts[c.motivoInatividade]||0)+1; });
           const inativRanking = Object.entries(inativCounts).sort((a,b)=>b[1]-a[1]);
@@ -5252,6 +5339,26 @@ const FunilClub = ({ onAbrirPerfil }) => {
             </div>
           );
         })()}
+        {(()=>{
+          const renovacaoBreve = clientesDash.filter(c=>{
+            if(c.etapa!=="experiencia"||!c.dataInicioAssinatura) return false;
+            const d=new Date(c.dataInicioAssinatura+"T12:00:00");
+            const dias=Math.round((new Date()-d)/86400000);
+            return dias>=25&&dias<=35;
+          });
+          if(!renovacaoBreve.length) return null;
+          return (
+            <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginTop:12,marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:500,color:C.greenD,marginBottom:8}}>🔄 Renovações próximas ({renovacaoBreve.length})</div>
+              {renovacaoBreve.map(c=>(
+                <div key={c.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,fontSize:11}}>
+                  <span style={{flex:1,color:"var(--color-text-primary)",fontWeight:500}}>{c.nome}</span>
+                  <span style={{color:C.greenD}}>{c.tipoAssinatura||"—"}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {convertidos.length>0&&(
           <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginTop:12}}>
             <div style={{fontSize:11,fontWeight:500,color:C.greenD,marginBottom:8}}>Conversões por plano</div>
@@ -5262,38 +5369,104 @@ const FunilClub = ({ onAbrirPerfil }) => {
             })}
           </div>
         )}
-
         {(()=>{
-          // Taxa de conversão por script
-          const scriptStats = {};
-          todos.forEach(c => {
-            (c.scriptsEnviados||[]).forEach(s => {
-              if(!scriptStats[s.id]) scriptStats[s.id]={label:SCRIPTS_CLUB.find(sc=>sc.id===s.id)?.label||s.id, enviados:0, convertidos:0};
-              scriptStats[s.id].enviados++;
-            });
-            if(c.statusClub==="fechou"&&c.scriptUsado) {
-              if(scriptStats[c.scriptUsado]) scriptStats[c.scriptUsado].convertidos++;
-            }
+          // Alertas de renovação: assinantes com ciclo próximo ao vencimento
+          const CICLOS = {"Trimestral":90,"Semestral":180,"Anual":365};
+          const hoje0 = new Date();
+          const proximosVenc = todos.filter(c=>{
+            if(c.etapa!=="experiencia"&&c.statusClub!=="fechou") return false;
+            if(!c.dataInicioAssinatura||!c.planoFechado) return false;
+            const inicio = new Date(c.dataInicioAssinatura+"T12:00:00");
+            const diasPlano = CICLOS[c.planoFechado]||90;
+            const diasPassados = Math.round((hoje0-inicio)/86400000);
+            const diasParaVenc = diasPlano - diasPassados;
+            return diasParaVenc >= 0 && diasParaVenc <= 14;
+          }).sort((a,b)=>{
+            const diasA = CICLOS[a.planoFechado]||90;
+            const diasB = CICLOS[b.planoFechado]||90;
+            const dA = Math.round((hoje0-new Date(a.dataInicioAssinatura+"T12:00:00"))/86400000);
+            const dB = Math.round((hoje0-new Date(b.dataInicioAssinatura+"T12:00:00"))/86400000);
+            return (diasA-dA)-(diasB-dB);
           });
-          const stats = Object.values(scriptStats).filter(s=>s.enviados>0).sort((a,b)=>b.enviados-a.enviados);
-          if(stats.length===0) return null;
+          if(!proximosVenc.length) return null;
           return (
-            <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:12}}>
-              <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>📊 Conversão por script</div>
-              {stats.map(s=>{
-                const tx = s.enviados>0?Math.round(s.convertidos/s.enviados*100):0;
+            <div style={{background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:10,padding:"12px 14px",marginTop:12}}>
+              <div style={{fontSize:11,fontWeight:500,color:C.amberD,marginBottom:8}}>⚠ Renovações nos próximos 14 dias ({proximosVenc.length})</div>
+              {proximosVenc.map(c=>{
+                const dias = CICLOS[c.planoFechado]||90;
+                const passados = Math.round((hoje0-new Date(c.dataInicioAssinatura+"T12:00:00"))/86400000);
                 return (
-                  <div key={s.label} style={{marginBottom:8}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{fontSize:11,color:"var(--color-text-primary)",fontWeight:500}}>{s.label}</span>
-                      <span style={{fontSize:11,color:tx>=10?C.greenD:tx>=5?C.amberD:C.coralD,fontWeight:500}}>{tx}% ({s.convertidos}/{s.enviados})</span>
-                    </div>
-                    <div style={{height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
-                      <div style={{width:tx+"%",height:"100%",background:tx>=10?C.green:tx>=5?C.amber:C.coral,borderRadius:3}}/>
-                    </div>
+                  <div key={c.id} style={{fontSize:12,color:C.amberD,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
+                    <span style={{fontWeight:500}}>{c.nome}</span>
+                    <span>{c.planoFechado} · vence em {dias-passados}d</span>
                   </div>
                 );
               })}
+            </div>
+          );
+        })()}
+
+        })()}
+
+        {(()=>{
+          const scriptStats = {};
+          const aberturas = ["recorrente","ticket_alto","kit"];
+          todos.forEach(c => {
+            (c.scriptsEnviados||[]).forEach(s => {
+              if(!scriptStats[s.id]) scriptStats[s.id]={label:SCRIPTS_CLUB.find(sc=>sc.id===s.id)?.label||s.id,enviados:0,responderam:0,convertidos:0};
+              scriptStats[s.id].enviados++;
+              if(["respondeu","interessado","link_enviado","fechou"].includes(c.statusClub)) scriptStats[s.id].responderam++;
+              if(c.statusClub==="fechou") scriptStats[s.id].convertidos++;
+            });
+          });
+          const abStats = aberturas.map(id=>({id,...(scriptStats[id]||{label:SCRIPTS_CLUB.find(s=>s.id===id)?.label||id,enviados:0,responderam:0,convertidos:0})})).filter(s=>s.enviados>0);
+          const outrosStats = Object.entries(scriptStats).filter(([id])=>!aberturas.includes(id)).map(([,s])=>s).filter(s=>s.enviados>0).sort((a,b)=>b.enviados-a.enviados);
+          if(!Object.keys(scriptStats).length) return null;
+          return (
+            <div>
+              {abStats.length>0&&(
+                <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:12}}>
+                  <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>🧪 A/B — Scripts de abertura</div>
+                  {abStats.map(s=>{
+                    const txResp=s.enviados>0?Math.round(s.responderam/s.enviados*100):0;
+                    const txConv=s.enviados>0?Math.round(s.convertidos/s.enviados*100):0;
+                    return (
+                      <div key={s.label} style={{marginBottom:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                          <span style={{fontSize:11,fontWeight:500,color:"var(--color-text-primary)"}}>{s.label}</span>
+                          <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{s.enviados} envios</span>
+                        </div>
+                        <div style={{height:8,background:"var(--color-border-tertiary)",borderRadius:4,overflow:"hidden",marginBottom:2}}>
+                          <div style={{width:txResp+"%",height:"100%",background:C.teal,borderRadius:4}}/>
+                        </div>
+                        <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>
+                          Resposta: <span style={{color:C.tealD,fontWeight:500}}>{txResp}%</span>
+                          {" · "}Conversão: <span style={{color:txConv>=10?C.greenD:C.amberD,fontWeight:500}}>{txConv}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {outrosStats.length>0&&(
+                <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",marginTop:12}}>
+                  <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>📊 Conversão por script</div>
+                  {outrosStats.map(s=>{
+                    const tx=s.enviados>0?Math.round(s.convertidos/s.enviados*100):0;
+                    return (
+                      <div key={s.label} style={{marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                          <span style={{fontSize:11,fontWeight:500,color:"var(--color-text-primary)"}}>{s.label}</span>
+                          <span style={{fontSize:11,color:tx>=10?C.greenD:tx>=5?C.amberD:C.coralD,fontWeight:500}}>{tx}% ({s.convertidos}/{s.enviados})</span>
+                        </div>
+                        <div style={{height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
+                          <div style={{width:tx+"%",height:"100%",background:tx>=10?C.green:tx>=5?C.amber:C.coral,borderRadius:3}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -5331,7 +5504,24 @@ const FunilClub = ({ onAbrirPerfil }) => {
     <div>
       {/* Abas internas */}
       <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid var(--color-border-tertiary)"}}>
-        {[["hoje","⚡ Hoje"],["lista","📋 Lista"],["calendario","📅 Calendário"],["dash","📊 Dash"],["scripts","💬 Scripts"]].map(([id,label])=>(
+        {(()=>{
+        const assinantes = clientesDash.filter(c=>c.statusClub==="fechou"||c.etapa==="experiencia").length;
+        const meta100 = 100; const inicio30 = 30;
+        const semanas = Math.max(1, Math.round((new Date("2026-12-31")-new Date())/604800000));
+        const pct = Math.min(100, Math.round((assinantes-inicio30)/(meta100-inicio30)*100));
+        return assinantes>0&&(
+          <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>🏆 Meta 2026: {assinantes}/100 assinantes</span>
+              <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{100-assinantes} faltam · {semanas} semanas</span>
+            </div>
+            <div style={{height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
+              <div style={{width:pct+"%",height:"100%",background:pct>=80?C.green:pct>=50?C.amber:C.teal,borderRadius:3,transition:"width 0.5s"}}/>
+            </div>
+          </div>
+        );
+      })()}
+      {[["lista","📋 Lista"],["calendario","📅 Calendário"],["dash","📊 Dash"],["scripts","💬 Scripts"]].map(([id,label])=>(
           <button key={id} onClick={()=>setAba(id)}
             style={{padding:"8px 16px",fontSize:12,fontWeight:500,background:"none",border:"none",cursor:"pointer",
               color:aba===id?C.teal:"var(--color-text-secondary)",
@@ -5341,172 +5531,109 @@ const FunilClub = ({ onAbrirPerfil }) => {
         ))}
       </div>
 
-      {/* ABA HOJE */}
-      {aba==="hoje"&&(()=>{
-        const prontas = clientes.filter(c =>
-          (c.p||0) >= 2 && (c._diasUlt||999) < 90 && !c._muitoInativa
-        );
-
-        // Follow-ups: clientes já no funil
-        const acaoImediata = prontas.filter(c =>
-          c.statusClub==="interessado" || c.statusClub==="respondeu"
-        ).sort((a,b) => a.statusClub==="interessado"?-1:1);
-
-        const aguardandoFechamento = prontas.filter(c => c.statusClub==="link_enviado");
-
-        const followUpsHoje = prontas.filter(c =>
-          c.statusClub &&
-          c.statusClub!=="interessado" && c.statusClub!=="respondeu" &&
-          c.statusClub!=="link_enviado" && c.statusClub!=="fechou" && c.statusClub!=="perdido" &&
-          c.proximoFollowup && c.proximoFollowup<=hoje
-        ).sort((a,b)=>(a.proximoFollowup||"")>(b.proximoFollowup||"")?1:-1);
-
-        // Novos contatos: nunca abordadas
-        const janelaHoje = prontas.filter(c =>
-          !c.statusClub &&
-          c._diasParaProxima!=null && c._diasParaProxima>=-2 && c._diasParaProxima<=5
-        ).sort((a,b)=>(a._diasParaProxima||0)-(b._diasParaProxima||0));
-
-        const janelaIds = new Set(janelaHoje.map(c=>c.id));
-        const novosContatos = prontas.filter(c =>
-          !c.statusClub && !janelaIds.has(c.id) &&
-          (c._score||0)>=40 && (c._diasUlt||999)<=60 &&
-          !(c._diasParaProxima!=null && c._diasParaProxima>7)
-        ).sort((a,b)=>(b._score||0)-(a._score||0));
-
-        const novosRestantes = Math.max(0, metaDiaria - janelaHoje.length);
-        const primeiroContato = novosContatos.slice(0, novosRestantes);
-
-        const novosContatadosHoje = prontas.filter(c=>!c.statusClub&&c.dataUltimoContato===hoje).length;
-        const followUpsFeitos = prontas.filter(c=>c.statusClub&&c.dataUltimoContato===hoje).length;
-        const pctNovos = Math.min(100,Math.round(novosContatadosHoje/metaDiaria*100));
-        const totalFU = acaoImediata.length+aguardandoFechamento.length+followUpsHoje.length;
-        const totalNovos = janelaHoje.length+primeiroContato.length;
-        const nada = totalFU===0 && totalNovos===0;
-
-        return (
-          <div>
-            <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:500,color:"var(--color-text-primary)"}}>
-                  {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
-                </div>
-                <div style={{marginTop:6}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-                    <span style={{fontSize:10,color:"var(--color-text-tertiary)"}}>Novos contatos hoje</span>
-                    <span style={{fontSize:10,fontWeight:500,color:pctNovos>=100?C.greenD:C.teal}}>{novosContatadosHoje}/{metaDiaria}</span>
-                  </div>
-                  <div style={{height:4,background:"var(--color-border-tertiary)",borderRadius:2,overflow:"hidden"}}>
-                    <div style={{width:pctNovos+"%",height:"100%",background:pctNovos>=100?C.green:C.teal,borderRadius:2,transition:"width 0.3s"}}/>
-                  </div>
-                </div>
-                {followUpsFeitos>0&&<div style={{fontSize:10,color:C.greenD,marginTop:4}}>✓ {followUpsFeitos} follow-up{followUpsFeitos>1?"s":""} realizados hoje</div>}
-              </div>
-              <div style={{display:"flex",gap:6,flexShrink:0}}>
-                {totalFU>0&&<div style={{textAlign:"center",background:C.coral+"18",borderRadius:8,padding:"6px 10px",border:"0.5px solid "+C.coral}}>
-                  <div style={{fontSize:18,fontWeight:600,color:C.coralD}}>{totalFU}</div>
-                  <div style={{fontSize:9,color:C.coralD,textTransform:"uppercase"}}>Follow-ups</div>
-                </div>}
-                {totalNovos>0&&<div style={{textAlign:"center",background:C.teal+"18",borderRadius:8,padding:"6px 10px",border:"0.5px solid "+C.teal}}>
-                  <div style={{fontSize:18,fontWeight:600,color:C.tealD}}>{totalNovos}</div>
-                  <div style={{fontSize:9,color:C.tealD,textTransform:"uppercase"}}>Novos</div>
-                </div>}
-              </div>
-            </div>
-
-            {/* Melhor candidata */}
-            {(acaoImediata[0]||janelaHoje[0]||followUpsHoje[0])&&(()=>{
-              const melhor = acaoImediata[0]||janelaHoje[0]||followUpsHoje[0];
-              return (
-                <div style={{background:"linear-gradient(135deg,"+C.greenL+" 0%,"+C.tealL+" 100%)",border:"1.5px solid "+C.teal,borderRadius:12,padding:"12px 14px",marginBottom:16}}>
-                  <div style={{fontSize:10,fontWeight:600,color:C.tealD,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>⭐ Melhor candidata hoje</div>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>{melhor.nome}</div>
-                      <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>
-                        {melhor.p}p · R${(melhor.gasto||0).toFixed(0)} · {STATUS_CLUB.find(s=>s.id===melhor.statusClub)?.label||"Não abordada"}
-                        {melhor._diasParaProxima!=null&&<span style={{color:C.greenD,fontWeight:500}}> · {melhor._diasParaProxima<=0?"🛒 comprando agora":"janela em "+melhor._diasParaProxima+"d"}</span>}
-                      </div>
-                    </div>
-                    <button onClick={()=>{setSel(melhor);setScriptSel(sugerirScript(melhor));setAba("lista");}}
-                      style={{padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",background:C.teal,color:"#fff",border:"none"}}>
-                      Abrir →
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* FOLLOW-UPS */}
-            {totalFU>0&&(
-              <div style={{marginBottom:20}}>
-                <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
-                  <span>🔔 Follow-ups</span>
-                  <div style={{flex:1,height:1,background:"var(--color-border-tertiary)"}}/>
-                  <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{totalFU} clientes</span>
-                </div>
-                {acaoImediata.length>0&&(
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:10,color:C.coralD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>🔥 Responderam ou estão interessadas</div>
-                    {acaoImediata.map(c=><CardLista key={c.id} c={c}/>)}
-                  </div>
-                )}
-                {aguardandoFechamento.length>0&&(
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:10,color:C.blueD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>🔗 Link enviado — aguardando fechamento</div>
-                    {aguardandoFechamento.map(c=><CardLista key={c.id} c={c}/>)}
-                  </div>
-                )}
-                {followUpsHoje.length>0&&(
-                  <div>
-                    <div style={{fontSize:10,color:C.amberD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>📅 Follow-ups agendados para hoje</div>
-                    {followUpsHoje.map(c=><CardLista key={c.id} c={c}/>)}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* NOVOS CONTATOS */}
-            {totalNovos>0&&(
-              <div>
-                <div style={{fontSize:12,fontWeight:600,color:"var(--color-text-primary)",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
-                  <span>📤 Novos contatos do dia</span>
-                  <div style={{flex:1,height:1,background:"var(--color-border-tertiary)"}}/>
-                  <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{totalNovos}/{metaDiaria}</span>
-                </div>
-                {janelaHoje.length>0&&(
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:10,color:C.greenD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>🛒 Janela de compra aberta — prioridade máxima</div>
-                    {janelaHoje.map(c=><CardLista key={c.id} c={c}/>)}
-                  </div>
-                )}
-                {primeiroContato.length>0&&(
-                  <div>
-                    <div style={{fontSize:10,color:C.tealD,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>⭐ Score alto — nunca abordadas</div>
-                    {primeiroContato.map(c=><CardLista key={c.id} c={c}/>)}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {nada&&(
-              <div style={{textAlign:"center",padding:40,color:"var(--color-text-tertiary)"}}>
-                <div style={{fontSize:32,marginBottom:12}}>✅</div>
-                <div style={{fontSize:13}}>Tudo em dia! Nenhuma ação urgente no momento.</div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
       {/* ABA LISTA */}
       {aba==="lista"&&(
+        <div>
+        {/* PAINEL DE URGÊNCIAS + PROGRESSO — substitui aba Hoje */}
+        {(()=>{
+          const prontas = clientes.filter(c=>(c.p||0)>=2&&(c._diasUlt||999)<90&&!c._muitoInativa);
+          const nVencidos = prontas.filter(c=>c.statusClub&&c.proximoFollowup&&c.proximoFollowup<=hoje).length;
+          const nImediata = prontas.filter(c=>c.statusClub==="interessado"||c.statusClub==="respondeu").length;
+          const nNovos = prontas.filter(c=>!c.statusClub&&(c._score||0)>=40).length;
+          const nRenovacao = clientesDash.filter(c=>c.etapa==="experiencia"&&c.dataInicioAssinatura&&(()=>{
+            const d=new Date(c.dataInicioAssinatura+"T12:00:00");
+            const dias=Math.round((new Date()-d)/86400000);
+            return dias>=25&&dias<=35;
+          })()).length;
+          // Meta anual
+          const totalAssinantes = clientesDash.filter(c=>c.statusClub==="fechou"||c.etapa==="experiencia").length + 30;
+          const meta = 100;
+          const semanasFim = Math.max(1,Math.round((new Date("2026-12-31")-new Date())/604800000));
+          const faltam = Math.max(0,meta-totalAssinantes);
+          const pctMeta = Math.min(100,Math.round(totalAssinantes/meta*100));
+          const novosContatadosHoje = prontas.filter(c=>!c.statusClub&&c.dataUltimoContato===hoje).length;
+          const pctNovos = Math.min(100,Math.round(novosContatadosHoje/metaDiaria*100));
+          const temAcao = nVencidos>0||nImediata>0||nNovos>0||nRenovacao>0;
+          return (
+            <div style={{marginBottom:12}}>
+              {/* Meta + contatos do dia */}
+              <div style={{display:"flex",gap:8,marginBottom:8}}>
+                <div style={{flex:1,background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>Meta 2026 — Assinantes</span>
+                    <span style={{fontSize:11,fontWeight:600,color:pctMeta>=100?C.greenD:C.purple}}>{totalAssinantes}/{meta}</span>
+                  </div>
+                  <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden",marginBottom:4}}>
+                    <div style={{width:pctMeta+"%",height:"100%",background:pctMeta>=100?C.green:C.purple,borderRadius:3,transition:"width 0.3s"}}/>
+                  </div>
+                  <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{faltam} faltam · {semanasFim} semanas</div>
+                </div>
+                <div style={{flex:1,background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>Novos hoje</span>
+                    <span style={{fontSize:11,fontWeight:600,color:pctNovos>=100?C.greenD:C.teal}}>{novosContatadosHoje}/{metaDiaria}</span>
+                  </div>
+                  <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden",marginBottom:4}}>
+                    <div style={{width:pctNovos+"%",height:"100%",background:pctNovos>=100?C.green:C.teal,borderRadius:3,transition:"width 0.3s"}}/>
+                  </div>
+                  <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{metaDiaria-novosContatadosHoje>0?metaDiaria-novosContatadosHoje+" restantes":""}</div>
+                </div>
+              </div>
+              {/* Urgências clicáveis */}
+              {temAcao&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                {nImediata>0&&<button onClick={()=>{setFiltroStatus("interessado");}}
+                  style={{flex:1,minWidth:90,background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{fontSize:18,fontWeight:600,color:C.coralD}}>{nImediata}</div>
+                  <div style={{fontSize:10,color:C.coralD}}>🔥 Ação imediata</div>
+                </button>}
+                {nVencidos>0&&<button onClick={()=>{setFiltroStatus("hoje");}}
+                  style={{flex:1,minWidth:90,background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{fontSize:18,fontWeight:600,color:C.amberD}}>{nVencidos}</div>
+                  <div style={{fontSize:10,color:C.amberD}}>🔔 Follow-ups vencidos</div>
+                </button>}
+                {nRenovacao>0&&<button onClick={()=>setAba("dash")}
+                  style={{flex:1,minWidth:90,background:C.greenL,border:"0.5px solid "+C.green,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{fontSize:18,fontWeight:600,color:C.greenD}}>{nRenovacao}</div>
+                  <div style={{fontSize:10,color:C.greenD}}>🔄 Renovações próximas</div>
+                </button>}
+                {nNovos>0&&<button onClick={()=>setFiltroStatus("nao_abordado")}
+                  style={{flex:1,minWidth:90,background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{fontSize:18,fontWeight:600,color:C.tealD}}>{Math.min(nNovos,metaDiaria)}</div>
+                  <div style={{fontSize:10,color:C.tealD}}>📤 Novos disponíveis</div>
+                </button>}
+              </div>}
+            </div>
+          );
+        })()}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div>
             <div style={{display:"flex",gap:8,marginBottom:8}}>
               <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar cliente..."
                 style={{flex:1,padding:"7px 10px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}/>
+              <button onClick={()=>{setModoLote(!modoLote);setSelecionadosLote(new Set());}}
+                style={{padding:"6px 10px",borderRadius:8,fontSize:11,cursor:"pointer",fontWeight:500,
+                  background:modoLote?C.purple:"var(--color-background-secondary)",
+                  color:modoLote?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(modoLote?C.purple:"var(--color-border-tertiary)")}}>
+                {modoLote?"✕ Cancelar":"☑ Lote"}
+              </button>
             </div>
+            {modoLote&&selecionadosLote.size>0&&(
+              <div style={{background:C.purpleL,border:"0.5px solid "+C.purple,borderRadius:8,padding:"8px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:12,color:C.purpleD,flex:1}}>{selecionadosLote.size} selecionado{selecionadosLote.size>1?"s":""}</span>
+                <button onClick={async()=>{
+                  const ids=[...selecionadosLote];
+                  for(const id of ids){
+                    const c=clientes.find(x=>x.id===id);
+                    if(c&&!c.statusClub) await saveCliente({...c,statusClub:"contatado",dataAbordagem:hoje,dataUltimoContato:hoje,tentativasClub:(c.tentativasClub||0)+1,proximoFollowup:addDays(2)});
+                  }
+                  setSelecionadosLote(new Set()); setModoLote(false);
+                }}
+                  style={{padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:500,cursor:"pointer",background:C.purple,color:"#fff",border:"none"}}>
+                  📤 Marcar como Contatado
+                </button>
+              </div>
+            )}
             {/* Sorts cumulativos */}
             <div style={{display:"flex",gap:4,marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginRight:2}}>Ordenar:</span>
@@ -5574,23 +5701,28 @@ const FunilClub = ({ onAbrirPerfil }) => {
             <div style={{maxHeight:"65vh",overflowY:"auto"}}>
               {filtroStatus==="hoje"?(()=>{
                 const prontas2 = clientes.filter(c=>(c.p||0)>=2&&(c._diasUlt||999)<90&&!c._muitoInativa);
-                const ai = prontas2.filter(c=>c.statusClub==="interessado"||(c.statusClub==="respondeu")||(c.proximoFollowup&&c.proximoFollowup<=hoje));
-                const jh = prontas2.filter(c=>!c.statusClub&&c._diasParaProxima!=null&&c._diasParaProxima>=-2&&c._diasParaProxima<=5);
-                const lf = prontas2.filter(c=>c.statusClub==="link_enviado");
-                const pc = prontas2.filter(c=>!c.statusClub).slice(0,12);
+                const acaoIm = prontas2.filter(c=>c.statusClub==="interessado"||c.statusClub==="respondeu").sort((a,b)=>a.statusClub==="interessado"?-1:1);
+                const linksEnv = prontas2.filter(c=>c.statusClub==="link_enviado");
+                const fuHoje = prontas2.filter(c=>c.statusClub&&c.statusClub!=="interessado"&&c.statusClub!=="respondeu"&&c.statusClub!=="link_enviado"&&c.statusClub!=="fechou"&&c.statusClub!=="perdido"&&c.proximoFollowup&&c.proximoFollowup<=hoje).sort((a,b)=>(a.proximoFollowup||"")>(b.proximoFollowup||"")?1:-1);
+                const janelaH = prontas2.filter(c=>!c.statusClub&&c._diasParaProxima!=null&&c._diasParaProxima>=-2&&c._diasParaProxima<=5);
+                const jIds = new Set(janelaH.map(c=>c.id));
+                const novosH = prontas2.filter(c=>!c.statusClub&&!jIds.has(c.id)&&(c._score||0)>=40&&(c._diasUlt||999)<=60&&!(c._diasParaProxima!=null&&c._diasParaProxima>7)).sort((a,b)=>(b._score||0)-(a._score||0)).slice(0,Math.max(0,12-janelaH.length));
+                const nada = acaoIm.length===0&&linksEnv.length===0&&fuHoje.length===0&&janelaH.length===0&&novosH.length===0;
                 return (
                   <div>
-                    {[["🔥 Ação imediata",ai,C.coralD],[" 🛒 Janela aberta",jh,C.greenD],["🔗 Link enviado",lf,C.blueD],["📤 1° contato",pc,C.tealD]].map(([titulo,lista,cor])=>
-                      lista.length>0&&(
-                        <div key={titulo} style={{marginBottom:12}}>
-                          <div style={{fontSize:11,fontWeight:600,color:cor,marginBottom:6}}>{titulo} ({lista.length})</div>
-                          {lista.map(c=><CardLista key={c.id} c={c}/>)}
-                        </div>
-                      )
-                    )}
-                    {ai.length===0&&jh.length===0&&lf.length===0&&pc.length===0&&(
-                      <div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>Nenhuma ação urgente hoje</div>
-                    )}
+                    {[
+                      ["🔥 Ação imediata",acaoIm,C.coralD,C.coralL],
+                      ["🔗 Link enviado",linksEnv,C.blueD,C.blueL],
+                      ["📅 Follow-ups de hoje",fuHoje,C.amberD,C.amberL],
+                      ["🛒 Janela de compra",janelaH,C.greenD,C.greenL],
+                      ["📤 Novos contatos",novosH,C.tealD,C.tealL],
+                    ].map(([titulo,lista,corD,corL])=>lista.length>0&&(
+                      <div key={titulo} style={{marginBottom:12}}>
+                        <div style={{fontSize:10,fontWeight:600,color:corD,background:corL,borderRadius:6,padding:"3px 8px",marginBottom:6,display:"inline-block"}}>{titulo} ({lista.length})</div>
+                        {lista.map(c=><CardLista key={c.id} c={c}/>)}
+                      </div>
+                    ))}
+                    {nada&&<div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>✅ Nenhuma ação urgente hoje</div>}
                   </div>
                 );
               })():(
@@ -5605,6 +5737,7 @@ const FunilClub = ({ onAbrirPerfil }) => {
             <PainelDetalhe/>
           </div>
         </div>
+      </div>
       )}
 
       {/* ABA DASH */}
@@ -5898,6 +6031,7 @@ export default function App() {
   const [cfgLoad,setCfgLoad]=useState(true);
   const [sessao,setSessao]=useState(null);
   const [sessaoLoad,setSessaoLoad]=useState(true);
+  const [clubUrgencia,setClubUrgencia]=useState(0);
   useEffect(()=>{ loadCfg().then(cfg=>{ setCfgOk(!!(cfg.url&&cfg.key)); setCfgLoad(false); }); },[]);
   useEffect(()=>{ if(cfgOk){ setSessao(loadSession()); setSessaoLoad(false); } },[cfgOk]);
   const onSalvo = () => { setTab("kanban"); setRefresh(r=>r+1); };
@@ -5936,7 +6070,7 @@ export default function App() {
       </div>
       <div style={{ display:"flex",borderBottom:"0.5px solid var(--color-border-tertiary)",marginBottom:24,overflowX:"auto" }}>
         <T label="📋 Kanban" active={tab==="kanban"} color={C.green} onClick={()=>{setClienteId(null);setTab("kanban");}}/>
-        <T label="🎯 Club" active={tab==="club"} color={C.teal} onClick={()=>setTab("club")}/>
+        <T label={"🎯 Club"+(clubUrgencia>0?" ("+clubUrgencia+")":"")} active={tab==="club"} color={C.teal} onClick={()=>setTab("club")}/>
         {isAdmin&&<T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>}
         <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
@@ -5947,7 +6081,7 @@ export default function App() {
         {isAdmin&&<T label="👥 Usuários" active={tab==="usuarios"} color={C.purple} onClick={()=>setTab("usuarios")}/>}
         {isAdmin&&<T label="⚙ Config" active={tab==="config"} color="var(--color-text-tertiary)" onClick={()=>setTab("config")}/>}
       </div>
-      {tab==="club"&&<FunilClub onAbrirPerfil={(id)=>{abrirClienteGlobal(id);setTab("kanban");}}/>}
+      {tab==="club"&&<FunilClub onAbrirPerfil={(id)=>{abrirClienteGlobal(id);setTab("kanban");}} onUrgencia={setClubUrgencia}/>}
       {tab==="kanban"&&(clienteId?<Perfil key={clienteId} clienteId={clienteId} onVoltar={()=>{setClienteId(null);setRefresh(r=>r+1);}}/>:
           <Kanban onAbrir={setClienteId} reloadToken={refresh}
             filtroHoje={filtroHojeApp} setFiltroHoje={setFiltroHojeApp}
