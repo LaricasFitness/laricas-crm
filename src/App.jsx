@@ -4229,8 +4229,20 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
   const [loginToken, setLoginToken] = React.useState(""); // token intermediário antes do 2FA
   const [mensagem, setMensagem] = React.useState("");
   const [resultado, setResultado] = React.useState(null);
-
   const [loginResp, setLoginResp] = React.useState(null);
+
+  // Ao abrir: tenta token salvo antes de pedir login
+  React.useEffect(() => {
+    const tokenSalvo = ritspayGetToken();
+    if (!tokenSalvo) return;
+    setStep("syncing");
+    setMensagem("Usando sessão salva...");
+    sincronizar(tokenSalvo).catch(() => {
+      ritspaySetToken(""); // token expirou
+      setStep("login");
+      setMensagem("Sessão expirada. Faça login novamente.");
+    });
+  }, []);
 
   const fazerLogin = async () => {
     if (!email.trim() || !senha.trim()) { setMensagem("Preencha email e senha."); return; }
@@ -4329,12 +4341,22 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
         if (c.id) emailMap["id:" + c.id] = c;
       });
 
+      // Ordena para processar: ativos primeiro, depois outros
+      const STATUS_PRIO = { "active": 0, "past_due": 1, "paused": 2, "canceled": 3, "inactive": 4 };
+      const subsPriorizadas = [...subs].sort((a, b) => {
+        const pa = STATUS_PRIO[(a.status||"").toLowerCase()] ?? 9;
+        const pb = STATUS_PRIO[(b.status||"").toLowerCase()] ?? 9;
+        return pa - pb;
+      });
+
       // Busca todos os clientes do CRM
       const crmClientes = await dbGetAll();
       let atualizados = 0;
       const detalhes = [];
+      // Rastreia clientes já processados — se tiver múltiplas assinaturas, usa a mais prioritária (ativo > atrasado > pausado > cancelado)
+      const processados = new Set();
 
-      for (const sub of subs) {
+      for (const sub of subsPriorizadas) {
         const custRef = sub.customer || {};
         const custId  = custRef.id || custRef.customer_id || sub.customer_id || "";
         let custEmail = custRef.email || custRef.email_address || "";
@@ -4344,14 +4366,21 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
         }
         if (!custEmail) continue;
 
+        const emailNorm = custEmail.toLowerCase().trim();
+
+        // Se já processou esse email com assinatura mais prioritária, pula
+        if (processados.has(emailNorm)) continue;
+
         const crmCliente = crmClientes.find(c =>
-          (c.email||"").toLowerCase().trim() === custEmail.toLowerCase().trim() ||
-          (c.emailClub||"").toLowerCase().trim() === custEmail.toLowerCase().trim()
+          (c.email||"").toLowerCase().trim() === emailNorm ||
+          (c.emailClub||"").toLowerCase().trim() === emailNorm
         );
         if (!crmCliente) {
           detalhes.push({ nome: custEmail, status: "não encontrado no CRM" });
           continue;
         }
+
+        processados.add(emailNorm);
 
         const novoStatus = mapRitsStatus(sub);
         const novoPlano  = mapRitsPlan(sub);
@@ -5229,10 +5258,10 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   const baseParaFiltro = busca ? todosParaBusca : clientes;
   const listaFiltrada = baseParaFiltro.filter(c => {
     if (filtroStatus === "hoje") {
-      // Janela de compra aberta ou ação imediata
-      const janelaOk = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -2 && c._diasParaProxima <= 5;
-      const acaoOk = ["interessado","respondeu","link_enviado"].includes(c.statusClub) || (c.proximoFollowup && c.proximoFollowup <= hoje);
-      if (!janelaOk && !acaoOk) return false;
+      // Só aparece quem tem follow-up para HOJE ou vencido — sem exceção por status
+      const followUpHoje = c.proximoFollowup && c.proximoFollowup <= hoje;
+      const janelaAberta = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -2 && c._diasParaProxima <= 5 && !c.statusClub;
+      if (!followUpHoje && !janelaAberta) return false;
     } else if (filtroStatus === "nao_abordado") {
       if (c.statusClub) return false; // qualquer status = já abordado
     } else if (filtroStatus) {
@@ -6125,7 +6154,7 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
         {(()=>{
           const prontas = clientes.filter(c=>(c.p||0)>=2&&(c._diasUlt||999)<90&&!c._muitoInativa);
           const nVencidos = prontas.filter(c=>c.statusClub&&c.proximoFollowup&&c.proximoFollowup<=hoje).length;
-          const nImediata = prontas.filter(c=>c.statusClub==="interessado"||c.statusClub==="respondeu").length;
+          const nImediata = prontas.filter(c=>["interessado","respondeu","link_enviado"].includes(c.statusClub)&&c.proximoFollowup&&c.proximoFollowup<=hoje).length;
           const nNovos = prontas.filter(c=>!c.statusClub&&(c._score||0)>=40).length;
           const hoje2 = new Date().toISOString().split("T")[0];
           const nRenovacao = clientesDash.filter(c=>c.etapa==="experiencia"&&c.dataInicioAssinatura&&(()=>{
