@@ -4478,21 +4478,6 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     }
   };
 
-        await dbSave(atualizado);
-        atualizados++;
-        detalhes.push({ nome: crmCliente.nome, status: novoStatus });
-      }
-
-      setResultado({ total: subs.length, atualizados, detalhes });
-      setStep("done");
-      setMensagem(`${atualizados} clientes atualizados no CRM.`);
-      if (onSyncDone) onSyncDone();
-    } catch(e) {
-      setStep("error");
-      setMensagem("Erro na sincronização: " + e.message);
-    }
-  };
-
   const C2 = { coral: "#ef4444", coralL: "#fef2f2", green: "#10b981", greenL: "#ecfdf5", teal: "#0d9488", tealL: "#f0fdfa", tealD: "#0f766e", purple: "#7c3aed", purpleL: "#ede9fe", amber: "#f59e0b", amberL: "#fffbeb", amberD: "#b45309" };
 
   return (
