@@ -4560,6 +4560,8 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
                 </button>
               </div>
             )}
+          </div>
+        )}
 
         {step === "error" && (
           <div>
