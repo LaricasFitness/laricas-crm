@@ -4308,31 +4308,47 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     try {
       const tenant = tenantId.trim();
 
-      // Busca subscriptions
-      const subsResp = await ritspayFetch(`/sales/${tenant}/subscriptions`, token);
-      // Normaliza para array independente do formato
-      const subs = Array.isArray(subsResp) ? subsResp
-        : Array.isArray(subsResp?.results) ? subsResp.results
-        : Array.isArray(subsResp?.items) ? subsResp.items
-        : Array.isArray(subsResp?.data) ? subsResp.data
-        : [];
+      // Helper para buscar todas as páginas
+      const fetchAll = async (path) => {
+        const todos = [];
+        let url = path;
+        let pagina = 1;
+        while (url) {
+          const resp = await ritspayFetch(url, token);
+          const items = Array.isArray(resp) ? resp
+            : Array.isArray(resp?.results) ? resp.results
+            : Array.isArray(resp?.items) ? resp.items
+            : Array.isArray(resp?.data) ? resp.data
+            : [];
+          todos.push(...items);
+          // Verifica se há próxima página
+          const next = resp?.next || resp?.links?.next || null;
+          if (next && next !== url) {
+            // next pode ser URL completa ou path relativo
+            url = next.startsWith("http") ? next.replace("https://api.ritspay.com","") : next;
+            pagina++;
+            setMensagem(`Buscando página ${pagina}...`);
+          } else {
+            url = null;
+          }
+          if (pagina > 20) break; // Segurança: máximo 20 páginas
+        }
+        return todos;
+      };
+
+      // Busca todas as subscriptions (todas as páginas)
+      const subs = await fetchAll(`/sales/${tenant}/subscriptions`);
 
       if (subs.length === 0) {
-        // Mostra resposta real para debug
         setStep("error");
-        setMensagem("Sem assinaturas encontradas. Resposta: " + JSON.stringify(subsResp).slice(0, 300));
+        setMensagem("Sem assinaturas encontradas. Verifique o Tenant ID.");
         return;
       }
 
       setMensagem(`${subs.length} assinaturas encontradas. Buscando clientes...`);
 
-      // Busca customers
-      const custsResp = await ritspayFetch(`/sales/${tenant}/customers`, token);
-      const custs = Array.isArray(custsResp) ? custsResp
-        : Array.isArray(custsResp?.results) ? custsResp.results
-        : Array.isArray(custsResp?.items) ? custsResp.items
-        : Array.isArray(custsResp?.data) ? custsResp.data
-        : [];
+      // Busca todos os customers (todas as páginas)
+      const custs = await fetchAll(`/sales/${tenant}/customers`);
 
       // Monta mapa email → customer
       const emailMap = {};
