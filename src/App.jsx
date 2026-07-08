@@ -4369,6 +4369,10 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const crmClientes = await dbGetAll();
       let atualizados = 0;
       const detalhes = [];
+      // Debug: loga estrutura da primeira assinatura no console
+      if (subs.length > 0) console.log("[RitsPay] Estrutura assinatura:", JSON.stringify(subs[0], null, 2));
+      if (custs.length > 0) console.log("[RitsPay] Estrutura customer:", JSON.stringify(custs[0], null, 2));
+
       // Rastreia clientes já processados — se tiver múltiplas assinaturas, usa a mais prioritária (ativo > atrasado > pausado > cancelado)
       const processados = new Set();
 
@@ -4403,14 +4407,37 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
         const novoValor  = sub.amount || sub.total || sub.price || sub.plan?.price || "";
         const proximaCob = sub.next_billing_date || sub.next_charge_date || sub.renewal_date || "";
 
+        // Mapeia todos os campos disponíveis na assinatura RitsPay
+        const dataInicio = (
+          sub.started_at || sub.start_date || sub.created_at ||
+          sub.subscription_start || sub.begin_date || ""
+        ).split("T")[0] || "";
+
+        // Ciclo total — tenta múltiplos campos
+        const cicloRaw = sub.billing_cycles_completed ?? sub.paid_cycles ??
+          sub.current_cycle ?? sub.cycles_completed ?? sub.period_count ?? null;
+        const cicloAtualRits = cicloRaw !== null ? parseInt(cicloRaw) : null;
+
+        // Valor mensal — divide por 100 se vier em centavos (valor > 500 provavelmente é centavos)
+        const valorRaw = parseFloat(
+          sub.amount || sub.price || sub.plan?.price || sub.monthly_amount || 0
+        );
+        const valorMensalCalc = valorRaw > 500 ? (valorRaw / 100).toFixed(2)
+          : valorRaw > 0 ? valorRaw.toFixed(2) : "";
+
         const atualizado = {
           ...crmCliente,
           statusAssinatura: novoStatus,
-          ...(novoPlano ? { tipoAssinatura: novoPlano } : {}),
-          ...(novoValor ? { valorMensal: String(parseFloat(novoValor) > 100 ? parseFloat(novoValor)/100 : novoValor) } : {}),
-          ...(proximaCob ? { proximaCobranca: proximaCob.split("T")[0] } : {}),
           cancelado: novoStatus === "cancelado",
           falhaRenovacao: novoStatus === "atrasado",
+          ...(novoPlano ? { tipoAssinatura: novoPlano } : {}),
+          ...(valorMensalCalc ? { valorMensal: valorMensalCalc } : {}),
+          ...(proximaCob ? { proximaCobranca: proximaCob.split("T")[0] } : {}),
+          ...(dataInicio ? { dataInicioAssinatura: dataInicio } : {}),
+          ...(cicloAtualRits !== null ? { cicloAtualClub: cicloAtualRits } : {}),
+          // ID da assinatura no RitsPay para referência futura
+          subscriptionIdRits: sub.id || sub.subscription_id || "",
+          customerIdRits: sub.customer?.id || sub.customer_id || "",
         };
 
         await dbSave(atualizado);
