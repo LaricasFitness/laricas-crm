@@ -4199,24 +4199,20 @@ const mapRitsStatus = (sub) => {
   const s = (sub.status || "").toLowerCase();
   if (s === "canceled" || s === "cancelled" || s === "inactive") return "cancelado";
   if (s === "paused" || s === "suspended") return "pausado";
-  if (s === "past_due" || s === "unpaid" || s === "failed" || s.includes("fail")) return "atrasado";
+  // atrasado: overdue_at preenchido ou status overdue/past_due
+  if (s === "past_due" || s === "unpaid" || s === "overdue" || sub.overdue_at) return "atrasado";
   return "ativo";
 };
 
 // Infere tipo de assinatura pelo período
 const mapRitsPlan = (sub) => {
   if (!sub) return "";
-  const billing = sub.billing_period || sub.plan?.billing_period || "";
-  const interval = parseInt(sub.billing_interval || sub.plan?.billing_interval || 1);
-  if (billing === "month" && interval === 3) return "Trimestral";
-  if (billing === "month" && interval === 6) return "Semestral";
-  if (billing === "month" && interval === 12) return "Anual";
-  if (billing === "year") return "Anual";
-  // Tenta pelo nome do plano
-  const name = (sub.plan?.name || sub.description || "").toLowerCase();
-  if (name.includes("anual") || name.includes("annual")) return "Anual";
-  if (name.includes("semestral")) return "Semestral";
-  if (name.includes("trimestral")) return "Trimestral";
+  // Usa slug e name do plano (campos confirmados da API)
+  const slug = (sub.plan?.slug || sub.plan?.code || "").toLowerCase();
+  const name = (sub.plan?.name || "").toLowerCase();
+  if (slug.includes("anual") || name.includes("anual") || name.includes("annual")) return "Anual";
+  if (slug.includes("semestral") || name.includes("semestral")) return "Semestral";
+  if (slug.includes("trimestral") || name.includes("trimestral")) return "Trimestral";
   return "";
 };
 
@@ -4369,24 +4365,18 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const crmClientes = await dbGetAll();
       let atualizados = 0;
       const detalhes = [];
-      // Debug: mostra estrutura da primeira assinatura diretamente na UI
-      if (subs.length > 0) {
-        setResultado({ debug: true, sub0: subs[0], cust0: custs[0], total: subs.length });
-        setStep("done");
-        setMensagem("Debug: veja estrutura abaixo antes de sincronizar.");
-        return;
-      }
+      // Estrutura confirmada — sync direto sem debug
 
       // Rastreia clientes já processados — se tiver múltiplas assinaturas, usa a mais prioritária (ativo > atrasado > pausado > cancelado)
       const processados = new Set();
 
       for (const sub of subsPriorizadas) {
+        // Email confirmado em sub.customer.email (API RitsPay)
         const custRef = sub.customer || {};
-        const custId  = custRef.id || custRef.customer_id || sub.customer_id || "";
         let custEmail = custRef.email || custRef.email_address || "";
-        if (!custEmail && custId) {
-          const c = emailMap["id:" + custId];
-          custEmail = c?.email || "";
+        // Fallback: busca no mapa de customers pelo ID
+        if (!custEmail && custRef.id) {
+          custEmail = emailMap["id:" + custRef.id]?.email || "";
         }
         if (!custEmail) continue;
 
@@ -4408,26 +4398,24 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
 
         const novoStatus = mapRitsStatus(sub);
         const novoPlano  = mapRitsPlan(sub);
-        const novoValor  = sub.amount || sub.total || sub.price || sub.plan?.price || "";
-        const proximaCob = sub.next_billing_date || sub.next_charge_date || sub.renewal_date || "";
+        // Campos confirmados da API RitsPay
+        const proximaCob = (sub.next_billing_at || sub.next_billing_date || "").split("T")[0] || "";
 
-        // Mapeia todos os campos disponíveis na assinatura RitsPay
-        const dataInicio = (
-          sub.started_at || sub.start_date || sub.created_at ||
-          sub.subscription_start || sub.begin_date || ""
-        ).split("T")[0] || "";
+        // Mapeamento exato dos campos confirmados da API RitsPay
+        const dataInicio = (sub.start_at || sub.created_at || "").split("T")[0] || "";
+        const cicloAtualRits = typeof sub.cycle === "number" ? sub.cycle : null;
 
-        // Ciclo total — tenta múltiplos campos
-        const cicloRaw = sub.billing_cycles_completed ?? sub.paid_cycles ??
-          sub.current_cycle ?? sub.cycles_completed ?? sub.period_count ?? null;
-        const cicloAtualRits = cicloRaw !== null ? parseInt(cicloRaw) : null;
+        // Valor: total em centavos (19044 → R$190,44)
+        const valorRaw = parseFloat(sub.total || sub.subscription_price || 0);
+        const valorMensalCalc = valorRaw > 0 ? (valorRaw / 100).toFixed(2) : "";
 
-        // Valor mensal — divide por 100 se vier em centavos (valor > 500 provavelmente é centavos)
-        const valorRaw = parseFloat(
-          sub.amount || sub.price || sub.plan?.price || sub.monthly_amount || 0
-        );
-        const valorMensalCalc = valorRaw > 500 ? (valorRaw / 100).toFixed(2)
-          : valorRaw > 0 ? valorRaw.toFixed(2) : "";
+        // Calcular fim da fidelidade baseado no plano
+        const mesesPlano = novoPlano==="Anual"?12:novoPlano==="Semestral"?6:novoPlano==="Trimestral"?3:0;
+        const fimFidelidade = dataInicio && mesesPlano > 0 ? (() => {
+          const d = new Date(dataInicio+"T12:00:00");
+          d.setMonth(d.getMonth() + mesesPlano);
+          return d.toISOString().split("T")[0];
+        })() : "";
 
         const atualizado = {
           ...crmCliente,
@@ -4436,12 +4424,12 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
           falhaRenovacao: novoStatus === "atrasado",
           ...(novoPlano ? { tipoAssinatura: novoPlano } : {}),
           ...(valorMensalCalc ? { valorMensal: valorMensalCalc } : {}),
-          ...(proximaCob ? { proximaCobranca: proximaCob.split("T")[0] } : {}),
+          ...(proximaCob ? { proximaCobranca: proximaCob } : {}),
           ...(dataInicio ? { dataInicioAssinatura: dataInicio } : {}),
           ...(cicloAtualRits !== null ? { cicloAtualClub: cicloAtualRits } : {}),
-          // ID da assinatura no RitsPay para referência futura
-          subscriptionIdRits: sub.id || sub.subscription_id || "",
-          customerIdRits: sub.customer?.id || sub.customer_id || "",
+          ...(fimFidelidade ? { dataFimFidelidade: fimFidelidade } : {}),
+          subscriptionIdRits: sub.id || "",
+          customerIdRits: sub.customer?.id || "",
         };
 
         await dbSave(atualizado);
