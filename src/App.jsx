@@ -4165,6 +4165,287 @@ const CalendarioFollowups = ({ clientes, onAbrirCliente }) => {
   );
 };
 
+
+// ── RITSPAY INTEGRATION ────────────────────────────────────────────────────
+const RITSPAY_STORAGE_KEY = "ritspay_cfg";
+const RITSPAY_TOKEN_KEY   = "ritspay_token";
+
+const ritspaySaveCfg = (cfg) => {
+  try { localStorage.setItem(RITSPAY_STORAGE_KEY, JSON.stringify(cfg)); } catch(e) {}
+};
+const ritspayLoadCfg = () => {
+  try { const r = localStorage.getItem(RITSPAY_STORAGE_KEY); return r ? JSON.parse(r) : {}; } catch(e) { return {}; }
+};
+const ritspayGetToken = () => {
+  try { return localStorage.getItem(RITSPAY_TOKEN_KEY) || ""; } catch(e) { return ""; }
+};
+const ritspaySetToken = (t) => {
+  try { localStorage.setItem(RITSPAY_TOKEN_KEY, t); } catch(e) {}
+};
+
+// Chama a API RitsPay com token
+const ritspayFetch = async (path, token, opts = {}) => {
+  const r = await fetch("https://api.ritspay.com" + path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token, ...(opts.headers||{}) }
+  });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+};
+
+// Mapeia status RitsPay → statusAssinatura CRM
+const mapRitsStatus = (sub) => {
+  if (!sub) return "ativo";
+  const s = (sub.status || "").toLowerCase();
+  if (s === "canceled" || s === "cancelled" || s === "inactive") return "cancelado";
+  if (s === "paused" || s === "suspended") return "pausado";
+  if (s === "past_due" || s === "unpaid" || s === "failed" || s.includes("fail")) return "atrasado";
+  return "ativo";
+};
+
+// Infere tipo de assinatura pelo período
+const mapRitsPlan = (sub) => {
+  if (!sub) return "";
+  const billing = sub.billing_period || sub.plan?.billing_period || "";
+  const interval = parseInt(sub.billing_interval || sub.plan?.billing_interval || 1);
+  if (billing === "month" && interval === 3) return "Trimestral";
+  if (billing === "month" && interval === 6) return "Semestral";
+  if (billing === "month" && interval === 12) return "Anual";
+  if (billing === "year") return "Anual";
+  // Tenta pelo nome do plano
+  const name = (sub.plan?.name || sub.description || "").toLowerCase();
+  if (name.includes("anual") || name.includes("annual")) return "Anual";
+  if (name.includes("semestral")) return "Semestral";
+  if (name.includes("trimestral")) return "Trimestral";
+  return "";
+};
+
+const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
+  const [step, setStep] = React.useState("login"); // login | twofa | syncing | done | error
+  const [email, setEmail] = React.useState(() => ritspayLoadCfg().email || "");
+  const [senha, setSenha] = React.useState("");
+  const [tenantId, setTenantId] = React.useState(() => ritspayLoadCfg().tenantId || "TEN-1G57I7LIVD8K0F8M");
+  const [codigo2fa, setCodigo2fa] = React.useState("");
+  const [loginToken, setLoginToken] = React.useState(""); // token intermediário antes do 2FA
+  const [mensagem, setMensagem] = React.useState("");
+  const [resultado, setResultado] = React.useState(null);
+
+  const fazerLogin = async () => {
+    if (!email.trim() || !senha.trim()) { setMensagem("Preencha email e senha."); return; }
+    setStep("syncing");
+    setMensagem("Fazendo login no RitsPay...");
+    try {
+      const r = await fetch("https://api.ritspay.com/account/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password: senha })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || data.message || "Erro no login");
+      // Guarda token intermediário (antes do 2FA)
+      setLoginToken(data.access_token || data.token || "");
+      ritspaySaveCfg({ email: email.trim(), tenantId: tenantId.trim() });
+      setStep("twofa");
+      setMensagem("Código enviado para o email. Digite abaixo:");
+    } catch(e) {
+      setStep("error");
+      setMensagem("Erro no login: " + e.message);
+    }
+  };
+
+  const confirmar2fa = async () => {
+    if (!codigo2fa.trim()) { setMensagem("Digite o código."); return; }
+    setStep("syncing");
+    setMensagem("Autenticando 2FA...");
+    try {
+      const r = await fetch("https://api.ritspay.com/account/auth/two_factor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(loginToken?{"Authorization":"Bearer "+loginToken}:{}) },
+        body: JSON.stringify({ code: codigo2fa.trim(), email: email.trim() })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || data.message || "Código inválido");
+      const token = data.access_token || data.token || loginToken;
+      ritspaySetToken(token);
+      await sincronizar(token);
+    } catch(e) {
+      setStep("error");
+      setMensagem("Erro no 2FA: " + e.message);
+    }
+  };
+
+  const sincronizar = async (token) => {
+    setStep("syncing");
+    setMensagem("Buscando assinantes no RitsPay...");
+    try {
+      const tenant = tenantId.trim();
+      // Busca subscriptions
+      const subsData = await ritspayFetch(`/sales/${tenant}/subscriptions`, token);
+      const subs = subsData.results || subsData.items || subsData || [];
+      setMensagem(`${subs.length} assinaturas encontradas. Buscando clientes...`);
+
+      // Busca customers (para ter email)
+      const custsData = await ritspayFetch(`/sales/${tenant}/customers`, token);
+      const custs = custsData.results || custsData.items || custsData || [];
+
+      // Monta mapa email → customer
+      const emailMap = {};
+      custs.forEach(c => {
+        if (c.email) emailMap[c.email.toLowerCase().trim()] = c;
+        if (c.id) emailMap["id:"+c.id] = c;
+      });
+
+      // Busca todos os clientes do CRM
+      const crmClientes = await dbGetAll();
+      let atualizados = 0;
+      const detalhes = [];
+
+      for (const sub of subs) {
+        // Encontra email do customer desta assinatura
+        const custRef = sub.customer || {};
+        const custId  = custRef.id || custRef.customer_id || sub.customer_id || "";
+        let custEmail = custRef.email || custRef.email_address || "";
+
+        // Se não tem email, busca no mapa
+        if (!custEmail && custId) {
+          const c = emailMap["id:"+custId];
+          custEmail = c?.email || "";
+        }
+        if (!custEmail) continue;
+
+        // Procura no CRM por email
+        const crmCliente = crmClientes.find(c =>
+          (c.email||"").toLowerCase().trim() === custEmail.toLowerCase().trim() ||
+          (c.emailClub||"").toLowerCase().trim() === custEmail.toLowerCase().trim()
+        );
+        if (!crmCliente) {
+          detalhes.push({ nome: custEmail, status: "não encontrado no CRM" });
+          continue;
+        }
+
+        const novoStatus = mapRitsStatus(sub);
+        const novoPlano  = mapRitsPlan(sub);
+        const novoValor  = sub.amount || sub.total || sub.price || sub.plan?.price || "";
+        const proximaCob = sub.next_billing_date || sub.next_charge_date || sub.renewal_date || "";
+
+        const atualizado = {
+          ...crmCliente,
+          statusAssinatura: novoStatus,
+          ...(novoPlano ? { tipoAssinatura: novoPlano } : {}),
+          ...(novoValor ? { valorMensal: String(parseFloat(novoValor)/100 || novoValor) } : {}),
+          ...(proximaCob ? { proximaCobranca: proximaCob.split("T")[0] } : {}),
+          cancelado: novoStatus === "cancelado",
+          falhaRenovacao: novoStatus === "atrasado",
+        };
+
+        await dbSave(atualizado);
+        atualizados++;
+        detalhes.push({ nome: crmCliente.nome, status: novoStatus });
+      }
+
+      setResultado({ total: subs.length, atualizados, detalhes });
+      setStep("done");
+      setMensagem(`${atualizados} clientes atualizados no CRM.`);
+      if (onSyncDone) onSyncDone();
+    } catch(e) {
+      setStep("error");
+      setMensagem("Erro na sincronização: " + e.message);
+    }
+  };
+
+  const C2 = { coral: "#ef4444", coralL: "#fef2f2", green: "#10b981", greenL: "#ecfdf5", teal: "#0d9488", tealL: "#f0fdfa", tealD: "#0f766e", purple: "#7c3aed", purpleL: "#ede9fe", amber: "#f59e0b", amberL: "#fffbeb", amberD: "#b45309" };
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999 }}>
+      <div style={{ width:440,background:"var(--color-background-primary)",borderRadius:16,padding:"24px 28px",boxShadow:"0 8px 40px rgba(0,0,0,0.15)" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:20 }}>
+          <div style={{ fontSize:20 }}>🔄</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:15,fontWeight:600,color:"var(--color-text-primary)" }}>Sincronizar com RitsPay</div>
+            <div style={{ fontSize:12,color:"var(--color-text-tertiary)" }}>Status, próxima cobrança e valor mensal</div>
+          </div>
+          <button onClick={onClose} style={{ fontSize:18,cursor:"pointer",background:"none",border:"none",color:"var(--color-text-tertiary)" }}>✕</button>
+        </div>
+
+        {step === "login" && (
+          <div>
+            <div style={{ marginBottom:10 }}>
+              <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Email RitsPay</div>
+              <input value={email} onChange={e=>setEmail(e.target.value)} style={inp()} placeholder="seu@email.com"/>
+            </div>
+            <div style={{ marginBottom:10 }}>
+              <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Senha</div>
+              <input type="password" value={senha} onChange={e=>setSenha(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fazerLogin()} style={inp()} placeholder="••••••••"/>
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Tenant ID</div>
+              <input value={tenantId} onChange={e=>setTenantId(e.target.value)} style={inp()} placeholder="TEN-..."/>
+            </div>
+            {mensagem && <div style={{ fontSize:12,color:"#e53e3e",marginBottom:10 }}>{mensagem}</div>}
+            <button onClick={fazerLogin}
+              style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
+              Entrar e buscar código 2FA
+            </button>
+          </div>
+        )}
+
+        {step === "twofa" && (
+          <div>
+            <div style={{ fontSize:13,color:"var(--color-text-primary)",marginBottom:16,lineHeight:1.5 }}>
+              {mensagem}
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Código recebido no email</div>
+              <input value={codigo2fa} onChange={e=>setCodigo2fa(e.target.value)} onKeyDown={e=>e.key==="Enter"&&confirmar2fa()} style={inp()} placeholder="000000" autoFocus/>
+            </div>
+            <button onClick={confirmar2fa}
+              style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
+              Confirmar e sincronizar
+            </button>
+          </div>
+        )}
+
+        {step === "syncing" && (
+          <div style={{ textAlign:"center",padding:"20px 0" }}>
+            <div style={{ fontSize:32,marginBottom:12 }}>⏳</div>
+            <div style={{ fontSize:13,color:"var(--color-text-primary)" }}>{mensagem}</div>
+          </div>
+        )}
+
+        {step === "done" && resultado && (
+          <div>
+            <div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
+              <div style={{ fontSize:14,fontWeight:600,color:C.greenD,marginBottom:4 }}>✅ Sincronização concluída</div>
+              <div style={{ fontSize:12,color:C.greenD }}>{resultado.atualizados} de {resultado.total} assinaturas atualizadas no CRM</div>
+            </div>
+            <div style={{ maxHeight:160,overflowY:"auto",marginBottom:12 }}>
+              {resultado.detalhes.map((d,i)=>(
+                <div key={i} style={{ display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"0.5px solid var(--color-border-tertiary)" }}>
+                  <span style={{ color:"var(--color-text-primary)" }}>{d.nome}</span>
+                  <span style={{ color:d.status==="ativo"?C.green:d.status==="cancelado"?C.coral:d.status==="atrasado"?C.amber:"var(--color-text-tertiary)",fontWeight:500 }}>{d.status}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={onClose} style={{ width:"100%",padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
+              Fechar
+            </button>
+          </div>
+        )}
+
+        {step === "error" && (
+          <div>
+            <div style={{ background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:10,padding:"12px 14px",marginBottom:12,fontSize:13,color:C.coralD }}>
+              ❌ {mensagem}
+            </div>
+            <button onClick={()=>setStep("login")} style={{ width:"100%",padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:"none",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)" }}>
+              Tentar novamente
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 // ── FUNIL CLUB ─────────────────────────────────────────────────────────────
 const STATUS_CLUB = [
   { id:"",            label:"Não abordado",   cor:C.purple,  emoji:"○" },
@@ -5431,6 +5712,7 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   };
 
   // ── Dashboard simples ──────────────────────────────────────────────────────
+  const [showRitsSync, setShowRitsSync] = React.useState(false);
   const DashClub = () => {
     const todos = clientesDash;
     const abordados = todos.filter(c=>c.statusClub&&c.statusClub!=="");
@@ -6031,6 +6313,17 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
 
       {/* ABA SCRIPTS */}
       {aba==="scripts"&&<Biblioteca/>}
+      {showRitsSync&&<RitsPaySyncModal onClose={()=>setShowRitsSync(false)} onSyncDone={()=>{
+        // Reload Club data after sync
+        dbGetAll().then(lista => {
+          const addScore = c => { const sc=calcScoreClub(c); return {...c,_score:sc.score,_diasUlt:sc.diasUlt,_diasParaProxima:sc.diasParaProxima,_inativa:sc.inativa,_muitoInativa:sc.muitoInativa}; };
+          const todosSc = lista.map(c => fixCliente(addScore(c)));
+          setTodosParaBusca(todosSc);
+          const comScore = todosSc.filter(c => (c.p||0) >= 2);
+          setClientes(comScore.filter(c=>c.etapa!=="experiencia"&&c.etapa!=="encerrado"&&c.statusClub!=="fechou"&&c.statusClub!=="perdido").sort((a,b)=>b._score-a._score));
+          setClientesDash(comScore.filter(c=>c.statusClub||c.etapa==="experiencia"));
+        });
+      }}/>}
     </div>
   );
 };
