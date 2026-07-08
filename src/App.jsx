@@ -808,7 +808,7 @@ const LogAtividade = ({ c, save }) => {
 };
 
 const SeqRetencao = ({ c }) => {
-  const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura);
+  const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura, c.cicloAtualClub);
   const tipoLabel = (TIPOS_ASSINATURA.find(t=>t.id===c.tipoAssinatura)?.ciclosTotais||"")+"m";
   const retSteps = buildRetencao(assin, tipoLabel);
   const cicloAtual = assin ? assin.cicloAtual : 1;
@@ -1027,7 +1027,7 @@ const Perfil = ({ clienteId, onVoltar }) => {
       )}
       {toast&&<div style={{ position:"fixed",top:24,left:"50%",transform:"translateX(-50%)",background:C.green,color:"#fff",padding:"10px 24px",borderRadius:30,fontSize:14,fontWeight:500,zIndex:999,boxShadow:"0 4px 20px rgba(0,0,0,0.15)" }}>{toast}</div>}
       {c.etapa==="experiencia"&&(()=>{
-        const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura);
+        const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura, c.cicloAtualClub);
         const corCobranca = assin ? (assin.diasParaCobranca<=7?C.coral:assin.diasParaCobranca<=15?C.amber:C.green) : "var(--color-text-tertiary)";
         const corFim = assin ? (assin.diasParaFim<=30?C.coral:assin.diasParaFim<=60?C.amber:C.teal) : "var(--color-text-tertiary)";
         return (
@@ -1059,32 +1059,42 @@ const Perfil = ({ clienteId, onVoltar }) => {
             {assin&&(()=>{
               const vm = parseFloat(c.valorMensal)||0;
               const ciclosPagos = c.cancelado ? calcCiclosCancelado(c.dataInicioAssinatura, c.dataCancelamento) : assin.cicloAtual;
-              const ltvPago = vm * ciclosPagos;
+              // LTV da assinatura: usa dado real do RitsPay se disponível, senão estima
+              const ltvAssinatura = c.ltvAssinatura
+                ? parseFloat(c.ltvAssinatura)
+                : vm * ciclosPagos;
+              // Ticket médio: usa dado real se disponível
+              const ticketMedio = c.ticketMedioClub
+                ? parseFloat(c.ticketMedioClub)
+                : vm;
               const ciclosRestantes = c.cancelado ? 0 : assin.ciclosTotais - assin.cicloNoPeriodo;
-              const ltvProjetado = ltvPago + vm * ciclosRestantes;
-              const ltvTotal = ltvPago + (c.gasto||0);
-              const ltvTotalProjetado = ltvProjetado + (c.gasto||0);
+              const ltvProjetadoClub = ltvAssinatura + ticketMedio * ciclosRestantes;
+              const ltvTotalAtual = ltvAssinatura + (c.gasto||0);
+              const ltvTotalProjetado = ltvProjetadoClub + (c.gasto||0);
               return (vm > 0 && (
                 <div style={{ background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
                   <div style={{ fontSize:11,fontWeight:500,color:C.tealD,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10 }}>LTV do cliente</div>
                   <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8 }}>
                     <div style={{ background:"#fff",borderRadius:8,padding:"8px 10px" }}>
-                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Pre-assinatura</div>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Pré-assinatura</div>
                       <div style={{ fontSize:14,fontWeight:500,color:"var(--color-text-primary)" }}>R${(c.gasto||0).toFixed(0)}</div>
                     </div>
                     <div style={{ background:"#fff",borderRadius:8,padding:"8px 10px" }}>
                       <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Club pago</div>
-                      <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvPago.toFixed(0)}</div>
-                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginTop:1 }}>{assin.cicloAtual}x R${vm}</div>
+                      <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvAssinatura.toFixed(0)}</div>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginTop:1 }}>
+                        {c.ticketMedioClub ? `ticket médio R$${ticketMedio.toFixed(0)}` : `${assin.cicloAtual}x R$${vm.toFixed(0)}`}
+                      </div>
                     </div>
                     <div style={{ background:"#fff",borderRadius:8,padding:"8px 10px" }}>
-                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>LTV atual</div>
-                      <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvTotal.toFixed(0)}</div>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>LTV atual (total)</div>
+                      <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvTotalAtual.toFixed(0)}</div>
+                      <div style={{ fontSize:9,color:"var(--color-text-tertiary)",marginTop:1 }}>club + avulsos</div>
                     </div>
                     <div style={{ background:C.tealL,borderRadius:8,padding:"8px 10px",border:"0.5px solid "+C.teal }}>
                       <div style={{ fontSize:9,color:C.tealD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500 }}>LTV projetado</div>
                       <div style={{ fontSize:14,fontWeight:500,color:C.tealD }}>R${ltvTotalProjetado.toFixed(0)}</div>
-                      <div style={{ fontSize:9,color:C.tealD,marginTop:1 }}>+{ciclosRestantes}x R${vm}</div>
+                      <div style={{ fontSize:9,color:C.tealD,marginTop:1 }}>+{ciclosRestantes}x R${ticketMedio.toFixed(0)}</div>
                     </div>
                   </div>
                 </div>
@@ -1228,7 +1238,7 @@ const Perfil = ({ clienteId, onVoltar }) => {
       })()}
 
       {c.etapa==="experiencia"&&c.tipoAssinatura&&(()=>{
-        const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura);
+        const assin = calcAssinatura(c.tipoAssinatura, c.dataInicioAssinatura, c.cicloAtualClub);
         const podeUpsell = c.tipoAssinatura!=="anual" && !c.cancelado && !c.falhaRenovacao && assin && assin.cicloAtual>=2 && assin.diasParaFim>30;
         const proximoPlano = c.tipoAssinatura==="trimestral"?"semestral":c.tipoAssinatura==="semestral"?"anual":null;
         const proximoCiclos = proximoPlano==="semestral"?6:proximoPlano==="anual"?12:0;
@@ -1644,22 +1654,25 @@ const addMeses = (data, meses) => {
   return d;
 };
 
-const calcAssinatura = (tipo, dataInicio) => {
+const calcAssinatura = (tipo, dataInicio, cicloRits) => {
   if (!tipo || !dataInicio) return null;
   const t = TIPOS_ASSINATURA.find(t=>t.id===tipo);
   if (!t) return null;
   const inicio = new Date(dataInicio + "T12:00:00");
   const hoje = new Date();
 
-  // Ciclo mensal atual (1-indexed)
-  // Quantos meses completos se passaram desde o inicio
+  // Ciclo mensal atual — usa dado real do RitsPay se disponível
   let cicloAtual = 0;
-  let proxData = new Date(inicio);
-  while (proxData <= hoje) {
-    cicloAtual++;
-    proxData = addMeses(inicio, cicloAtual);
+  if (cicloRits && cicloRits > 0) {
+    cicloAtual = cicloRits;
+  } else {
+    let proxData = new Date(inicio);
+    while (proxData <= hoje) {
+      cicloAtual++;
+      proxData = addMeses(inicio, cicloAtual);
+    }
+    cicloAtual = Math.max(1, cicloAtual);
   }
-  cicloAtual = Math.max(1, cicloAtual);
 
   // Proxima cobranca mensal
   const proximaCobranca = addMeses(inicio, cicloAtual);
@@ -4304,112 +4317,128 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     try {
       const tenant = tenantId.trim();
 
-      // Helper para buscar todas as páginas
+      // Helper para buscar todas as páginas — tenta next, depois page param
       const fetchAll = async (path) => {
         const todos = [];
-        let url = path;
         let pagina = 1;
-        while (url) {
-          const resp = await ritspayFetch(url, token);
+        while (true) {
+          const sep = path.includes("?") ? "&" : "?";
+          const resp = await ritspayFetch(`${path}${sep}page=${pagina}&limit=50`, token);
           const items = Array.isArray(resp) ? resp
             : Array.isArray(resp?.results) ? resp.results
             : Array.isArray(resp?.items) ? resp.items
             : Array.isArray(resp?.data) ? resp.data
             : [];
+          if (items.length === 0) break;
           todos.push(...items);
-          // Verifica se há próxima página
-          const next = resp?.next || resp?.links?.next || null;
-          if (next && next !== url) {
-            // next pode ser URL completa ou path relativo
-            url = next.startsWith("http") ? next.replace("https://api.ritspay.com","") : next;
+          setMensagem(`${path.includes("subscription") ? "Assinaturas" : "Registros"}: ${todos.length}...`);
+          // Se a API retorna next URL, usa ela; senão para quando não tem mais itens
+          const next = resp?.next || null;
+          if (next) {
             pagina++;
-            setMensagem(`Buscando página ${pagina}...`);
+          } else if (items.length < 50) {
+            break; // última página (retornou menos que o limit)
           } else {
-            url = null;
+            pagina++;
           }
-          if (pagina > 20) break; // Segurança: máximo 20 páginas
+          if (pagina > 30) break;
         }
         return todos;
       };
 
-      // Busca todas as subscriptions (todas as páginas)
+      // 1. Busca todas as subscriptions
       const subs = await fetchAll(`/sales/${tenant}/subscriptions`);
-
       if (subs.length === 0) {
         setStep("error");
         setMensagem("Sem assinaturas encontradas. Verifique o Tenant ID.");
         return;
       }
+      setMensagem(`${subs.length} assinaturas. Buscando histórico de compras...`);
 
-      setMensagem(`${subs.length} assinaturas encontradas. Buscando clientes...`);
+      // 2. Busca purchases para calcular ticket médio e LTV real da assinatura
+      const purchases = await fetchAll(`/sales/${tenant}/purchases`);
+      // Agrupa purchases por customer ID → { custId: [{cycle, total}...] }
+      const purchasesByCust = {};
+      purchases.forEach(p => {
+        const cid = p.customer?.id || p.customer_id || "";
+        if (!cid) return;
+        if (!purchasesByCust[cid]) purchasesByCust[cid] = [];
+        purchasesByCust[cid].push({
+          total: parseFloat(p.total || p.amount || 0) / 100,
+          date: (p.created_at || p.paid_at || "").split("T")[0],
+        });
+      });
 
-      // Busca todos os customers (todas as páginas)
+      // 3. Busca customers para mapa de nomes (fallback de matching)
+      setMensagem("Buscando clientes RitsPay...");
       const custs = await fetchAll(`/sales/${tenant}/customers`);
+      const custMap = {}; // id → customer
+      custs.forEach(c => { if (c.id) custMap[c.id] = c; });
 
-      // Monta mapa email → customer
-      const emailMap = {};
-      custs.forEach(c => {
-        if (c.email) emailMap[c.email.toLowerCase().trim()] = c;
-        if (c.id) emailMap["id:" + c.id] = c;
-      });
+      // 4. Ordena subscriptions: ativo primeiro
+      const STATUS_PRIO = { "active": 0, "overdue": 1, "past_due": 1, "paused": 2, "canceled": 3, "inactive": 4 };
+      const subsPriorizadas = [...subs].sort((a, b) =>
+        (STATUS_PRIO[(a.status||"").toLowerCase()] ?? 9) - (STATUS_PRIO[(b.status||"").toLowerCase()] ?? 9)
+      );
 
-      // Ordena para processar: ativos primeiro, depois outros
-      const STATUS_PRIO = { "active": 0, "past_due": 1, "paused": 2, "canceled": 3, "inactive": 4 };
-      const subsPriorizadas = [...subs].sort((a, b) => {
-        const pa = STATUS_PRIO[(a.status||"").toLowerCase()] ?? 9;
-        const pb = STATUS_PRIO[(b.status||"").toLowerCase()] ?? 9;
-        return pa - pb;
-      });
-
-      // Busca todos os clientes do CRM
+      // 5. Busca todos os clientes do CRM
       const crmClientes = await dbGetAll();
       let atualizados = 0;
       const detalhes = [];
-      // Estrutura confirmada — sync direto sem debug
-
-      // Rastreia clientes já processados — se tiver múltiplas assinaturas, usa a mais prioritária (ativo > atrasado > pausado > cancelado)
       const processados = new Set();
 
+      setMensagem(`Sincronizando ${subs.length} assinaturas com ${crmClientes.length} clientes CRM...`);
+
       for (const sub of subsPriorizadas) {
-        // Email confirmado em sub.customer.email (API RitsPay)
+        // Email: vem direto em sub.customer.email (confirmado pela API)
         const custRef = sub.customer || {};
-        let custEmail = custRef.email || custRef.email_address || "";
-        // Fallback: busca no mapa de customers pelo ID
-        if (!custEmail && custRef.id) {
-          custEmail = emailMap["id:" + custRef.id]?.email || "";
-        }
-        if (!custEmail) continue;
+        const custId = custRef.id || "";
+        let custEmail = custRef.email || "";
+        const custNome = custRef.name || custMap[custId]?.name || "";
 
-        const emailNorm = custEmail.toLowerCase().trim();
+        if (processados.has(custEmail.toLowerCase())) continue;
 
-        // Se já processou esse email com assinatura mais prioritária, pula
-        if (processados.has(emailNorm)) continue;
-
-        const crmCliente = crmClientes.find(c =>
-          (c.email||"").toLowerCase().trim() === emailNorm ||
-          (c.emailClub||"").toLowerCase().trim() === emailNorm
+        // Encontra no CRM: primeiro por email, depois por nome normalizado
+        let crmCliente = crmClientes.find(c =>
+          custEmail && (
+            (c.email||"").toLowerCase().trim() === custEmail.toLowerCase().trim() ||
+            (c.emailClub||"").toLowerCase().trim() === custEmail.toLowerCase().trim()
+          )
         );
+        // Fallback por nome (remove acentos, case insensitive, primeiros 2 tokens)
+        if (!crmCliente && custNome) {
+          const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+          const nomeRitsTokens = norm(custNome).split(" ").slice(0,2).join(" ");
+          crmCliente = crmClientes.find(c => {
+            const nCrm = norm(c.nome||"").split(" ").slice(0,2).join(" ");
+            return nCrm === nomeRitsTokens && nomeRitsTokens.length > 3;
+          });
+        }
+
         if (!crmCliente) {
-          detalhes.push({ nome: custEmail, status: "não encontrado no CRM" });
+          detalhes.push({ nome: custNome || custEmail || custId, status: "não encontrado" });
           continue;
         }
 
-        processados.add(emailNorm);
+        if (custEmail) processados.add(custEmail.toLowerCase());
 
         const novoStatus = mapRitsStatus(sub);
         const novoPlano  = mapRitsPlan(sub);
-        // Campos confirmados da API RitsPay
-        const proximaCob = (sub.next_billing_at || sub.next_billing_date || "").split("T")[0] || "";
-
-        // Mapeamento exato dos campos confirmados da API RitsPay
+        const proximaCob = (sub.next_billing_at || "").split("T")[0] || "";
         const dataInicio = (sub.start_at || sub.created_at || "").split("T")[0] || "";
-        const cicloAtualRits = typeof sub.cycle === "number" ? sub.cycle : null;
+        const cicloAtual = typeof sub.cycle === "number" ? sub.cycle : null;
 
-        // Valor: total em centavos (19044 → R$190,44)
-        const valorRaw = parseFloat(sub.total || sub.subscription_price || 0);
-        const valorMensalCalc = valorRaw > 0 ? (valorRaw / 100).toFixed(2) : "";
+        // Valor atual da assinatura (total em centavos)
+        const valorAtual = parseFloat(sub.total || sub.subscription_price || 0) / 100;
+        const valorMensalCalc = valorAtual > 0 ? valorAtual.toFixed(2) : "";
 
-        // Calcular fim da fidelidade baseado no plano
+        // LTV da assinatura: soma dos purchases reais deste cliente no RitsPay
+        const custPurchases = purchasesByCust[custId] || [];
+        const ltvAssinaturaRits = custPurchases.reduce((s, p) => s + p.total, 0);
+        const ticketMedioRits = custPurchases.length > 0
+          ? (ltvAssinaturaRits / custPurchases.length).toFixed(2) : "";
+
+        // Fim da fidelidade
         const mesesPlano = novoPlano==="Anual"?12:novoPlano==="Semestral"?6:novoPlano==="Trimestral"?3:0;
         const fimFidelidade = dataInicio && mesesPlano > 0 ? (() => {
           const d = new Date(dataInicio+"T12:00:00");
@@ -4426,11 +4455,28 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
           ...(valorMensalCalc ? { valorMensal: valorMensalCalc } : {}),
           ...(proximaCob ? { proximaCobranca: proximaCob } : {}),
           ...(dataInicio ? { dataInicioAssinatura: dataInicio } : {}),
-          ...(cicloAtualRits !== null ? { cicloAtualClub: cicloAtualRits } : {}),
+          ...(cicloAtual !== null ? { cicloAtualClub: cicloAtual } : {}),
           ...(fimFidelidade ? { dataFimFidelidade: fimFidelidade } : {}),
+          ...(ltvAssinaturaRits > 0 ? { ltvAssinatura: ltvAssinaturaRits.toFixed(2) } : {}),
+          ...(ticketMedioRits ? { ticketMedioClub: ticketMedioRits } : {}),
           subscriptionIdRits: sub.id || "",
-          customerIdRits: sub.customer?.id || "",
+          customerIdRits: custId,
         };
+
+        await dbSave(atualizado);
+        atualizados++;
+        detalhes.push({ nome: crmCliente.nome, status: novoStatus });
+      }
+
+      setResultado({ total: subs.length, atualizados, detalhes });
+      setStep("done");
+      setMensagem(`${atualizados} clientes atualizados no CRM.`);
+      if (onSyncDone) onSyncDone();
+    } catch(e) {
+      setStep("error");
+      setMensagem("Erro na sincronização: " + e.message);
+    }
+  };
 
         await dbSave(atualizado);
         atualizados++;
