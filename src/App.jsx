@@ -4972,9 +4972,10 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   const [aba, setAba] = useState("lista");
   const [filtroStatus, setFiltroStatus] = useState("hoje");
   const [busca, setBusca] = useState("");
-  const [sorts, setSorts] = useState([]); // [{campo, dir}] — cumulativo
-  const [selecionadosLote, setSelecionadosLote] = useState(new Set()); // IDs selecionados para ação em lote
+  const [sorts, setSorts] = useState([]);
+  const [selecionadosLote, setSelecionadosLote] = useState(new Set());
   const [modoLote, setModoLote] = useState(false);
+  const [showRitsSync, setShowRitsSync] = useState(false);
   const toggleSort = (campo) => {
     setSorts(prev => {
       const existing = prev.find(s=>s.campo===campo);
@@ -5712,7 +5713,6 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   };
 
   // ── Dashboard simples ──────────────────────────────────────────────────────
-  const [showRitsSync, setShowRitsSync] = React.useState(false);
   const DashClub = () => {
     const todos = clientesDash;
     const abordados = todos.filter(c=>c.statusClub&&c.statusClub!=="");
