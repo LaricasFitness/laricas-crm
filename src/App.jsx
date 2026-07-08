@@ -4230,6 +4230,8 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
   const [mensagem, setMensagem] = React.useState("");
   const [resultado, setResultado] = React.useState(null);
 
+  const [loginResp, setLoginResp] = React.useState(null);
+
   const fazerLogin = async () => {
     if (!email.trim() || !senha.trim()) { setMensagem("Preencha email e senha."); return; }
     setStep("syncing");
@@ -4241,9 +4243,10 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
         body: JSON.stringify({ email: email.trim(), password: senha })
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || data.message || "Erro no login");
-      // Guarda token intermediário (antes do 2FA)
-      setLoginToken(data.access_token || data.token || "");
+      if (!r.ok) throw new Error(data.detail || data.message || JSON.stringify(data).slice(0,200));
+      setLoginResp(data); // Guarda resposta completa para debug
+      const token = data.access_token || data.token || data.data?.access_token || data.data?.token || "";
+      setLoginToken(token);
       ritspaySaveCfg({ email: email.trim(), tenantId: tenantId.trim() });
       setStep("twofa");
       setMensagem("Código enviado para o email. Digite abaixo:");
@@ -4258,14 +4261,28 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     setStep("syncing");
     setMensagem("Autenticando 2FA...");
     try {
+      // Tenta diferentes formatos do corpo 2FA
+      const body2fa = {
+        code: codigo2fa.trim(),
+        token: codigo2fa.trim(),
+        email: email.trim(),
+      };
+      const headers2fa = {
+        "Content-Type": "application/json",
+        ...(loginToken ? { "Authorization": "Bearer " + loginToken } : {}),
+      };
       const r = await fetch("https://api.ritspay.com/account/auth/two_factor", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(loginToken?{"Authorization":"Bearer "+loginToken}:{}) },
-        body: JSON.stringify({ code: codigo2fa.trim(), email: email.trim() })
+        headers: headers2fa,
+        body: JSON.stringify(body2fa)
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || data.message || "Código inválido");
-      const token = data.access_token || data.token || loginToken;
+      if (!r.ok) {
+        // Mostra resposta completa para debug
+        const detalhe = JSON.stringify(data).slice(0,200);
+        throw new Error(detalhe);
+      }
+      const token = data.access_token || data.token || data.data?.access_token || loginToken;
       ritspaySetToken(token);
       await sincronizar(token);
     } catch(e) {
@@ -4394,6 +4411,11 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
             <div style={{ fontSize:13,color:"var(--color-text-primary)",marginBottom:16,lineHeight:1.5 }}>
               {mensagem}
             </div>
+            {loginResp&&(
+              <div style={{ fontSize:10,color:"var(--color-text-tertiary)",background:"var(--color-background-secondary)",borderRadius:6,padding:"8px",marginBottom:12,fontFamily:"monospace",wordBreak:"break-all" }}>
+                Resposta do login: {JSON.stringify(loginResp)}
+              </div>
+            )}
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em" }}>Código recebido no email</div>
               <input value={codigo2fa} onChange={e=>setCodigo2fa(e.target.value)} onKeyDown={e=>e.key==="Enter"&&confirmar2fa()} style={inp()} placeholder="000000" autoFocus/>
