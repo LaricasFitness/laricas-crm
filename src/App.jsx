@@ -4295,20 +4295,38 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     setMensagem("Buscando assinantes no RitsPay...");
     try {
       const tenant = tenantId.trim();
+
       // Busca subscriptions
-      const subsData = await ritspayFetch(`/sales/${tenant}/subscriptions`, token);
-      const subs = subsData.results || subsData.items || subsData || [];
+      const subsResp = await ritspayFetch(`/sales/${tenant}/subscriptions`, token);
+      // Normaliza para array independente do formato
+      const subs = Array.isArray(subsResp) ? subsResp
+        : Array.isArray(subsResp?.results) ? subsResp.results
+        : Array.isArray(subsResp?.items) ? subsResp.items
+        : Array.isArray(subsResp?.data) ? subsResp.data
+        : [];
+
+      if (subs.length === 0) {
+        // Mostra resposta real para debug
+        setStep("error");
+        setMensagem("Sem assinaturas encontradas. Resposta: " + JSON.stringify(subsResp).slice(0, 300));
+        return;
+      }
+
       setMensagem(`${subs.length} assinaturas encontradas. Buscando clientes...`);
 
-      // Busca customers (para ter email)
-      const custsData = await ritspayFetch(`/sales/${tenant}/customers`, token);
-      const custs = custsData.results || custsData.items || custsData || [];
+      // Busca customers
+      const custsResp = await ritspayFetch(`/sales/${tenant}/customers`, token);
+      const custs = Array.isArray(custsResp) ? custsResp
+        : Array.isArray(custsResp?.results) ? custsResp.results
+        : Array.isArray(custsResp?.items) ? custsResp.items
+        : Array.isArray(custsResp?.data) ? custsResp.data
+        : [];
 
       // Monta mapa email → customer
       const emailMap = {};
       custs.forEach(c => {
         if (c.email) emailMap[c.email.toLowerCase().trim()] = c;
-        if (c.id) emailMap["id:"+c.id] = c;
+        if (c.id) emailMap["id:" + c.id] = c;
       });
 
       // Busca todos os clientes do CRM
@@ -4317,19 +4335,15 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const detalhes = [];
 
       for (const sub of subs) {
-        // Encontra email do customer desta assinatura
         const custRef = sub.customer || {};
         const custId  = custRef.id || custRef.customer_id || sub.customer_id || "";
         let custEmail = custRef.email || custRef.email_address || "";
-
-        // Se não tem email, busca no mapa
         if (!custEmail && custId) {
-          const c = emailMap["id:"+custId];
+          const c = emailMap["id:" + custId];
           custEmail = c?.email || "";
         }
         if (!custEmail) continue;
 
-        // Procura no CRM por email
         const crmCliente = crmClientes.find(c =>
           (c.email||"").toLowerCase().trim() === custEmail.toLowerCase().trim() ||
           (c.emailClub||"").toLowerCase().trim() === custEmail.toLowerCase().trim()
@@ -4348,7 +4362,7 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
           ...crmCliente,
           statusAssinatura: novoStatus,
           ...(novoPlano ? { tipoAssinatura: novoPlano } : {}),
-          ...(novoValor ? { valorMensal: String(parseFloat(novoValor)/100 || novoValor) } : {}),
+          ...(novoValor ? { valorMensal: String(parseFloat(novoValor) > 100 ? parseFloat(novoValor)/100 : novoValor) } : {}),
           ...(proximaCob ? { proximaCobranca: proximaCob.split("T")[0] } : {}),
           cancelado: novoStatus === "cancelado",
           falhaRenovacao: novoStatus === "atrasado",
