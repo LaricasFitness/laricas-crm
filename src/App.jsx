@@ -4369,9 +4369,13 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const crmClientes = await dbGetAll();
       let atualizados = 0;
       const detalhes = [];
-      // Debug: loga estrutura da primeira assinatura no console
-      if (subs.length > 0) console.log("[RitsPay] Estrutura assinatura:", JSON.stringify(subs[0], null, 2));
-      if (custs.length > 0) console.log("[RitsPay] Estrutura customer:", JSON.stringify(custs[0], null, 2));
+      // Debug: mostra estrutura da primeira assinatura diretamente na UI
+      if (subs.length > 0) {
+        setResultado({ debug: true, sub0: subs[0], cust0: custs[0], total: subs.length });
+        setStep("done");
+        setMensagem("Debug: veja estrutura abaixo antes de sincronizar.");
+        return;
+      }
 
       // Rastreia clientes já processados — se tiver múltiplas assinaturas, usa a mais prioritária (ativo > atrasado > pausado > cancelado)
       const processados = new Set();
@@ -4521,23 +4525,41 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
 
         {step === "done" && resultado && (
           <div>
-            <div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
-              <div style={{ fontSize:14,fontWeight:600,color:C.greenD,marginBottom:4 }}>✅ Sincronização concluída</div>
-              <div style={{ fontSize:12,color:C.greenD }}>{resultado.atualizados} de {resultado.total} assinaturas atualizadas no CRM</div>
-            </div>
-            <div style={{ maxHeight:160,overflowY:"auto",marginBottom:12 }}>
-              {resultado.detalhes.map((d,i)=>(
-                <div key={i} style={{ display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"0.5px solid var(--color-border-tertiary)" }}>
-                  <span style={{ color:"var(--color-text-primary)" }}>{d.nome}</span>
-                  <span style={{ color:d.status==="ativo"?C.green:d.status==="cancelado"?C.coral:d.status==="atrasado"?C.amber:"var(--color-text-tertiary)",fontWeight:500 }}>{d.status}</span>
+            {resultado.debug ? (
+              <div>
+                <div style={{fontSize:12,fontWeight:500,color:C.tealD,marginBottom:8}}>🔍 Estrutura da API ({resultado.total} assinaturas encontradas)</div>
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4}}>Assinatura [0]:</div>
+                  <pre style={{fontSize:9,background:"var(--color-background-secondary)",borderRadius:6,padding:8,overflow:"auto",maxHeight:200,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
+                    {JSON.stringify(resultado.sub0, null, 2)}
+                  </pre>
                 </div>
-              ))}
-            </div>
-            <button onClick={onClose} style={{ width:"100%",padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
-              Fechar
-            </button>
-          </div>
-        )}
+                {resultado.cust0&&<div>
+                  <div style={{fontSize:10,color:"var(--color-text-tertiary)",marginBottom:4}}>Customer [0]:</div>
+                  <pre style={{fontSize:9,background:"var(--color-background-secondary)",borderRadius:6,padding:8,overflow:"auto",maxHeight:160,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>
+                    {JSON.stringify(resultado.cust0, null, 2)}
+                  </pre>
+                </div>}
+              </div>
+            ) : (
+              <div>
+                <div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
+                  <div style={{ fontSize:14,fontWeight:600,color:C.greenD,marginBottom:4 }}>✅ Sincronização concluída</div>
+                  <div style={{ fontSize:12,color:C.greenD }}>{resultado.atualizados} de {resultado.total} assinaturas atualizadas no CRM</div>
+                </div>
+                <div style={{ maxHeight:160,overflowY:"auto",marginBottom:12 }}>
+                  {resultado.detalhes.map((d,i)=>(
+                    <div key={i} style={{ display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"0.5px solid var(--color-border-tertiary)" }}>
+                      <span style={{ color:"var(--color-text-primary)" }}>{d.nome}</span>
+                      <span style={{ color:d.status==="ativo"?C.green:d.status==="cancelado"?C.coral:d.status==="atrasado"?C.amber:"var(--color-text-tertiary)",fontWeight:500 }}>{d.status}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={onClose} style={{ width:"100%",padding:"10px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
+                  Fechar
+                </button>
+              </div>
+            )}
 
         {step === "error" && (
           <div>
