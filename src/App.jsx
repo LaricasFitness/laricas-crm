@@ -4322,9 +4322,16 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
         const todos = [];
         let pagina = 1;
         let totalEsperado = null;
+        let debugPrimeiro = null;
         while (true) {
           const sep = path.includes("?") ? "&" : "?";
           const resp = await ritspayFetch(`${path}${sep}page=${pagina}`, token);
+          // Captura estrutura da primeira resposta para debug
+          if (pagina === 1 && path.includes("subscription")) {
+            debugPrimeiro = { keys: Object.keys(resp||{}), count: resp?.count, next: resp?.next, total: resp?.total };
+            setMensagem("Estrutura: " + JSON.stringify(debugPrimeiro));
+            await new Promise(r => setTimeout(r, 2000)); // pausa 2s para ler
+          }
           const items = Array.isArray(resp) ? resp
             : Array.isArray(resp?.results) ? resp.results
             : Array.isArray(resp?.items) ? resp.items
@@ -4332,18 +4339,16 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
             : [];
           if (items.length === 0) break;
           todos.push(...items);
-          // Pega o total esperado na primeira página
           if (totalEsperado === null) {
             totalEsperado = resp?.count ?? resp?.total ?? resp?.total_count ?? null;
           }
           setMensagem(`${path.includes("subscription") ? "Assinaturas" : "Registros"}: ${todos.length}${totalEsperado ? "/" + totalEsperado : ""}...`);
-          // Para quando: tem total e já buscou tudo, ou API retornou next=null
           const next = resp?.next || null;
           if (totalEsperado !== null && todos.length >= totalEsperado) break;
-          if (!next && totalEsperado === null) break; // sem total e sem next = última página
+          if (!next && totalEsperado === null) break;
           if (!next && todos.length >= totalEsperado) break;
           pagina++;
-          if (pagina > 50) break; // segurança
+          if (pagina > 50) break;
         }
         return todos;
       };
