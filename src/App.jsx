@@ -4317,13 +4317,14 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     try {
       const tenant = tenantId.trim();
 
-      // Helper para buscar todas as páginas — tenta next, depois page param
+      // Helper para buscar todas as páginas — usa count total da resposta
       const fetchAll = async (path) => {
         const todos = [];
         let pagina = 1;
+        let totalEsperado = null;
         while (true) {
           const sep = path.includes("?") ? "&" : "?";
-          const resp = await ritspayFetch(`${path}${sep}page=${pagina}&limit=50`, token);
+          const resp = await ritspayFetch(`${path}${sep}page=${pagina}`, token);
           const items = Array.isArray(resp) ? resp
             : Array.isArray(resp?.results) ? resp.results
             : Array.isArray(resp?.items) ? resp.items
@@ -4331,17 +4332,18 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
             : [];
           if (items.length === 0) break;
           todos.push(...items);
-          setMensagem(`${path.includes("subscription") ? "Assinaturas" : "Registros"}: ${todos.length}...`);
-          // Se a API retorna next URL, usa ela; senão para quando não tem mais itens
-          const next = resp?.next || null;
-          if (next) {
-            pagina++;
-          } else if (items.length < 50) {
-            break; // última página (retornou menos que o limit)
-          } else {
-            pagina++;
+          // Pega o total esperado na primeira página
+          if (totalEsperado === null) {
+            totalEsperado = resp?.count ?? resp?.total ?? resp?.total_count ?? null;
           }
-          if (pagina > 30) break;
+          setMensagem(`${path.includes("subscription") ? "Assinaturas" : "Registros"}: ${todos.length}${totalEsperado ? "/" + totalEsperado : ""}...`);
+          // Para quando: tem total e já buscou tudo, ou API retornou next=null
+          const next = resp?.next || null;
+          if (totalEsperado !== null && todos.length >= totalEsperado) break;
+          if (!next && totalEsperado === null) break; // sem total e sem next = última página
+          if (!next && todos.length >= totalEsperado) break;
+          pagina++;
+          if (pagina > 50) break; // segurança
         }
         return todos;
       };
