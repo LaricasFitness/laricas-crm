@@ -4240,6 +4240,7 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const r = await fetch("https://api.ritspay.com/account/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email: email.trim(), password: senha })
       });
       const data = await r.json();
@@ -4261,10 +4262,9 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     setStep("syncing");
     setMensagem("Autenticando 2FA...");
     try {
-      // Tenta diferentes formatos do corpo 2FA
+      // Campo correto confirmado pela API: two_factor_code
       const body2fa = {
-        code: codigo2fa.trim(),
-        token: codigo2fa.trim(),
+        two_factor_code: codigo2fa.trim(),
         email: email.trim(),
       };
       const headers2fa = {
@@ -4274,6 +4274,7 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const r = await fetch("https://api.ritspay.com/account/auth/two_factor", {
         method: "POST",
         headers: headers2fa,
+        credentials: "include",
         body: JSON.stringify(body2fa)
       });
       const data = await r.json();
