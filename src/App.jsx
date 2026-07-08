@@ -1123,13 +1123,13 @@ const Perfil = ({ clienteId, onVoltar }) => {
                     {!c.cancelado&&(
                       <button onClick={()=>{
                         const hoje2=new Date().toISOString().split("T")[0];
-                        save({cancelado:true,dataCancelamento:hoje2});
+                        save({cancelado:true,dataCancelamento:hoje2,statusAssinatura:"cancelado"});
                       }} style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.coral,color:"#fff",border:"none" }}>
                         Registrar cancelamento
                       </button>
                     )}
                     {c.cancelado&&(
-                      <button onClick={()=>save({cancelado:false,dataCancelamento:""})} style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:"none",color:C.tealD,border:"0.5px solid "+C.teal }}>
+                      <button onClick={()=>save({cancelado:false,dataCancelamento:"",statusAssinatura:"ativo"})} style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:"none",color:C.tealD,border:"0.5px solid "+C.teal }}>
                         Reativar
                       </button>
                     )}
@@ -1143,13 +1143,13 @@ const Perfil = ({ clienteId, onVoltar }) => {
                         {c.falhaRenovacao&&<div style={{ fontSize:11,color:C.amberD }}>Registrada em {c.dataFalhaRenovacao||"—"} · Nao contabilizado no MRR</div>}
                       </div>
                       {!c.falhaRenovacao&&(
-                        <button onClick={()=>save({falhaRenovacao:true,dataFalhaRenovacao:new Date().toLocaleDateString("pt-BR")})}
+                        <button onClick={()=>save({falhaRenovacao:true,dataFalhaRenovacao:new Date().toLocaleDateString("pt-BR"),statusAssinatura:"atrasado"})}
                           style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.amber,color:"#fff",border:"none" }}>
                           Registrar falha
                         </button>
                       )}
                       {c.falhaRenovacao&&(
-                        <button onClick={()=>save({falhaRenovacao:false,dataFalhaRenovacao:""})}
+                        <button onClick={()=>save({falhaRenovacao:false,dataFalhaRenovacao:"",statusAssinatura:"ativo"})}
                           style={{ padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:"none",color:C.tealD,border:"0.5px solid "+C.teal }}>
                           Resolver
                         </button>
@@ -5469,11 +5469,18 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
         })()}
         {(()=>{
           const assinantes = todos.filter(c=>c.etapa==="experiencia");
-          const ativos     = assinantes.filter(c=>!c.statusAssinatura||c.statusAssinatura==="ativo");
-          const totalAtivosClub = ativos.length; // ativos reais — exclui pausados, atrasados, cancelados
-          const pausados   = assinantes.filter(c=>c.statusAssinatura==="pausado");
-          const atrasados  = assinantes.filter(c=>c.statusAssinatura==="atrasado");
-          const cancelados = assinantes.filter(c=>c.statusAssinatura==="cancelado");
+          // Helper: resolve status — prioriza statusAssinatura, mas respeita campos antigos como fallback
+          const resolveStatus = c => {
+            if(c.statusAssinatura) return c.statusAssinatura;
+            if(c.cancelado) return "cancelado";
+            if(c.falhaRenovacao) return "atrasado";
+            return "ativo";
+          };
+          const ativos     = assinantes.filter(c=>resolveStatus(c)==="ativo");
+          const totalAtivosClub = ativos.length;
+          const pausados   = assinantes.filter(c=>resolveStatus(c)==="pausado");
+          const atrasados  = assinantes.filter(c=>resolveStatus(c)==="atrasado");
+          const cancelados = assinantes.filter(c=>resolveStatus(c)==="cancelado");
           const hoje2 = new Date().toISOString().split("T")[0];
           const pausaVoltando = pausados.filter(c=>c.dataPausaFim&&c.dataPausaFim<=hoje2);
           return (
@@ -5710,7 +5717,8 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
           // Meta anual
           const totalAssinantes = clientesDash.filter(c=>
   (c.statusClub==="fechou"||c.etapa==="experiencia") &&
-  c.statusAssinatura !== "cancelado"
+  c.statusAssinatura !== "cancelado" &&
+  !c.cancelado
 ).length;
           const meta = 100;
           const semanasFim = Math.max(1,Math.round((new Date("2026-12-31")-new Date())/604800000));
