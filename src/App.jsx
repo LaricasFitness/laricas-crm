@@ -4240,7 +4240,6 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const r = await fetch("https://api.ritspay.com/account/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ email: email.trim(), password: senha })
       });
       const data = await r.json();
@@ -4274,7 +4273,6 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
       const r = await fetch("https://api.ritspay.com/account/auth/two_factor", {
         method: "POST",
         headers: headers2fa,
-        credentials: "include",
         body: JSON.stringify(body2fa)
       });
       const data = await r.json();
