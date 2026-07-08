@@ -4317,38 +4317,27 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     try {
       const tenant = tenantId.trim();
 
-      // Helper para buscar todas as páginas — usa count total da resposta
+      // Helper para buscar todas as páginas — estrutura confirmada: {data, links, meta}
       const fetchAll = async (path) => {
         const todos = [];
-        let pagina = 1;
-        let totalEsperado = null;
-        let debugPrimeiro = null;
-        while (true) {
-          const sep = path.includes("?") ? "&" : "?";
-          const resp = await ritspayFetch(`${path}${sep}page=${pagina}`, token);
-          // Captura estrutura da primeira resposta para debug
-          if (pagina === 1 && path.includes("subscription")) {
-            debugPrimeiro = { keys: Object.keys(resp||{}), count: resp?.count, next: resp?.next, total: resp?.total };
-            setMensagem("Estrutura: " + JSON.stringify(debugPrimeiro));
-            await new Promise(r => setTimeout(r, 2000)); // pausa 2s para ler
-          }
-          const items = Array.isArray(resp) ? resp
+        let url = path;
+        while (url) {
+          const sep = url.includes("?") ? "&" : "?";
+          // Acrescenta page só se não vier da URL next
+          const fetchUrl = url === path ? `${url}${sep}page=1` : url;
+          const resp = await ritspayFetch(fetchUrl.startsWith("http") ? fetchUrl.replace("https://api.ritspay.com","") : fetchUrl, token);
+          const items = Array.isArray(resp?.data) ? resp.data
             : Array.isArray(resp?.results) ? resp.results
-            : Array.isArray(resp?.items) ? resp.items
-            : Array.isArray(resp?.data) ? resp.data
-            : [];
+            : Array.isArray(resp) ? resp : [];
           if (items.length === 0) break;
           todos.push(...items);
-          if (totalEsperado === null) {
-            totalEsperado = resp?.count ?? resp?.total ?? resp?.total_count ?? null;
-          }
-          setMensagem(`${path.includes("subscription") ? "Assinaturas" : "Registros"}: ${todos.length}${totalEsperado ? "/" + totalEsperado : ""}...`);
-          const next = resp?.next || null;
-          if (totalEsperado !== null && todos.length >= totalEsperado) break;
-          if (!next && totalEsperado === null) break;
-          if (!next && todos.length >= totalEsperado) break;
-          pagina++;
-          if (pagina > 50) break;
+          const total = resp?.meta?.total ?? resp?.meta?.total_count ?? null;
+          setMensagem(`${url.includes("subscription")?"Assinaturas":"Registros"}: ${todos.length}${total?"/"+total:""}...`);
+          // Próxima página via links.next
+          const next = resp?.links?.next || null;
+          if (!next || next === fetchUrl) break;
+          url = next; // URL completa da próxima página
+          if (todos.length > 500) break; // segurança
         }
         return todos;
       };
