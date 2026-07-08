@@ -1119,6 +1119,17 @@ const Perfil = ({ clienteId, onVoltar }) => {
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:11,fontWeight:500,color:c.cancelado?C.coralD:"var(--color-text-primary)",marginBottom:2 }}>{c.cancelado?"✗ Assinatura cancelada":"Marcar como cancelada"}</div>
                       {c.cancelado&&<div style={{ fontSize:11,color:C.coralD }}>Data: {c.dataCancelamento||"—"} · LTV congelado em R${(calcCiclosCancelado(c.dataInicioAssinatura,c.dataCancelamento)*(parseFloat(c.valorMensal)||0)+(c.gasto||0)).toFixed(0)}</div>}
+                      {c.cancelado&&(
+                        <div style={{ marginTop:8 }}>
+                          <div style={{ fontSize:10,color:C.coralD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em" }}>Motivo do cancelamento</div>
+                          <select value={c.motivoCancelamento||""} onChange={e=>save({motivoCancelamento:e.target.value})}
+                            style={{ width:"100%",padding:"6px 10px",borderRadius:8,border:"0.5px solid "+C.coral,fontSize:12,color:"var(--color-text-primary)",background:"var(--color-background-primary)" }}>
+                            <option value="">— Selecione o motivo —</option>
+                            {["Preço","Não gostou do produto","Excesso de produto / estoque cheio","Protocolo médico / dieta restritiva","Mudança de rotina","Problema financeiro","Esqueceu / parou de usar","Trocou por concorrente","Problema com entrega","Outro"].map(m=><option key={m} value={m}>{m}</option>)}
+                          </select>
+                          {c.motivoCancelamento&&<div style={{ fontSize:10,color:C.coralD,marginTop:3 }}>💡 Registrado no Dash</div>}
+                        </div>
+                      )}
                     </div>
                     {!c.cancelado&&(
                       <button onClick={()=>{
@@ -1252,6 +1263,75 @@ Quer que eu te explique como funciona?`).catch(()=>{}); }}
                 </button>
               </div>
             )}
+
+                {/* PRODUTOS FAVORITOS */}
+                <div style={{ marginTop:8,padding:"10px 12px",background:"var(--color-background-secondary)",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)" }}>
+                  <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-primary)",marginBottom:8 }}>❤️ Produtos favoritos</div>
+                  <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
+                    {["Pão de Mel Brigadeiro","Pão de Mel Beijinho","Pão de Mel Avelã Trufado","Pão de Mel Cookies'n Cream","Bolinho","Barra Recheada","Bombom","Potinho"].map(prod=>{
+                      const favs = c.produtosFavoritos||[];
+                      const ativo = favs.includes(prod);
+                      return (
+                        <button key={prod} onClick={()=>{
+                          const novos = ativo ? favs.filter(f=>f!==prod) : [...favs,prod];
+                          save({produtosFavoritos:novos});
+                        }}
+                          style={{ padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",fontWeight:ativo?500:400,
+                            background:ativo?C.purple:C.purpleL,color:ativo?"#fff":C.purpleD,
+                            border:"0.5px solid "+(ativo?C.purple:C.purpleL) }}>
+                          {prod}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(c.produtosFavoritos||[]).length===0&&<div style={{ fontSize:10,color:"var(--color-text-tertiary)",marginTop:4 }}>Clique para marcar os favoritos desta assinante</div>}
+                </div>
+
+                {/* CHECKLIST R1-R4 VISUAL */}
+                {(()=>{
+                  const etapasR = [
+                    { id:"r1", label:"R1 — Onboarding", desc:"Até 3 dias após início", campo:"r1Feito", dataCampo:"r1Data", corAtivo:C.teal },
+                    { id:"r2", label:"R2 — Como está indo?", desc:"7 a 15 dias", campo:"r2Feito", dataCampo:"r2Data", corAtivo:C.green },
+                    { id:"r3", label:"R3 — Feedback da caixa", desc:"25 a 30 dias", campo:"r3Feito", dataCampo:"r3Data", corAtivo:C.purple },
+                    { id:"r4", label:"R4 — Renovação / Upsell", desc:"45 a 60 dias", campo:"r4Feito", dataCampo:"r4Data", corAtivo:C.amber },
+                  ];
+                  const feitos = etapasR.filter(e=>c[e.campo]).length;
+                  return (
+                    <div style={{ marginTop:8,padding:"10px 12px",background:"var(--color-background-secondary)",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)" }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
+                        <div style={{ fontSize:11,fontWeight:500,color:"var(--color-text-primary)" }}>🔄 Sequência de retenção</div>
+                        <div style={{ flex:1,height:4,background:"var(--color-border-tertiary)",borderRadius:2,overflow:"hidden" }}>
+                          <div style={{ width:(feitos/4*100)+"%",height:"100%",background:C.teal,borderRadius:2,transition:"width 0.3s" }}/>
+                        </div>
+                        <div style={{ fontSize:10,color:C.tealD,fontWeight:500 }}>{feitos}/4</div>
+                      </div>
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6 }}>
+                        {etapasR.map(e=>{
+                          const feito = !!c[e.campo];
+                          return (
+                            <button key={e.id} onClick={()=>{
+                              const update = { [e.campo]: !feito };
+                              if(!feito) update[e.dataCampo] = new Date().toLocaleDateString("pt-BR");
+                              else update[e.dataCampo] = "";
+                              save(update);
+                            }}
+                              style={{ padding:"8px 10px",borderRadius:8,cursor:"pointer",textAlign:"left",
+                                background:feito?e.corAtivo+"18":"var(--color-background-primary)",
+                                border:"0.5px solid "+(feito?e.corAtivo:"var(--color-border-tertiary)") }}>
+                              <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:2 }}>
+                                <span style={{ fontSize:14 }}>{feito?"✅":"○"}</span>
+                                <span style={{ fontSize:11,fontWeight:500,color:feito?e.corAtivo:"var(--color-text-primary)" }}>{e.label}</span>
+                              </div>
+                              <div style={{ fontSize:10,color:"var(--color-text-tertiary)",paddingLeft:20 }}>
+                                {feito&&c[e.dataCampo]?c[e.dataCampo]:e.desc}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
             <SeqRetencao c={c} save={save}/>
             {/* STATUS DE ASSINATURA */}
             {(()=>{
@@ -5523,6 +5603,23 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
                   ))}
                 </div>
               )}
+              {cancelados.length>0&&(()=>{
+                const motivoCounts = {};
+                cancelados.forEach(c=>{if(c.motivoCancelamento) motivoCounts[c.motivoCancelamento]=(motivoCounts[c.motivoCancelamento]||0)+1;});
+                const ranking = Object.entries(motivoCounts).sort((a,b)=>b[1]-a[1]);
+                if(!ranking.length) return null;
+                return (
+                  <div style={{background:"#f5f5f5",borderRadius:10,padding:"10px 14px",marginBottom:8}}>
+                    <div style={{fontSize:11,fontWeight:500,color:"#555",marginBottom:6}}>✗ Motivos de cancelamento</div>
+                    {ranking.map(([m,n])=>(
+                      <div key={m} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
+                        <span style={{color:"#555"}}>{m}</span>
+                        <span style={{fontWeight:500,color:"#555"}}>{n}x</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
