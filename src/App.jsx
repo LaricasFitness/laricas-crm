@@ -5726,6 +5726,12 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
     const objRanking = Object.entries(objCounts).sort((a,b)=>b[1]-a[1]);
     return (
       <div>
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+          <button onClick={()=>setShowRitsSync(true)}
+            style={{padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none",display:"flex",alignItems:"center",gap:6}}>
+            🔄 Sincronizar com RitsPay
+          </button>
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
           {[
             ["Abordados",abordados.length,C.teal,C.tealD,C.tealL],
