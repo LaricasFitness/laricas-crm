@@ -4489,9 +4489,15 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
             </div>
             {mensagem && <div style={{ fontSize:12,color:"#e53e3e",marginBottom:10 }}>{mensagem}</div>}
             <button onClick={fazerLogin}
-              style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
+              style={{ width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none",marginBottom:8 }}>
               Entrar e buscar código 2FA
             </button>
+            {ritspayGetToken()&&(
+              <button onClick={()=>{ setStep("syncing"); setMensagem("Testando estrutura da API..."); ritspayFetch(`/sales/${tenantId.trim()}/subscriptions`, ritspayGetToken()).then(r=>{ const items=Array.isArray(r)?r:r?.results||r?.items||r?.data||[]; setResultado({debug:true,sub0:items[0],cust0:null,total:items.length}); setStep("done"); setMensagem("Estrutura carregada."); }).catch(e=>{ setStep("error"); setMensagem("Erro: "+e.message); }); }}
+                style={{ width:"100%",padding:"8px",borderRadius:10,fontSize:12,cursor:"pointer",background:"none",border:"0.5px solid "+C.teal,color:C.tealD }}>
+                🔍 Ver estrutura da API (sessão salva)
+              </button>
+            )}
           </div>
         )}
 
