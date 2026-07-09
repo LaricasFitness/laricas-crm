@@ -4397,14 +4397,14 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
 
         if (processados.has(custEmail.toLowerCase())) continue;
 
-        // Encontra no CRM: por email → por telefone → por nome
+        // Encontra no CRM: por email → por telefone (nome removido — falsos positivos)
         let crmCliente = crmClientes.find(c =>
           custEmail && (
             (c.email||"").toLowerCase().trim() === custEmail.toLowerCase().trim() ||
             (c.emailClub||"").toLowerCase().trim() === custEmail.toLowerCase().trim()
           )
         );
-        // Fallback por telefone
+        // Fallback por telefone (9 últimos dígitos)
         if (!crmCliente) {
           const telefoneRits = (custRef.phone || custMap[custId]?.phone || "").replace(/\D/g,"").slice(-9);
           if (telefoneRits.length >= 8) {
@@ -4413,15 +4413,6 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
               return telCrm === telefoneRits && telCrm.length >= 8;
             });
           }
-        }
-        // Fallback por nome (primeiros 2 tokens)
-        if (!crmCliente && custNome) {
-          const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
-          const nomeRitsTokens = norm(custNome).split(" ").slice(0,2).join(" ");
-          crmCliente = crmClientes.find(c => {
-            const nCrm = norm(c.nome||"").split(" ").slice(0,2).join(" ");
-            return nCrm === nomeRitsTokens && nomeRitsTokens.length > 3;
-          });
         }
 
         if (!crmCliente) {
@@ -6454,15 +6445,21 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
       {/* Abas internas */}
       <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid var(--color-border-tertiary)"}}>
         {(()=>{
-        const assinantes = clientesDash.filter(c=>c.statusClub==="fechou"||c.etapa==="experiencia").length;
-        const meta100 = 100; const inicio30 = 30;
+        const assinantes = ritsCount !== null ? ritsCount
+          : clientesDash.filter(c=>{
+              if(!(c.statusClub==="fechou"||c.etapa==="experiencia")) return false;
+              if(c.cancelado) return false;
+              const st = c.statusAssinatura||"ativo";
+              return st==="ativo"||st==="pausado";
+            }).length;
+        const meta100 = 100;
         const semanas = Math.max(1, Math.round((new Date("2026-12-31")-new Date())/604800000));
-        const pct = Math.min(100, Math.round((assinantes-inicio30)/(meta100-inicio30)*100));
+        const pct = Math.min(100, Math.round(assinantes/meta100*100));
         return assinantes>0&&(
           <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 14px",marginBottom:10}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-              <span style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>🏆 Meta 2026: {assinantes}/100 assinantes</span>
-              <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{100-assinantes} faltam · {semanas} semanas</span>
+              <span style={{fontSize:12,fontWeight:500,color:"var(--color-text-primary)"}}>🏆 Meta 2026: {assinantes}/100 assinantes {ritsCount!==null&&<span style={{fontSize:10,color:C.tealD}}>(RitsPay)</span>}</span>
+              <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{Math.max(0,100-assinantes)} faltam · {semanas} semanas</span>
             </div>
             <div style={{height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
               <div style={{width:pct+"%",height:"100%",background:pct>=80?C.green:pct>=50?C.amber:C.teal,borderRadius:3,transition:"width 0.5s"}}/>
