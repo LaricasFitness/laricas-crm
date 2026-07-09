@@ -4613,6 +4613,250 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     </div>
   );
 };
+
+// ── ANALYTICS RITSPAY — dados direto da API, sem sync ───────────────────────
+const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
+  const [dados, setDados] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [erro, setErro] = React.useState("");
+  const [ordenar, setOrdenar] = React.useState("nome");
+  const [filtroStatus, setFiltroStatus] = React.useState("todos");
+
+  const mapStatus = (s, sub) => {
+    const st = (s||"").toLowerCase();
+    if (st==="canceled"||st==="cancelled"||st==="inactive") return "cancelado";
+    if (st==="paused"||st==="suspended") return "pausado";
+    if (st==="past_due"||st==="unpaid"||st==="overdue"||sub?.overdue_at) return "atrasado";
+    return "ativo";
+  };
+
+  const mapPlano = (sub) => {
+    const slug = (sub?.plan?.slug||sub?.plan?.code||"").toLowerCase();
+    const name = (sub?.plan?.name||"").toLowerCase();
+    if (slug.includes("anual")||name.includes("anual")) return "Anual";
+    if (slug.includes("semestral")||name.includes("semestral")) return "Semestral";
+    if (slug.includes("trimestral")||name.includes("trimestral")) return "Trimestral";
+    return "—";
+  };
+
+  const mesesPlano = p => p==="Anual"?12:p==="Semestral"?6:p==="Trimestral"?3:0;
+
+  const carregar = async () => {
+    const token = ritspayGetToken();
+    if (!token) { setErro("Faça login no RitsPay primeiro (botão Sincronizar)."); return; }
+    setLoading(true); setErro("");
+    try {
+      const cfg = ritspayLoadCfg();
+      const tenant = cfg.tenantId || "TEN-1G57I7LIVD8K0F8M";
+
+      const fetchAll = async (path) => {
+        const todos = [];
+        let pagina = 1;
+        while (pagina <= 50) {
+          try {
+            const sep = path.includes("?")?"&":"?";
+            const resp = await ritspayFetch(`${path}${sep}page=${pagina}`, token);
+            const items = Array.isArray(resp?.data)?resp.data:Array.isArray(resp?.results)?resp.results:Array.isArray(resp)?resp:[];
+            if (!items.length) break;
+            todos.push(...items);
+            if (!resp?.links?.next) break;
+            if (resp?.meta?.total && todos.length >= resp.meta.total) break;
+            pagina++;
+          } catch(e) { break; }
+        }
+        return todos;
+      };
+
+      // Busca subscriptions e purchases em paralelo
+      const [subs, purchases, crmClientes] = await Promise.all([
+        fetchAll(`/sales/${tenant}/subscriptions`),
+        fetchAll(`/sales/${tenant}/purchases`),
+        dbGetAll(),
+      ]);
+
+      // Agrupa purchases por customer ID
+      const purchByCustomer = {};
+      purchases.forEach(p => {
+        const cid = p.customer?.id||p.customer_id||"";
+        if (!cid) return;
+        if (!purchByCustomer[cid]) purchByCustomer[cid] = [];
+        purchByCustomer[cid].push(parseFloat(p.total||0)/100);
+      });
+
+      // Mapa email → gasto avulso do CRM
+      const gastoPorEmail = {};
+      crmClientes.forEach(c => {
+        const emails = [(c.email||"").toLowerCase().trim(), (c.emailClub||"").toLowerCase().trim()].filter(Boolean);
+        emails.forEach(e => { if(e) gastoPorEmail[e] = c.gasto||0; });
+      });
+
+      // Processa cada assinatura (ativa tem prioridade sobre cancelada)
+      const STATUS_PRIO = {active:0,overdue:1,past_due:1,paused:2,canceled:3,inactive:4};
+      const subsPrio = [...subs].sort((a,b)=>(STATUS_PRIO[(a.status||"").toLowerCase()]??9)-(STATUS_PRIO[(b.status||"").toLowerCase()]??9));
+
+      const vistos = new Set();
+      const rows = [];
+      for (const sub of subsPrio) {
+        const email = (sub.customer?.email||"").toLowerCase().trim();
+        if (vistos.has(sub.customer?.id||email)) continue;
+        vistos.add(sub.customer?.id||email);
+
+        const status = mapStatus(sub.status, sub);
+        const plano = mapPlano(sub);
+        const meses = mesesPlano(plano);
+        const cicloAtual = typeof sub.cycle==="number" ? sub.cycle : null;
+        const cicloDisplay = cicloAtual!==null && meses>0 ? `${cicloAtual}° (${cicloAtual}/${meses})` : cicloAtual!==null ? `${cicloAtual}°` : "—";
+
+        // Ticket médio: média das purchases reais deste customer
+        const custPurchases = purchByCustomer[sub.customer?.id||""] || [];
+        const ticketMedio = custPurchases.length>0
+          ? (custPurchases.reduce((s,v)=>s+v,0)/custPurchases.length)
+          : (parseFloat(sub.total||sub.subscription_price||0)/100);
+
+        // LTV club: soma de todas as purchases reais
+        const ltvClub = custPurchases.length>0
+          ? custPurchases.reduce((s,v)=>s+v,0)
+          : ticketMedio*(cicloAtual||1);
+
+        // LTV total = club + avulsos do CRM
+        const gastoAvulso = gastoPorEmail[email] || 0;
+        const ltvTotal = ltvClub + gastoAvulso;
+
+        const proximaCob = (sub.next_billing_at||"").split("T")[0]||"—";
+        const nome = sub.customer?.name || email || "—";
+
+        rows.push({ nome, email, plano, cicloDisplay, cicloAtual, ticketMedio, ltvClub, ltvTotal, gastoAvulso, proximaCob, status, id: sub.id });
+      }
+
+      setDados(rows);
+    } catch(e) {
+      // Token expirado — limpar e pedir relogin
+      if (e.message.includes("401")||e.message.includes("403")) {
+        ritspaySetToken("");
+        setErro("Sessão expirada. Clique em 'Sincronizar com RitsPay' para reconectar.");
+      } else {
+        setErro("Erro: " + e.message);
+      }
+    }
+    setLoading(false);
+  };
+
+  React.useEffect(() => { carregar(); }, []);
+
+  const COR_STATUS = {ativo:C.green,pausado:C.amber,atrasado:C.coral,cancelado:"#aaa"};
+  const statusOpts = ["todos","ativo","pausado","atrasado","cancelado"];
+
+  const filtrados = (dados||[]).filter(r => filtroStatus==="todos"||r.status===filtroStatus);
+  const ordenados = [...filtrados].sort((a,b)=>{
+    if (ordenar==="nome") return (a.nome||"").localeCompare(b.nome||"");
+    if (ordenar==="ciclo") return (b.cicloAtual||0)-(a.cicloAtual||0);
+    if (ordenar==="ticket") return b.ticketMedio-a.ticketMedio;
+    if (ordenar==="ltvClub") return b.ltvClub-a.ltvClub;
+    if (ordenar==="ltvTotal") return b.ltvTotal-a.ltvTotal;
+    if (ordenar==="prox") return (a.proximaCob||"").localeCompare(b.proximaCob||"");
+    return 0;
+  });
+
+  // Totais
+  const ativos = (dados||[]).filter(r=>r.status==="ativo");
+  const mrrTotal = ativos.reduce((s,r)=>s+r.ticketMedio,0);
+  const ltvMedio = ativos.length>0 ? ativos.reduce((s,r)=>s+r.ltvTotal,0)/ativos.length : 0;
+
+  const Th = ({label, campo}) => (
+    <th onClick={()=>setOrdenar(campo)} style={{padding:"8px 10px",fontSize:10,fontWeight:600,color:ordenar===campo?C.tealD:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",cursor:"pointer",whiteSpace:"nowrap",borderBottom:"1px solid var(--color-border-tertiary)",background:"var(--color-background-secondary)",userSelect:"none"}}>
+      {label}{ordenar===campo?" ↓":""}
+    </th>
+  );
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+        <div style={{fontSize:14,fontWeight:600,color:"var(--color-text-primary)"}}>📈 Analytics de Assinantes</div>
+        <div style={{flex:1}}/>
+        <button onClick={carregar} disabled={loading}
+          style={{padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none"}}>
+          {loading?"⏳ Carregando...":"🔄 Atualizar"}
+        </button>
+      </div>
+
+      {/* Cards resumo */}
+      {dados&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>
+          {[
+            ["Assinantes ativos", ativos.length, C.green, C.greenL],
+            ["MRR total", "R$"+mrrTotal.toFixed(0)+"/mês", C.teal, C.tealL],
+            ["LTV médio", "R$"+ltvMedio.toFixed(0), C.purple, C.purpleL],
+            ["Total na base", (dados||[]).length+" clientes", "#666", "#f5f5f5"],
+          ].map(([label,val,cor,bg])=>(
+            <div key={label} style={{background:bg,border:"0.5px solid "+cor,borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontSize:10,color:cor,marginBottom:2,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
+              <div style={{fontSize:18,fontWeight:600,color:cor}}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {erro&&<div style={{background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:8,padding:"10px 14px",fontSize:12,color:C.coralD,marginBottom:12}}>{erro}</div>}
+      {loading&&<div style={{textAlign:"center",padding:32,color:"var(--color-text-tertiary)"}}>⏳ Buscando dados do RitsPay...</div>}
+
+      {dados&&(
+        <>
+          {/* Filtro por status */}
+          <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+            {statusOpts.map(s=>(
+              <button key={s} onClick={()=>setFiltroStatus(s)}
+                style={{padding:"3px 12px",borderRadius:20,fontSize:11,cursor:"pointer",fontWeight:filtroStatus===s?500:400,
+                  background:filtroStatus===s?(COR_STATUS[s]||C.teal):"var(--color-background-secondary)",
+                  color:filtroStatus===s?"#fff":"var(--color-text-secondary)",
+                  border:"0.5px solid "+(filtroStatus===s?(COR_STATUS[s]||C.teal):"var(--color-border-tertiary)")}}>
+                {s==="todos"?"Todos":s.charAt(0).toUpperCase()+s.slice(1)} {s!=="todos"?`(${(dados||[]).filter(r=>r.status===s).length})`:`(${(dados||[]).length})`}
+              </button>
+            ))}
+          </div>
+
+          {/* Tabela */}
+          <div style={{overflowX:"auto",borderRadius:10,border:"0.5px solid var(--color-border-tertiary)"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead>
+                <tr>
+                  <Th label="Nome" campo="nome"/>
+                  <Th label="Plano" campo="plano"/>
+                  <Th label="Ciclo" campo="ciclo"/>
+                  <Th label="Ticket médio" campo="ticket"/>
+                  <Th label="LTV Club" campo="ltvClub"/>
+                  <Th label="LTV Total" campo="ltvTotal"/>
+                  <Th label="Próx. cobr." campo="prox"/>
+                  <th style={{padding:"8px 10px",fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid var(--color-border-tertiary)",background:"var(--color-background-secondary)"}}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ordenados.map((r,i)=>(
+                  <tr key={r.id||i} style={{background:i%2===0?"var(--color-background-primary)":"var(--color-background-secondary)",cursor:"pointer"}}
+                    onClick={()=>{ if(r.email) { const crm = null; onAbrirPerfil&&onAbrirPerfil(r.email); } }}>
+                    <td style={{padding:"8px 10px",color:"var(--color-text-primary)",fontWeight:500}}>{r.nome}</td>
+                    <td style={{padding:"8px 10px",color:"var(--color-text-secondary)"}}>{r.plano}</td>
+                    <td style={{padding:"8px 10px",color:C.tealD,fontWeight:500}}>{r.cicloDisplay}</td>
+                    <td style={{padding:"8px 10px",color:"var(--color-text-primary)"}}>R${r.ticketMedio.toFixed(0)}</td>
+                    <td style={{padding:"8px 10px",color:C.tealD,fontWeight:500}}>R${r.ltvClub.toFixed(0)}</td>
+                    <td style={{padding:"8px 10px",color:C.purple,fontWeight:500}}>R${r.ltvTotal.toFixed(0)}{r.gastoAvulso>0&&<span style={{fontSize:10,color:"var(--color-text-tertiary)",marginLeft:4}}>+R${r.gastoAvulso.toFixed(0)}</span>}</td>
+                    <td style={{padding:"8px 10px",color:r.proximaCob!=="—"&&r.proximaCob<=new Date().toISOString().split("T")[0]?C.coralD:"var(--color-text-secondary)"}}>{r.proximaCob!=="—"?new Date(r.proximaCob+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}):r.proximaCob}</td>
+                    <td style={{padding:"8px 10px"}}>
+                      <span style={{padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:500,background:(COR_STATUS[r.status]||"#eee")+"22",color:COR_STATUS[r.status]||"#666"}}>
+                        {r.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // ── FUNIL CLUB ─────────────────────────────────────────────────────────────
 const STATUS_CLUB = [
   { id:"",            label:"Não abordado",   cor:C.purple,  emoji:"○" },
@@ -6475,8 +6719,7 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
         <div>
           <DashClub/>
           <div style={{marginTop:20,borderTop:"0.5px solid var(--color-border-tertiary)",paddingTop:16}}>
-            <div style={{fontSize:11,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>📈 Analytics de Assinantes</div>
-            <LTV onAbrir={(id)=>{onAbrirPerfil&&onAbrirPerfil(id);}}/>
+            <AnalyticsRitsPay onAbrirPerfil={onAbrirPerfil}/>
           </div>
         </div>
       )}
