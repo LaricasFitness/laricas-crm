@@ -5463,9 +5463,38 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
     const tenant = cfg.tenantId || "TEN-1G57I7LIVD8K0F8M";
     ritspayFetch(`/sales/${tenant}/subscriptions?page=1`, token)
       .then(resp => {
+        const items = Array.isArray(resp?.data) ? resp.data : [];
+        // Meta: contar apenas ativos e pausados (não cancelados, não atrasados)
+        const ativosEPausados = items.filter(s => {
+          const st = (s.status||"").toLowerCase();
+          return st === "active" || st === "paused" || st === "suspended";
+        }).length;
         const total = resp?.meta?.total ?? null;
-        const ativos = Array.isArray(resp?.data) ? resp.data.filter(s=>(s.status||"").toLowerCase()==="active").length : 0;
-        if (total !== null) setRitsCount(total);
+        // Se a primeira página tem menos que o total, precisamos do total real — usamos meta.total como base
+        // mas subtraindo cancelados/atrasados proporcionalmente não é preciso, então buscamos todas as páginas
+        if (total && total <= items.length) {
+          setRitsCount(ativosEPausados);
+        } else if (total) {
+          // Busca todas as páginas para contar com precisão
+          (async () => {
+            let todos = [...items];
+            let pagina = 2;
+            while (todos.length < total && pagina <= 20) {
+              try {
+                const r2 = await ritspayFetch(`/sales/${tenant}/subscriptions?page=${pagina}`, token);
+                const its = Array.isArray(r2?.data) ? r2.data : [];
+                if (!its.length) break;
+                todos = [...todos, ...its];
+                pagina++;
+              } catch(e) { break; }
+            }
+            const count = todos.filter(s => {
+              const st = (s.status||"").toLowerCase();
+              return st === "active" || st === "paused" || st === "suspended";
+            }).length;
+            setRitsCount(count);
+          })();
+        }
       })
       .catch(() => {});
   }, []);
@@ -6468,11 +6497,12 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
           })()).length;
           const nPausaVolta = clientesDash.filter(c=>c.statusAssinatura==="pausado"&&c.dataPausaFim&&c.dataPausaFim<=hoje2).length;
           // Meta anual
-          const totalAssinantes = clientesDash.filter(c=>
-  (c.statusClub==="fechou"||c.etapa==="experiencia") &&
-  c.statusAssinatura !== "cancelado" &&
-  !c.cancelado
-).length;
+          const totalAssinantes = clientesDash.filter(c=>{
+            if (!(c.statusClub==="fechou"||c.etapa==="experiencia")) return false;
+            if (c.cancelado) return false;
+            const st = c.statusAssinatura||"ativo";
+            return st === "ativo" || st === "pausado"; // apenas ativos e pausados
+          }).length;
           const meta = 100;
           const metaReal = ritsCount !== null ? ritsCount : totalAssinantes;
           const semanasFim = Math.max(1,Math.round((new Date("2026-12-31")-new Date())/604800000));
