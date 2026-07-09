@@ -4701,16 +4701,23 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
         vistos.add(sub.customer?.id||email);
 
         const status = mapStatus(sub.status, sub);
-          // Ignora quem nunca ativou (falha no primeiro pagamento, cycle === 0)
-          if ((typeof sub.cycle === "number" ? sub.cycle : 0) === 0 &&
-              (status === "atrasado" || ["past_due","unpaid","overdue"].includes((sub.status||"").toLowerCase()))) continue;
+        const custId = sub.customer?.id || "";
+        const custPurchases = purchByCustomer[custId] || [];
+        const cycle = typeof sub.cycle === "number" ? sub.cycle : 0;
+
+        // Regra definitiva: só é assinante real quem tem pelo menos 1 purchase OU está ativo sem overdue
+        // Falha no primeiro pagamento: sem purchases E (status != active OU overdue_at preenchido)
+        const temPurchase = custPurchases.length > 0;
+        const statusAtivo = (sub.status||"").toLowerCase() === "active";
+        const temOverdue = !!sub.overdue_at;
+        const nuncaAtivou = !temPurchase && (!statusAtivo || temOverdue || cycle === 0);
+        if (nuncaAtivou) continue;
         const plano = mapPlano(sub);
         const meses = mesesPlano(plano);
         const cicloAtual = typeof sub.cycle==="number" ? sub.cycle : null;
         const cicloDisplay = cicloAtual!==null && meses>0 ? `${cicloAtual}° (${cicloAtual}/${meses})` : cicloAtual!==null ? `${cicloAtual}°` : "—";
 
         // Ticket médio: média das purchases reais deste customer
-        const custPurchases = purchByCustomer[sub.customer?.id||""] || [];
         const ticketMedio = custPurchases.length>0
           ? (custPurchases.reduce((s,v)=>s+v,0)/custPurchases.length)
           : (parseFloat(sub.total||sub.subscription_price||0)/100);
@@ -5466,13 +5473,12 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
     ritspayFetch(`/sales/${tenant}/subscriptions?page=1`, token)
       .then(resp => {
         const items = Array.isArray(resp?.data) ? resp.data : [];
-        // Meta: contar apenas ativos e pausados, excluindo quem nunca ativou (cycle===0)
+        // Meta: contar apenas ativos e pausados com pelo menos 1 purchase (excluir quem nunca pagou)
         const ativosEPausados = items.filter(s => {
           const st = (s.status||"").toLowerCase();
-          const cy = typeof s.cycle === "number" ? s.cycle : 0;
-          const ativouAlgumDia = cy >= 1 || st === "active" || st === "paused" || st === "suspended";
           const statusOk = st === "active" || st === "paused" || st === "suspended";
-          return statusOk && ativouAlgumDia;
+          // Será validado com purchases após buscar todas as páginas
+          return statusOk && !s.overdue_at; // estimativa rápida na primeira página
         }).length;
         const total = resp?.meta?.total ?? null;
         // Se a primeira página tem menos que o total, precisamos do total real — usamos meta.total como base
