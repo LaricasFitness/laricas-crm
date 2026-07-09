@@ -6247,131 +6247,6 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
           );
         })()}
         {(()=>{
-          const assinantes = todos.filter(c=>c.etapa==="experiencia");
-          // Helper: resolve status — prioriza statusAssinatura, mas respeita campos antigos como fallback
-          const resolveStatus = c => {
-            if(c.statusAssinatura) return c.statusAssinatura;
-            if(c.cancelado) return "cancelado";
-            if(c.falhaRenovacao) return "atrasado";
-            return "ativo";
-          };
-          const ativos     = assinantes.filter(c=>resolveStatus(c)==="ativo");
-          const totalAtivosClub = ativos.length;
-          const pausados   = assinantes.filter(c=>resolveStatus(c)==="pausado");
-          const atrasados  = assinantes.filter(c=>resolveStatus(c)==="atrasado");
-          const cancelados = assinantes.filter(c=>resolveStatus(c)==="cancelado");
-          const hoje2 = new Date().toISOString().split("T")[0];
-          const pausaVoltando = pausados.filter(c=>c.dataPausaFim&&c.dataPausaFim<=hoje2);
-          return (
-            <div>
-              {/* Cards de status */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:12}}>
-                {[
-                  [ativos.length,"Ativos",C.green,C.greenD,C.greenL,"✅"],
-                  [pausados.length,"Pausados",C.amber,C.amberD,C.amberL,"⏸"],
-                  [atrasados.length,"Atrasados",C.coral,C.coralD,C.coralL,"⚠"],
-                  [cancelados.length,"Cancelados","#ccc","#555","#f5f5f5","✗"],
-                ].map(([n,label,cor,corD,corL,emoji])=>(
-                  <div key={label} style={{background:corL,border:"0.5px solid "+cor,borderRadius:10,padding:"10px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:10,color:corD,marginBottom:2}}>{emoji} {label}</div>
-                    <div style={{fontSize:22,fontWeight:600,color:corD}}>{n}</div>
-                  </div>
-                ))}
-              </div>
-              {/* Lista por status */}
-              {[
-                {lista:pausados,label:"⏸ Pausados",cor:C.amberD,corL:C.amberL,showData:true},
-                {lista:atrasados,label:"⚠ Atrasados",cor:C.coralD,corL:C.coralL,showData:false},
-              ].map(({lista,label,cor,corL,showData})=>lista.length>0&&(
-                <div key={label} style={{background:corL,borderRadius:10,padding:"10px 14px",marginBottom:8}}>
-                  <div style={{fontSize:11,fontWeight:500,color:cor,marginBottom:6}}>{label}</div>
-                  {lista.map(c=>(
-                    <div key={c.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,fontSize:12}}>
-                      <span style={{flex:1,color:"var(--color-text-primary)",fontWeight:500}}>{c.nome}</span>
-                      {showData&&c.dataPausaFim&&<span style={{color:cor,fontSize:11}}>{c.dataPausaFim<=hoje2?"⚡ Volta hoje!":"Volta em "+new Date(c.dataPausaFim+"T12:00:00").toLocaleDateString("pt-BR")}</span>}
-                      <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{c.tipoAssinatura||"—"}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              {pausaVoltando.length>0&&(
-                <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"10px 14px",marginBottom:8}}>
-                  <div style={{fontSize:11,fontWeight:500,color:C.greenD,marginBottom:6}}>✅ Voltando hoje / atrasados na retomada</div>
-                  {pausaVoltando.map(c=>(
-                    <div key={c.id} style={{fontSize:12,color:C.greenD,marginBottom:2,fontWeight:500}}>{c.nome} — verificar cobrança</div>
-                  ))}
-                </div>
-              )}
-              {cancelados.length>0&&(()=>{
-                const motivoCounts = {};
-                cancelados.forEach(c=>{if(c.motivoCancelamento) motivoCounts[c.motivoCancelamento]=(motivoCounts[c.motivoCancelamento]||0)+1;});
-                const ranking = Object.entries(motivoCounts).sort((a,b)=>b[1]-a[1]);
-                if(!ranking.length) return null;
-                return (
-                  <div style={{background:"#f5f5f5",borderRadius:10,padding:"10px 14px",marginBottom:8}}>
-                    <div style={{fontSize:11,fontWeight:500,color:"#555",marginBottom:6}}>✗ Motivos de cancelamento</div>
-                    {ranking.map(([m,n])=>(
-                      <div key={m} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
-                        <span style={{color:"#555"}}>{m}</span>
-                        <span style={{fontWeight:500,color:"#555"}}>{n}x</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          );
-        })()}
-        {convertidos.length>0&&(
-          <div style={{background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginTop:12}}>
-            <div style={{fontSize:11,fontWeight:500,color:C.greenD,marginBottom:8}}>Conversões por plano</div>
-            {PLANOS.map(p=>{
-              const n=convertidos.filter(c=>c.planoFechado===p).length;
-              if(n===0) return null;
-              return <div key={p} style={{fontSize:12,color:C.greenD,marginBottom:4}}>{p}: {n} assinante{n>1?"s":""}</div>;
-            })}
-          </div>
-        )}
-        {(()=>{
-          // Alertas de renovação: assinantes com ciclo próximo ao vencimento
-          const CICLOS = {"Trimestral":90,"Semestral":180,"Anual":365};
-          const hoje0 = new Date();
-          const proximosVenc = todos.filter(c=>{
-            if(c.etapa!=="experiencia"&&c.statusClub!=="fechou") return false;
-            if(!c.dataInicioAssinatura||!c.planoFechado) return false;
-            const inicio = new Date(c.dataInicioAssinatura+"T12:00:00");
-            const diasPlano = CICLOS[c.planoFechado]||90;
-            const diasPassados = Math.round((hoje0-inicio)/86400000);
-            const diasParaVenc = diasPlano - diasPassados;
-            return diasParaVenc >= 0 && diasParaVenc <= 14;
-          }).sort((a,b)=>{
-            const diasA = CICLOS[a.planoFechado]||90;
-            const diasB = CICLOS[b.planoFechado]||90;
-            const dA = Math.round((hoje0-new Date(a.dataInicioAssinatura+"T12:00:00"))/86400000);
-            const dB = Math.round((hoje0-new Date(b.dataInicioAssinatura+"T12:00:00"))/86400000);
-            return (diasA-dA)-(diasB-dB);
-          });
-          if(!proximosVenc.length) return null;
-          return (
-            <div style={{background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:10,padding:"12px 14px",marginTop:12}}>
-              <div style={{fontSize:11,fontWeight:500,color:C.amberD,marginBottom:8}}>⚠ Renovações nos próximos 14 dias ({proximosVenc.length})</div>
-              {proximosVenc.map(c=>{
-                const dias = CICLOS[c.planoFechado]||90;
-                const passados = Math.round((hoje0-new Date(c.dataInicioAssinatura+"T12:00:00"))/86400000);
-                return (
-                  <div key={c.id} style={{fontSize:12,color:C.amberD,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
-                    <span style={{fontWeight:500}}>{c.nome}</span>
-                    <span>{c.planoFechado} · vence em {dias-passados}d</span>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-
-        })()}
-
-        {(()=>{
           const scriptStats = {};
           const aberturas = ["recorrente","ticket_alto","kit"];
           todos.forEach(c => {
@@ -6529,7 +6404,7 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
               <div style={{display:"flex",gap:8,marginBottom:8}}>
                 <div style={{flex:1,background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                    <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>Meta 2026 — Assinantes</span>
+                    <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>Meta 2026 — Assinantes (CRM)</span>
                     <span style={{fontSize:11,fontWeight:600,color:pctMeta>=100?C.greenD:C.purple}}>{totalAssinantes}/{meta}</span>
                   </div>
                   <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden",marginBottom:4}}>
