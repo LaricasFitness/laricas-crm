@@ -4210,10 +4210,13 @@ const ritspayFetch = async (path, token, opts = {}) => {
 const mapRitsStatus = (sub) => {
   if (!sub) return "ativo";
   const s = (sub.status || "").toLowerCase();
+  const cycle = typeof sub.cycle === "number" ? sub.cycle : 0;
   if (s === "canceled" || s === "cancelled" || s === "inactive") return "cancelado";
   if (s === "paused" || s === "suspended") return "pausado";
-  // atrasado: overdue_at preenchido ou status overdue/past_due
-  if (s === "past_due" || s === "unpaid" || s === "overdue" || sub.overdue_at) return "atrasado";
+  // Falha na RENOVAÇÃO: só conta como atrasado se já teve pelo menos 1 ciclo pago
+  // Falha no primeiro pagamento (cycle === 0) = nunca foi assinante
+  if ((s === "past_due" || s === "unpaid" || s === "overdue" || sub.overdue_at) && cycle >= 1) return "atrasado";
+  if ((s === "past_due" || s === "unpaid" || s === "overdue") && cycle === 0) return "nunca_ativado";
   return "ativo";
 };
 
@@ -4423,6 +4426,11 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
         if (custEmail) processados.add(custEmail.toLowerCase());
 
         const novoStatus = mapRitsStatus(sub);
+        // Não atualizar CRM para quem nunca ativou (falha no primeiro pagamento)
+        if (novoStatus === "nunca_ativado") {
+          detalhes.push({ nome: crmCliente.nome, status: "nunca ativado — ignorado" });
+          continue;
+        }
         const novoPlano  = mapRitsPlan(sub);
         const proximaCob = (sub.next_billing_at || "").split("T")[0] || "";
         const dataInicio = (sub.start_at || sub.created_at || "").split("T")[0] || "";
@@ -4693,6 +4701,9 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
         vistos.add(sub.customer?.id||email);
 
         const status = mapStatus(sub.status, sub);
+          // Ignora quem nunca ativou (falha no primeiro pagamento, cycle === 0)
+          if ((typeof sub.cycle === "number" ? sub.cycle : 0) === 0 &&
+              (status === "atrasado" || ["past_due","unpaid","overdue"].includes((sub.status||"").toLowerCase()))) continue;
         const plano = mapPlano(sub);
         const meses = mesesPlano(plano);
         const cicloAtual = typeof sub.cycle==="number" ? sub.cycle : null;
@@ -5455,10 +5466,13 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
     ritspayFetch(`/sales/${tenant}/subscriptions?page=1`, token)
       .then(resp => {
         const items = Array.isArray(resp?.data) ? resp.data : [];
-        // Meta: contar apenas ativos e pausados (não cancelados, não atrasados)
+        // Meta: contar apenas ativos e pausados, excluindo quem nunca ativou (cycle===0)
         const ativosEPausados = items.filter(s => {
           const st = (s.status||"").toLowerCase();
-          return st === "active" || st === "paused" || st === "suspended";
+          const cy = typeof s.cycle === "number" ? s.cycle : 0;
+          const ativouAlgumDia = cy >= 1 || st === "active" || st === "paused" || st === "suspended";
+          const statusOk = st === "active" || st === "paused" || st === "suspended";
+          return statusOk && ativouAlgumDia;
         }).length;
         const total = resp?.meta?.total ?? null;
         // Se a primeira página tem menos que o total, precisamos do total real — usamos meta.total como base
