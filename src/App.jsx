@@ -6474,9 +6474,10 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   !c.cancelado
 ).length;
           const meta = 100;
+          const metaReal = ritsCount !== null ? ritsCount : totalAssinantes;
           const semanasFim = Math.max(1,Math.round((new Date("2026-12-31")-new Date())/604800000));
-          const faltam = Math.max(0,meta-totalAssinantes);
-          const pctMeta = Math.min(100,Math.round(totalAssinantes/meta*100));
+          const faltamReal = Math.max(0,meta-metaReal);
+          const pctMeta = Math.min(100,Math.round(metaReal/meta*100));
           const novosContatadosHoje = prontas.filter(c=>!c.statusClub&&c.dataUltimoContato===hoje).length;
           const pctNovos = Math.min(100,Math.round(novosContatadosHoje/metaDiaria*100));
           const temAcao = nVencidos>0||nImediata>0||nNovos>0||nRenovacao>0;
@@ -6486,8 +6487,8 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
               <div style={{display:"flex",gap:8,marginBottom:8}}>
                 <div style={{flex:1,background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                    <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>Meta 2026 — Assinantes (CRM)</span>
-                    <span style={{fontSize:11,fontWeight:600,color:pctMeta>=100?C.greenD:C.purple}}>{totalAssinantes}/{meta}</span>
+                    <span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>Meta 2026 — Assinantes {ritsCount!==null?"(RitsPay)":"(CRM)"}</span>
+                    <span style={{fontSize:11,fontWeight:600,color:pctMeta>=100?C.greenD:C.purple}}>{metaReal}/{meta}</span>
                   </div>
                   <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden",marginBottom:4}}>
                     <div style={{width:pctMeta+"%",height:"100%",background:pctMeta>=100?C.green:C.purple,borderRadius:3,transition:"width 0.3s"}}/>
