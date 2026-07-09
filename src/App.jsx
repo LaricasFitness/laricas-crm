@@ -4317,27 +4317,30 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
     try {
       const tenant = tenantId.trim();
 
-      // Helper para buscar todas as páginas — estrutura confirmada: {data, links, meta}
+      // Helper para buscar todas as páginas — estrutura {data, links, meta}
       const fetchAll = async (path) => {
         const todos = [];
-        let url = path;
-        while (url) {
-          const sep = url.includes("?") ? "&" : "?";
-          // Acrescenta page só se não vier da URL next
-          const fetchUrl = url === path ? `${url}${sep}page=1` : url;
-          const resp = await ritspayFetch(fetchUrl.startsWith("http") ? fetchUrl.replace("https://api.ritspay.com","") : fetchUrl, token);
-          const items = Array.isArray(resp?.data) ? resp.data
-            : Array.isArray(resp?.results) ? resp.results
-            : Array.isArray(resp) ? resp : [];
-          if (items.length === 0) break;
-          todos.push(...items);
-          const total = resp?.meta?.total ?? resp?.meta?.total_count ?? null;
-          setMensagem(`${url.includes("subscription")?"Assinaturas":"Registros"}: ${todos.length}${total?"/"+total:""}...`);
-          // Próxima página via links.next
-          const next = resp?.links?.next || null;
-          if (!next || next === fetchUrl) break;
-          url = next; // URL completa da próxima página
-          if (todos.length > 500) break; // segurança
+        let pagina = 1;
+        while (pagina <= 50) {
+          try {
+            const sep = path.includes("?") ? "&" : "?";
+            const resp = await ritspayFetch(`${path}${sep}page=${pagina}`, token);
+            const items = Array.isArray(resp?.data) ? resp.data
+              : Array.isArray(resp?.results) ? resp.results
+              : Array.isArray(resp) ? resp : [];
+            if (items.length === 0) break;
+            todos.push(...items);
+            const total = resp?.meta?.total ?? resp?.meta?.total_count ?? null;
+            setMensagem(`${path.includes("subscription")?"Assinaturas":"Registros"}: ${todos.length}${total?"/"+total:""}...`);
+            // Para quando não tem next ou já buscou o total
+            const hasNext = resp?.links?.next != null;
+            if (!hasNext) break;
+            if (total && todos.length >= total) break;
+            pagina++;
+          } catch(pageErr) {
+            // Se falhar uma página, para aqui mas não cancela tudo
+            break;
+          }
         }
         return todos;
       };
@@ -4394,14 +4397,24 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
 
         if (processados.has(custEmail.toLowerCase())) continue;
 
-        // Encontra no CRM: primeiro por email, depois por nome normalizado
+        // Encontra no CRM: por email → por telefone → por nome
         let crmCliente = crmClientes.find(c =>
           custEmail && (
             (c.email||"").toLowerCase().trim() === custEmail.toLowerCase().trim() ||
             (c.emailClub||"").toLowerCase().trim() === custEmail.toLowerCase().trim()
           )
         );
-        // Fallback por nome (remove acentos, case insensitive, primeiros 2 tokens)
+        // Fallback por telefone
+        if (!crmCliente) {
+          const telefoneRits = (custRef.phone || custMap[custId]?.phone || "").replace(/\D/g,"").slice(-9);
+          if (telefoneRits.length >= 8) {
+            crmCliente = crmClientes.find(c => {
+              const telCrm = (c.telefone||"").replace(/\D/g,"").slice(-9);
+              return telCrm === telefoneRits && telCrm.length >= 8;
+            });
+          }
+        }
+        // Fallback por nome (primeiros 2 tokens)
         if (!crmCliente && custNome) {
           const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
           const nomeRitsTokens = norm(custNome).split(" ").slice(0,2).join(" ");
@@ -4464,9 +4477,10 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
         detalhes.push({ nome: crmCliente.nome, status: novoStatus });
       }
 
-      setResultado({ total: subs.length, atualizados, detalhes });
+      const naoEncontrados = detalhes.filter(d=>d.status==="não encontrado").length;
+      setResultado({ total: subs.length, atualizados, naoEncontrados, detalhes });
       setStep("done");
-      setMensagem(`${atualizados} clientes atualizados no CRM.`);
+      setMensagem(`${atualizados} atualizados · ${naoEncontrados} não encontrados no CRM`);
       if (onSyncDone) onSyncDone();
     } catch(e) {
       setStep("error");
@@ -4566,13 +4580,14 @@ const RitsPaySyncModal = ({ onClose, onSyncDone }) => {
               <div>
                 <div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:10,padding:"12px 14px",marginBottom:12 }}>
                   <div style={{ fontSize:14,fontWeight:600,color:C.greenD,marginBottom:4 }}>✅ Sincronização concluída</div>
-                  <div style={{ fontSize:12,color:C.greenD }}>{resultado.atualizados} de {resultado.total} assinaturas atualizadas no CRM</div>
+                  <div style={{ fontSize:12,color:C.greenD }}>{resultado.atualizados} de {resultado.total} atualizados</div>
+                  {resultado.naoEncontrados>0&&<div style={{ fontSize:11,color:C.amberD,marginTop:4 }}>⚠ {resultado.naoEncontrados} não encontrados no CRM (email/tel/nome diferente)</div>}
                 </div>
-                <div style={{ maxHeight:160,overflowY:"auto",marginBottom:12 }}>
+                <div style={{ maxHeight:200,overflowY:"auto",marginBottom:12 }}>
                   {resultado.detalhes.map((d,i)=>(
-                    <div key={i} style={{ display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"0.5px solid var(--color-border-tertiary)" }}>
-                      <span style={{ color:"var(--color-text-primary)" }}>{d.nome}</span>
-                      <span style={{ color:d.status==="ativo"?C.green:d.status==="cancelado"?C.coral:d.status==="atrasado"?C.amber:"var(--color-text-tertiary)",fontWeight:500 }}>{d.status}</span>
+                    <div key={i} style={{ display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"0.5px solid var(--color-border-tertiary)" }}>
+                      <span style={{ color:d.status==="não encontrado"?"var(--color-text-tertiary)":"var(--color-text-primary)" }}>{d.nome}</span>
+                      <span style={{ color:d.status==="ativo"?C.green:d.status==="cancelado"?C.coral:d.status==="atrasado"?C.amber:d.status==="pausado"?C.amber:"#aaa",fontWeight:500 }}>{d.status}</span>
                     </div>
                   ))}
                 </div>
