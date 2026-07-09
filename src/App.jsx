@@ -4771,7 +4771,19 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
         rows.push({ nome, email, plano, cicloDisplay, cicloAtual, ticketMedio, ltvClub, ltvTotal, gastoAvulso, proximaCob, status, id: sub.id, churnScore, aniversario, upgradeSugerido });
       }
 
-      setDados(rows);
+      // DEBUG TEMPORÁRIO — mostra dados brutos de cada assinatura
+      setDados([...rows, { _debug: true, _rawSubs: subsPrio.map(s => ({
+        nome: s.customer?.name,
+        email: s.customer?.email,
+        status: s.status,
+        cycle: s.cycle,
+        overdue_at: s.overdue_at,
+        created_at: s.created_at?.split("T")[0],
+        purchases: (purchByCustomer[s.customer?.id||""]||[]).length,
+        id: s.id,
+      })) }]);
+      setLoading(false);
+      return;
     } catch(e) {
       // Token expirado — limpar e pedir relogin
       if (e.message.includes("401")||e.message.includes("403")) {
@@ -4841,6 +4853,28 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
         </div>
       )}
 
+      {dados&&dados.find(r=>r._debug)&&(
+        <div style={{background:"#1a1a2e",borderRadius:10,padding:"14px",marginBottom:16,overflowX:"auto"}}>
+          <div style={{fontSize:11,color:"#7fdbff",marginBottom:8,fontWeight:600}}>🔍 DEBUG — Todas as assinaturas (vermelho = 0 purchases)</div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,color:"#eee",fontFamily:"monospace"}}>
+            <thead><tr style={{borderBottom:"1px solid #333"}}>
+              {["Nome","Status","Cycle","Overdue_at","Created","Purchases #"].map(h=><th key={h} style={{padding:"4px 8px",textAlign:"left",color:"#7fdbff"}}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {(dados.find(r=>r._debug)?._rawSubs||[]).map((s,i)=>(
+                <tr key={i} style={{borderBottom:"0.5px solid #333",background:s.purchases===0?"rgba(200,0,0,0.3)":"transparent"}}>
+                  <td style={{padding:"3px 8px",color:s.purchases===0?"#f87171":"#eee"}}>{s.nome}</td>
+                  <td style={{padding:"3px 8px",color:s.status==="active"?"#4ade80":"#fbbf24"}}>{s.status}</td>
+                  <td style={{padding:"3px 8px"}}>{s.cycle}</td>
+                  <td style={{padding:"3px 8px",color:"#aaa",fontSize:9}}>{s.overdue_at||"—"}</td>
+                  <td style={{padding:"3px 8px",color:"#aaa"}}>{s.created_at}</td>
+                  <td style={{padding:"3px 8px",fontWeight:600,color:s.purchases===0?"#f87171":"#4ade80"}}>{s.purchases}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {erro&&<div style={{background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:8,padding:"10px 14px",fontSize:12,color:C.coralD,marginBottom:12}}>{erro}</div>}
       {loading&&<div style={{textAlign:"center",padding:32,color:"var(--color-text-tertiary)"}}>⏳ Buscando dados do RitsPay...</div>}
 
