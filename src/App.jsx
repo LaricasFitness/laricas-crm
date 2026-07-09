@@ -4705,13 +4705,15 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
         const custPurchases = purchByCustomer[custId] || [];
         const cycle = typeof sub.cycle === "number" ? sub.cycle : 0;
 
-        // Regra definitiva: só é assinante real quem tem pelo menos 1 purchase OU está ativo sem overdue
-        // Falha no primeiro pagamento: sem purchases E (status != active OU overdue_at preenchido)
+        // Regra definitiva: purchases são a fonte de verdade absoluta.
+        // Sem purchases = nunca pagou, EXCETO se a assinatura foi criada há menos de 3 dias
+        // (pagamento ainda pode estar em processamento)
         const temPurchase = custPurchases.length > 0;
-        const statusAtivo = (sub.status||"").toLowerCase() === "active";
-        const temOverdue = !!sub.overdue_at;
-        const nuncaAtivou = !temPurchase && (!statusAtivo || temOverdue || cycle === 0);
-        if (nuncaAtivou) continue;
+        if (!temPurchase) {
+          const criadaEm = new Date(sub.created_at || sub.start_at || "2000-01-01");
+          const diasDesde = Math.round((new Date() - criadaEm) / 86400000);
+          if (diasDesde > 3) continue; // mais de 3 dias sem purchase = nunca pagou
+        }
         const plano = mapPlano(sub);
         const meses = mesesPlano(plano);
         const cicloAtual = typeof sub.cycle==="number" ? sub.cycle : null;
