@@ -4725,7 +4725,39 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
         const proximaCob = (sub.next_billing_at||"").split("T")[0]||"—";
         const nome = sub.customer?.name || email || "—";
 
-        rows.push({ nome, email, plano, cicloDisplay, cicloAtual, ticketMedio, ltvClub, ltvTotal, gastoAvulso, proximaCob, status, id: sub.id });
+        // Churn score: 0-100 (maior = mais risco)
+        let churnScore = 0;
+        if (status === "atrasado") churnScore += 40;
+        if (status === "pausado") churnScore += 20;
+        if (cicloAtual === 1) churnScore += 20; // primeiro mês, risco alto de não renovar
+        if (custPurchases.length > 1) {
+          const valores = custPurchases.slice(-3);
+          const trend = valores[valores.length-1] - valores[0];
+          if (trend < -20) churnScore += 15; // ticket caindo
+        }
+        if (cicloAtual !== null && meses > 0 && cicloAtual === meses) churnScore += 10; // renovação iminente
+
+        // Aniversário de assinatura
+        const dataIni = (sub.start_at || sub.created_at || "").split("T")[0];
+        let aniversario = null;
+        if (dataIni && cicloAtual !== null) {
+          const marcos = [3, 6, 12];
+          for (const m of marcos) {
+            if (cicloAtual === m - 1) { // 1 mês antes do aniversário
+              const d = new Date(dataIni+"T12:00:00");
+              d.setMonth(d.getMonth() + m);
+              aniversario = { meses: m, data: d.toLocaleDateString("pt-BR") };
+              break;
+            }
+          }
+        }
+
+        // Candidato a upgrade
+        const upgradeSugerido = plano === "Trimestral" && cicloAtual >= 2 && status === "ativo" && churnScore < 30
+          ? "Semestral" : plano === "Semestral" && cicloAtual >= 4 && status === "ativo" && churnScore < 30
+          ? "Anual" : null;
+
+        rows.push({ nome, email, plano, cicloDisplay, cicloAtual, ticketMedio, ltvClub, ltvTotal, gastoAvulso, proximaCob, status, id: sub.id, churnScore, aniversario, upgradeSugerido });
       }
 
       setDados(rows);
@@ -4754,6 +4786,7 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
     if (ordenar==="ltvClub") return b.ltvClub-a.ltvClub;
     if (ordenar==="ltvTotal") return b.ltvTotal-a.ltvTotal;
     if (ordenar==="prox") return (a.proximaCob||"").localeCompare(b.proximaCob||"");
+    if (ordenar==="churn") return (b.churnScore||0)-(a.churnScore||0);
     return 0;
   });
 
@@ -4802,6 +4835,26 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
 
       {dados&&(
         <>
+          {/* Alertas de ação */}
+          {(()=>{
+            const upgrades = (dados||[]).filter(r=>r.upgradeSugerido);
+            const aniversarios = (dados||[]).filter(r=>r.aniversario);
+            const churnAlto = (dados||[]).filter(r=>r.churnScore>=50&&r.status!=="cancelado");
+            if (!upgrades.length && !aniversarios.length && !churnAlto.length) return null;
+            return (
+              <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                {upgrades.length>0&&<div style={{background:C.purpleL,border:"0.5px solid "+C.purple,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.purpleD}}>
+                  ↑ <strong>{upgrades.length}</strong> candidatas a upgrade ({upgrades.map(r=>r.nome.split(" ")[0]).join(", ")})
+                </div>}
+                {aniversarios.length>0&&<div style={{background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.tealD}}>
+                  🎂 <strong>{aniversarios.length}</strong> aniversários de assinatura em breve
+                </div>}
+                {churnAlto.length>0&&<div style={{background:C.coralL,border:"0.5px solid "+C.coral,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.coralD}}>
+                  ⚠ <strong>{churnAlto.length}</strong> com risco alto de churn
+                </div>}
+              </div>
+            );
+          })()}
           {/* Filtro por status */}
           <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
             {statusOpts.map(s=>(
@@ -4827,6 +4880,7 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
                   <Th label="LTV Club" campo="ltvClub"/>
                   <Th label="LTV Total" campo="ltvTotal"/>
                   <Th label="Próx. cobr." campo="prox"/>
+                  <Th label="Risco" campo="churn"/>
                   <th style={{padding:"8px 10px",fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:"1px solid var(--color-border-tertiary)",background:"var(--color-background-secondary)"}}>Status</th>
                 </tr>
               </thead>
@@ -4841,6 +4895,18 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
                     <td style={{padding:"8px 10px",color:C.tealD,fontWeight:500}}>R${r.ltvClub.toFixed(0)}</td>
                     <td style={{padding:"8px 10px",color:C.purple,fontWeight:500}}>R${r.ltvTotal.toFixed(0)}{r.gastoAvulso>0&&<span style={{fontSize:10,color:"var(--color-text-tertiary)",marginLeft:4}}>+R${r.gastoAvulso.toFixed(0)}</span>}</td>
                     <td style={{padding:"8px 10px",color:r.proximaCob!=="—"&&r.proximaCob<=new Date().toISOString().split("T")[0]?C.coralD:"var(--color-text-secondary)"}}>{r.proximaCob!=="—"?new Date(r.proximaCob+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}):r.proximaCob}</td>
+                    <td style={{padding:"8px 10px"}}>
+                      {r.churnScore>0&&(
+                        <div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <div style={{width:32,height:5,background:"#eee",borderRadius:3,overflow:"hidden"}}>
+                            <div style={{width:r.churnScore+"%",height:"100%",background:r.churnScore>=50?C.coral:r.churnScore>=25?C.amber:C.green,borderRadius:3}}/>
+                          </div>
+                          <span style={{fontSize:9,color:"var(--color-text-tertiary)"}}>{r.churnScore}</span>
+                        </div>
+                      )}
+                      {r.upgradeSugerido&&<div style={{fontSize:9,color:C.purple,marginTop:2}}>↑ {r.upgradeSugerido}</div>}
+                      {r.aniversario&&<div style={{fontSize:9,color:C.tealD,marginTop:2}}>🎂 {r.aniversario.meses}m em {r.aniversario.data}</div>}
+                    </td>
                     <td style={{padding:"8px 10px"}}>
                       <span style={{padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:500,background:(COR_STATUS[r.status]||"#eee")+"22",color:COR_STATUS[r.status]||"#666"}}>
                         {r.status}
@@ -5387,6 +5453,22 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   const [selecionadosLote, setSelecionadosLote] = useState(new Set());
   const [modoLote, setModoLote] = useState(false);
   const [showRitsSync, setShowRitsSync] = useState(false);
+  const [ritsCount, setRitsCount] = React.useState(null); // contagem real de ativos do RitsPay
+
+  // Busca contagem real de assinantes ativos do RitsPay ao montar
+  React.useEffect(() => {
+    const token = ritspayGetToken();
+    if (!token) return;
+    const cfg = ritspayLoadCfg();
+    const tenant = cfg.tenantId || "TEN-1G57I7LIVD8K0F8M";
+    ritspayFetch(`/sales/${tenant}/subscriptions?page=1`, token)
+      .then(resp => {
+        const total = resp?.meta?.total ?? null;
+        const ativos = Array.isArray(resp?.data) ? resp.data.filter(s=>(s.status||"").toLowerCase()==="active").length : 0;
+        if (total !== null) setRitsCount(total);
+      })
+      .catch(() => {});
+  }, []);
   const toggleSort = (campo) => {
     setSorts(prev => {
       const existing = prev.find(s=>s.campo===campo);
@@ -6410,7 +6492,7 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
                   <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden",marginBottom:4}}>
                     <div style={{width:pctMeta+"%",height:"100%",background:pctMeta>=100?C.green:C.purple,borderRadius:3,transition:"width 0.3s"}}/>
                   </div>
-                  <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{faltam} faltam · {semanasFim} semanas</div>
+                  <div style={{fontSize:10,color:"var(--color-text-tertiary)"}}>{faltamReal} faltam · {semanasFim} semanas</div>
                 </div>
                 <div style={{flex:1,background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
