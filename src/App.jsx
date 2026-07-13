@@ -4801,7 +4801,7 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
   const COR_STATUS = {ativo:C.green,pausado:C.amber,atrasado:C.coral,cancelado:"#aaa"};
   const statusOpts = ["todos","ativo","pausado","atrasado","cancelado"];
 
-  const filtrados = (dados||[]).filter(r => filtroStatus==="todos"||r.status===filtroStatus);
+  const filtrados = (dados||[]).filter(r => filtroStatus==="todos"||r.status===filtroStatus).filter(r=>!r._debug);
   const ordenados = [...filtrados].sort((a,b)=>{
     if (ordenar==="nome") return (a.nome||"").localeCompare(b.nome||"");
     if (ordenar==="ciclo") return (b.cicloAtual||0)-(a.cicloAtual||0);
@@ -4814,7 +4814,7 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
   });
 
   // Totais
-  const ativos = (dados||[]).filter(r=>r.status==="ativo");
+  const ativos = (dados||[]).filter(r=>r.status==="ativo"&&!r._debug);
   const mrrTotal = ativos.reduce((s,r)=>s+r.ticketMedio,0);
   const ltvMedio = ativos.length>0 ? ativos.reduce((s,r)=>s+r.ltvTotal,0)/ativos.length : 0;
 
