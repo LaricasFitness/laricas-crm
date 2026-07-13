@@ -4209,12 +4209,13 @@ const ritspayFetch = async (path, token, opts = {}) => {
 // Mapeia status RitsPay → statusAssinatura CRM
 const mapRitsStatus = (sub) => {
   if (!sub) return "ativo";
+  // canceled_at sempre prevalece — independente do status de cobrança
+  if (sub.canceled_at || sub.deleted_at) return "cancelado";
   const s = (sub.status || "").toLowerCase();
   const cycle = typeof sub.cycle === "number" ? sub.cycle : 0;
   if (s === "canceled" || s === "cancelled" || s === "inactive") return "cancelado";
   if (s === "paused" || s === "suspended") return "pausado";
   // Falha na RENOVAÇÃO: só conta como atrasado se já teve pelo menos 1 ciclo pago
-  // Falha no primeiro pagamento (cycle === 0) = nunca foi assinante
   if ((s === "past_due" || s === "unpaid" || s === "overdue" || sub.overdue_at) && cycle >= 1) return "atrasado";
   if ((s === "past_due" || s === "unpaid" || s === "overdue") && cycle === 0) return "nunca_ativado";
   return "ativo";
@@ -4673,13 +4674,18 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
         dbGetAll(),
       ]);
 
-      // Agrupa purchases por customer ID
+      // Agrupa purchases por customer ID — apenas pagamentos confirmados
       const purchByCustomer = {};
       purchases.forEach(p => {
         const cid = p.customer?.id||p.customer_id||"";
         if (!cid) return;
+        // Ignora tentativas com pagamento falho ou valor zero
+        const st = (p.status||p.payment_status||"").toLowerCase();
+        if (st==="failed"||st==="refused"||st==="canceled"||st==="declined"||st==="error"||st==="chargeback") return;
+        const valor = parseFloat(p.total||p.amount||0)/100;
+        if (valor <= 0) return;
         if (!purchByCustomer[cid]) purchByCustomer[cid] = [];
-        purchByCustomer[cid].push(parseFloat(p.total||0)/100);
+        purchByCustomer[cid].push(valor);
       });
 
       // Mapa email → gasto avulso do CRM
@@ -4774,10 +4780,10 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
       // DEBUG TEMPORÁRIO — mostra dados brutos de cada assinatura
       setDados([...rows, { _debug: true, _rawSubs: subsPrio.map(s => ({
         nome: s.customer?.name,
-        email: s.customer?.email,
         status: s.status,
         cycle: s.cycle,
         overdue_at: s.overdue_at,
+        canceled_at: s.canceled_at,
         created_at: s.created_at?.split("T")[0],
         purchases: (purchByCustomer[s.customer?.id||""]||[]).length,
         id: s.id,
@@ -4858,7 +4864,7 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
           <div style={{fontSize:11,color:"#7fdbff",marginBottom:8,fontWeight:600}}>🔍 DEBUG — Todas as assinaturas (vermelho = 0 purchases)</div>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,color:"#eee",fontFamily:"monospace"}}>
             <thead><tr style={{borderBottom:"1px solid #333"}}>
-              {["Nome","Status","Cycle","Overdue_at","Created","Purchases #"].map(h=><th key={h} style={{padding:"4px 8px",textAlign:"left",color:"#7fdbff"}}>{h}</th>)}
+              {["Nome","Status","Cycle","Overdue_at","Canceled_at","Created","Purchases #"].map(h=><th key={h} style={{padding:"4px 8px",textAlign:"left",color:"#7fdbff"}}>{h}</th>)}
             </tr></thead>
             <tbody>
               {(dados.find(r=>r._debug)?._rawSubs||[]).map((s,i)=>(
@@ -4867,6 +4873,7 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
                   <td style={{padding:"3px 8px",color:s.status==="active"?"#4ade80":"#fbbf24"}}>{s.status}</td>
                   <td style={{padding:"3px 8px"}}>{s.cycle}</td>
                   <td style={{padding:"3px 8px",color:"#aaa",fontSize:9}}>{s.overdue_at||"—"}</td>
+                  <td style={{padding:"3px 8px",color:s.canceled_at?"#f87171":"#aaa",fontSize:9}}>{s.canceled_at||"—"}</td>
                   <td style={{padding:"3px 8px",color:"#aaa"}}>{s.created_at}</td>
                   <td style={{padding:"3px 8px",fontWeight:600,color:s.purchases===0?"#f87171":"#4ade80"}}>{s.purchases}</td>
                 </tr>
