@@ -3765,53 +3765,107 @@ const Unificar = ({ onSalvo }) => {
       {/* Preview unificação */}
       {preview&&(
         <div style={{ background:"var(--color-background-primary)",border:"0.5px solid "+C.teal,borderRadius:12,padding:"16px" }}>
-          <div style={{ fontSize:13,fontWeight:500,color:C.tealD,marginBottom:12 }}>Escolha qual perfil manter</div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
+          <div style={{ fontSize:13,fontWeight:500,color:C.tealD,marginBottom:12 }}>O que fazer com esses dois perfis?</div>
+
+          {/* Cards side by side */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
             {[preview.a, preview.b].map((c,i)=>(
-              <div key={c.id} style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px" }}>
-                <div style={{ fontSize:12,fontWeight:500,color:"var(--color-text-primary)",marginBottom:8 }}>{c.nome}</div>
-                <div style={{ fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6,lineHeight:1.6 }}>
+              <div key={c.id} style={{ background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",border:"0.5px solid var(--color-border-tertiary)" }}>
+                <div style={{ fontSize:12,fontWeight:500,color:"var(--color-text-primary)",marginBottom:6 }}>{c.nome}</div>
+                <div style={{ fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.6 }}>
                   {c.email&&<div>📧 {c.email}</div>}
                   {c.telefone&&<div>📱 {c.telefone}</div>}
                   <div>🛒 {c.p||0} pedidos · R${(c.gasto||0).toFixed(0)}</div>
                   <div>📋 {ETAPAS.find(e=>e.id===c.etapa)?.label||c.etapa}</div>
-                  {c.notas&&<div>📝 Tem anotações</div>}
                   {(c.logAtividade||[]).length>0&&<div>📌 {c.logAtividade.length} logs</div>}
                 </div>
-                <button onClick={()=>unificar(c, i===0?preview.b:preview.a)} disabled={salvando}
-                  style={{ width:"100%",padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:salvando?"default":"pointer",background:C.teal,color:"#fff",border:"none",opacity:salvando?0.6:1 }}>
-                  ✓ Manter este
-                </button>
               </div>
             ))}
           </div>
-          <div style={{ fontSize:11,color:"var(--color-text-tertiary)",textAlign:"center" }}>
-            O perfil escolhido absorve listas, notas, logs e histórico do outro. O outro é removido.
-          </div>
-          {preview&&(()=>{
-            // preview é {a, b} — desestruturação como objeto
-            const pa = preview.a, pb = preview.b;
-            const campos = ["nome","telefone","email","emailClub","responsavel"];
-            const conflitos = campos.filter(campo=>pa[campo]&&pb[campo]&&pa[campo]!==pb[campo]);
+
+          {/* Conflitos */}
+          {(()=>{
+            const pa=preview.a,pb=preview.b;
+            const campos=["nome","telefone","email","emailClub"];
+            const conflitos=campos.filter(f=>pa[f]&&pb[f]&&pa[f]!==pb[f]);
+            if(!conflitos.length) return null;
             return (
-              <div style={{marginTop:12,background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px"}}>
-                <div style={{fontSize:12,color:C.tealD,marginBottom:6,fontWeight:500}}>
-                  📊 Pedidos somados: {(pa.p||0)+(pb.p||0)} &nbsp;·&nbsp;
-                  Gasto somado: R${((pa.gasto||0)+(pb.gasto||0)).toFixed(0)}
-                </div>
-                {conflitos.length>0&&(
-                  <div style={{fontSize:11,color:C.coralD,marginTop:6}}>
-                    <strong>⚠ Campos com valores diferentes — ao clicar "Manter este", o da esquerda prevalece:</strong>
-                    {conflitos.map(campo=>(
-                      <div key={campo} style={{marginTop:4,background:C.coralL,borderRadius:6,padding:"4px 8px"}}>
-                        <strong>{campo}:</strong> "{pa[campo]}" ← vs → "{pb[campo]}"
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div style={{background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.amberD}}>
+                ⚠ Campos diferentes: {conflitos.map(f=>`${f}`).join(", ")} — na unificação o lado A prevalece
               </div>
             );
           })()}
+
+          {/* Resumo numérico */}
+          <div style={{background:C.tealL,borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:12,color:C.tealD,fontWeight:500}}>
+            📊 Se unificar: {(preview.a.p||0)+(preview.b.p||0)} pedidos totais · R${((preview.a.gasto||0)+(preview.b.gasto||0)).toFixed(0)} gasto total
+          </div>
+
+          {/* Três opções */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+            <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",textAlign:"center"}}>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6}}>
+                Manter só o <strong>A</strong><br/>
+                <span style={{fontSize:10}}>Apaga B · sem somar</span>
+              </div>
+              <button onClick={async()=>{
+                setSalvando(true);
+                try {
+                  await dbSave({...preview.a,
+                    email:preview.a.email||preview.b.email,
+                    telefone:preview.a.telefone||preview.b.telefone,
+                    emailClub:preview.a.emailClub||preview.b.emailClub,
+                  });
+                  await dbDelete(preview.b.id);
+                  setOk("✓ Perfil A mantido, B removido");
+                  setPreview(null);setSelecionados([]);setResultados([]);setBusca("");
+                  setSugestoes(prev=>prev.filter(s=>s.a.id!==preview.b.id&&s.b.id!==preview.b.id));
+                  setTimeout(()=>{setOk("");onSalvo&&onSalvo();},2000);
+                } catch(e){setOk("Erro: "+e.message);}
+                setSalvando(false);
+              }} disabled={salvando}
+                style={{width:"100%",padding:"7px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none",opacity:salvando?0.6:1}}>
+                ✓ Manter A
+              </button>
+            </div>
+
+            <div style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"10px 12px",textAlign:"center"}}>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:6}}>
+                Manter só o <strong>B</strong><br/>
+                <span style={{fontSize:10}}>Apaga A · sem somar</span>
+              </div>
+              <button onClick={async()=>{
+                setSalvando(true);
+                try {
+                  await dbSave({...preview.b,
+                    email:preview.b.email||preview.a.email,
+                    telefone:preview.b.telefone||preview.a.telefone,
+                    emailClub:preview.b.emailClub||preview.a.emailClub,
+                  });
+                  await dbDelete(preview.a.id);
+                  setOk("✓ Perfil B mantido, A removido");
+                  setPreview(null);setSelecionados([]);setResultados([]);setBusca("");
+                  setSugestoes(prev=>prev.filter(s=>s.a.id!==preview.a.id&&s.b.id!==preview.a.id));
+                  setTimeout(()=>{setOk("");onSalvo&&onSalvo();},2000);
+                } catch(e){setOk("Erro: "+e.message);}
+                setSalvando(false);
+              }} disabled={salvando}
+                style={{width:"100%",padding:"7px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none",opacity:salvando?0.6:1}}>
+                ✓ Manter B
+              </button>
+            </div>
+
+            <div style={{background:C.purpleL,borderRadius:10,padding:"10px 12px",textAlign:"center",border:"0.5px solid "+C.purple}}>
+              <div style={{fontSize:11,color:C.purpleD,marginBottom:6}}>
+                <strong>Unificar</strong><br/>
+                <span style={{fontSize:10}}>Soma pedidos + gasto</span>
+              </div>
+              <button onClick={()=>unificar(preview.a,preview.b)} disabled={salvando}
+                style={{width:"100%",padding:"7px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.purple,color:"#fff",border:"none",opacity:salvando?0.6:1}}>
+                ⊕ Unificar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -4620,6 +4674,11 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
   const [loading, setLoading] = React.useState(false);
   const [erro, setErro] = React.useState("");
   const [ordenar, setOrdenar] = React.useState("nome");
+  const [ordenarDir, setOrdenarDir] = React.useState("desc");
+  const toggleOrdenar = (campo) => {
+    if (ordenar === campo) setOrdenarDir(d => d==="desc"?"asc":"desc");
+    else { setOrdenar(campo); setOrdenarDir("desc"); }
+  };
   const [filtroStatus, setFiltroStatus] = React.useState("todos");
 
   const mapStatus = (s, sub) => {
@@ -4809,14 +4868,15 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
 
   const filtrados = (dados||[]).filter(r => filtroStatus==="todos"||r.status===filtroStatus).filter(r=>!r._debug);
   const ordenados = [...filtrados].sort((a,b)=>{
-    if (ordenar==="nome") return (a.nome||"").localeCompare(b.nome||"");
-    if (ordenar==="ciclo") return (b.cicloAtual||0)-(a.cicloAtual||0);
-    if (ordenar==="ticket") return b.ticketMedio-a.ticketMedio;
-    if (ordenar==="ltvClub") return b.ltvClub-a.ltvClub;
-    if (ordenar==="ltvTotal") return b.ltvTotal-a.ltvTotal;
-    if (ordenar==="prox") return (a.proximaCob||"").localeCompare(b.proximaCob||"");
-    if (ordenar==="churn") return (b.churnScore||0)-(a.churnScore||0);
-    return 0;
+    let res = 0;
+    if (ordenar==="nome") res = (a.nome||"").localeCompare(b.nome||"");
+    else if (ordenar==="ciclo") res = (a.cicloAtual||0)-(b.cicloAtual||0);
+    else if (ordenar==="ticket") res = a.ticketMedio-b.ticketMedio;
+    else if (ordenar==="ltvClub") res = a.ltvClub-b.ltvClub;
+    else if (ordenar==="ltvTotal") res = a.ltvTotal-b.ltvTotal;
+    else if (ordenar==="prox") res = (a.proximaCob||"").localeCompare(b.proximaCob||"");
+    else if (ordenar==="churn") res = (a.churnScore||0)-(b.churnScore||0);
+    return ordenarDir==="desc" ? -res : res;
   });
 
   // Totais
@@ -4825,8 +4885,8 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
   const ltvMedio = ativos.length>0 ? ativos.reduce((s,r)=>s+r.ltvTotal,0)/ativos.length : 0;
 
   const Th = ({label, campo}) => (
-    <th onClick={()=>setOrdenar(campo)} style={{padding:"8px 10px",fontSize:10,fontWeight:600,color:ordenar===campo?C.tealD:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",cursor:"pointer",whiteSpace:"nowrap",borderBottom:"1px solid var(--color-border-tertiary)",background:"var(--color-background-secondary)",userSelect:"none"}}>
-      {label}{ordenar===campo?" ↓":""}
+    <th onClick={()=>toggleOrdenar(campo)} style={{padding:"8px 10px",fontSize:10,fontWeight:600,color:ordenar===campo?C.tealD:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",cursor:"pointer",whiteSpace:"nowrap",borderBottom:"1px solid var(--color-border-tertiary)",background:"var(--color-background-secondary)",userSelect:"none"}}>
+      {label}{ordenar===campo?(ordenarDir==="desc"?" ↓":" ↑"):""}
     </th>
   );
 
@@ -5893,6 +5953,12 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
       if (!c.proximoFollowup || c.proximoFollowup > hoje) return false;
     } else if (filtroStatus === "nao_abordado") {
       if (c.statusClub) return false; // qualquer status = já abordado
+    } else if (filtroStatus === "renovacao_proxima") {
+      // Assinantes com renovação nos próximos 14 dias
+      if (c.etapa !== "experiencia") return false;
+      if (!c.proximaCobranca) return false;
+      const diasAteRenovacao = Math.round((new Date(c.proximaCobranca+"T12:00:00")-new Date())/86400000);
+      if (diasAteRenovacao < 0 || diasAteRenovacao > 14) return false;
     } else if (filtroStatus) {
       if (c.statusClub !== filtroStatus) return false;
     }
@@ -6892,6 +6958,22 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
                   border:"0.5px solid "+(filtroStatus==="nao_abordado"?C.teal:"var(--color-border-tertiary)")}}>
                 ○ Não abordado
               </button>
+              {(()=>{
+                const nRenov = clientesDash.filter(c=>{
+                  if(c.etapa!=="experiencia"||!c.proximaCobranca) return false;
+                  const dias = Math.round((new Date(c.proximaCobranca+"T12:00:00")-new Date())/86400000);
+                  return dias>=0&&dias<=14;
+                }).length;
+                return nRenov>0&&(
+                  <button onClick={()=>setFiltroStatus("renovacao_proxima")}
+                    style={{padding:"3px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                      background:filtroStatus==="renovacao_proxima"?C.green:"var(--color-background-secondary)",
+                      color:filtroStatus==="renovacao_proxima"?"#fff":"var(--color-text-secondary)",
+                      border:"0.5px solid "+(filtroStatus==="renovacao_proxima"?C.green:"var(--color-border-tertiary)")}}>
+                    🔄 Renovação ({nRenov})
+                  </button>
+                );
+              })()}
               {STATUS_CLUB.filter(s=>s.id).map(s=>{
                 const n=clientes.filter(c=>c.statusClub===s.id).length;
                 if(n===0) return null;
@@ -6907,38 +6989,10 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
               })}
             </div>
             <div style={{maxHeight:"65vh",overflowY:"auto"}}>
-              {filtroStatus==="hoje"?(()=>{
-                const prontas2 = clientes.filter(c=>(c.p||0)>=2&&(c._diasUlt||999)<90&&!c._muitoInativa);
-                const acaoIm = prontas2.filter(c=>c.statusClub==="interessado"||c.statusClub==="respondeu").sort((a,b)=>a.statusClub==="interessado"?-1:1);
-                const linksEnv = prontas2.filter(c=>c.statusClub==="link_enviado");
-                const fuHoje = prontas2.filter(c=>c.statusClub&&c.statusClub!=="interessado"&&c.statusClub!=="respondeu"&&c.statusClub!=="link_enviado"&&c.statusClub!=="fechou"&&c.statusClub!=="perdido"&&c.proximoFollowup&&c.proximoFollowup<=hoje).sort((a,b)=>(a.proximoFollowup||"")>(b.proximoFollowup||"")?1:-1);
-                const janelaH = prontas2.filter(c=>!c.statusClub&&c._diasParaProxima!=null&&c._diasParaProxima>=-2&&c._diasParaProxima<=5);
-                const jIds = new Set(janelaH.map(c=>c.id));
-                const novosH = prontas2.filter(c=>!c.statusClub&&!jIds.has(c.id)&&(c._score||0)>=40&&(c._diasUlt||999)<=60&&!(c._diasParaProxima!=null&&c._diasParaProxima>7)).sort((a,b)=>(b._score||0)-(a._score||0)).slice(0,Math.max(0,12-janelaH.length));
-                const nada = acaoIm.length===0&&linksEnv.length===0&&fuHoje.length===0&&janelaH.length===0&&novosH.length===0;
-                return (
-                  <div>
-                    {[
-                      ["🔥 Ação imediata",acaoIm,C.coralD,C.coralL],
-                      ["🔗 Link enviado",linksEnv,C.blueD,C.blueL],
-                      ["📅 Follow-ups de hoje",fuHoje,C.amberD,C.amberL],
-                      ["🛒 Janela de compra",janelaH,C.greenD,C.greenL],
-                      ["📤 Novos contatos",novosH,C.tealD,C.tealL],
-                    ].map(([titulo,lista,corD,corL])=>lista.length>0&&(
-                      <div key={titulo} style={{marginBottom:12}}>
-                        <div style={{fontSize:10,fontWeight:600,color:corD,background:corL,borderRadius:6,padding:"3px 8px",marginBottom:6,display:"inline-block"}}>{titulo} ({lista.length})</div>
-                        {lista.map(c=><CardLista key={c.id} c={c}/>)}
-                      </div>
-                    ))}
-                    {nada&&<div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>✅ Nenhuma ação urgente hoje</div>}
-                  </div>
-                );
-              })():(
-                <>
-                  {listaFiltrada.length===0&&<div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>Nenhum cliente neste filtro</div>}
-                  {listaFiltrada.map(c=><CardLista key={c.id} c={c}/>)}
-                </>
-              )}
+              {listaFiltrada.length===0&&<div style={{textAlign:"center",padding:20,color:"var(--color-text-tertiary)",fontSize:12}}>
+                {filtroStatus==="hoje"?"✅ Nenhum follow-up para hoje":"Nenhum cliente neste filtro"}
+              </div>}
+              {listaFiltrada.map(c=><CardLista key={c.id} c={c}/>)}
             </div>
           </div>
           <div style={{maxHeight:"80vh",overflowY:"auto"}}>
