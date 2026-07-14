@@ -6029,7 +6029,10 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
     const janelaAberta = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -3 && c._diasParaProxima <= 7 && !c._inativa;
     // Local state para campos de texto — evita re-render a cada tecla (bug de scroll)
     const [obsLocal, setObsLocal] = React.useState(c.obsClub||"");
-    React.useEffect(()=>setObsLocal(c.obsClub||""), [c.id]);
+    const [showContatoLivre, setShowContatoLivre] = React.useState(false);
+    const [notaContato, setNotaContato] = React.useState("");
+    const [dataRetorno, setDataRetorno] = React.useState(addDays(3));
+    React.useEffect(()=>{ setObsLocal(c.obsClub||""); setShowContatoLivre(false); }, [c.id]);
 
     const scriptAtual = SCRIPTS_CLUB.find(s=>s.id===scriptSel) || SCRIPTS_CLUB.find(s=>s.id===sugerirScript(c));
     const textoScript = scriptAtual ? personalizarScript(scriptAtual.copy, c) : "";
@@ -6394,6 +6397,72 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* CONTATO LIVRE — sem script */}
+        {!showContatoLivre ? (
+          <button onClick={()=>{ setShowContatoLivre(true); setNotaContato(""); setDataRetorno(addDays(3)); }}
+            style={{width:"100%",marginTop:10,padding:"9px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
+              background:C.purpleL,color:C.purpleD,border:"0.5px solid "+C.purple,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            📞 Registrar contato sem script
+          </button>
+        ) : (
+          <div style={{marginTop:10,background:C.purpleL,border:"0.5px solid "+C.purple,borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontSize:11,fontWeight:500,color:C.purpleD,marginBottom:8}}>📞 Registrar contato livre</div>
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:10,color:C.purpleD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em"}}>O que foi falado?</div>
+              <textarea value={notaContato} onChange={e=>setNotaContato(e.target.value)}
+                autoFocus rows={2} placeholder="Ex: Perguntou sobre a Nutri — vai responder semana que vem..."
+                style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid "+C.purple,fontSize:12,
+                  color:"var(--color-text-primary)",background:"var(--color-background-primary)",outline:"none",resize:"none",fontFamily:"inherit"}}/>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,color:C.purpleD,marginBottom:3,textTransform:"uppercase",letterSpacing:"0.06em"}}>Retornar em</div>
+              <input type="date" value={dataRetorno} onChange={e=>setDataRetorno(e.target.value)}
+                style={{width:"100%",padding:"7px 10px",borderRadius:8,border:"0.5px solid "+C.purple,fontSize:12,
+                  color:"var(--color-text-primary)",background:"var(--color-background-primary)"}}/>
+              <div style={{display:"flex",gap:6,marginTop:6}}>
+                {[[1,"Amanhã"],[3,"3 dias"],[7,"1 semana"],[14,"2 sem"],[30,"1 mês"]].map(([d,label])=>(
+                  <button key={d} onClick={()=>setDataRetorno(addDays(d))}
+                    style={{flex:1,padding:"3px 0",borderRadius:6,fontSize:10,cursor:"pointer",
+                      background:dataRetorno===addDays(d)?C.purple:C.purpleL,
+                      color:dataRetorno===addDays(d)?"#fff":C.purpleD,
+                      border:"0.5px solid "+C.purple}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={async()=>{
+                const nota = notaContato.trim() || "Contato livre registrado";
+                const logEntry = {
+                  texto: "📞 " + nota,
+                  data: new Date().toLocaleDateString("pt-BR"),
+                  hora: new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
+                  resp: c.responsavel||"",
+                };
+                const atualizado = {
+                  ...c,
+                  dataUltimoContato: hoje,
+                  proximoFollowup: dataRetorno,
+                  logAtividade: [logEntry,...(c.logAtividade||[])].slice(0,30),
+                  ...((!c.statusClub)?{statusClub:"contatado",dataAbordagem:hoje,tentativasClub:(c.tentativasClub||0)+1}:{}),
+                };
+                await saveCliente(atualizado);
+                setFollowUpProposto({data:dataRetorno,label:"Contato livre — retorno agendado",clienteId:c.id,status:c.statusClub});
+                setTimeout(()=>setFollowUpProposto(null),6000);
+                setShowContatoLivre(false);
+              }}
+                style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:C.purple,color:"#fff",border:"none"}}>
+                ✓ Salvar e agendar retorno
+              </button>
+              <button onClick={()=>setShowContatoLivre(false)}
+                style={{padding:"8px 12px",borderRadius:8,fontSize:12,cursor:"pointer",background:"none",border:"0.5px solid "+C.purple,color:C.purpleD}}>
+                Cancelar
+              </button>
             </div>
           </div>
         )}
