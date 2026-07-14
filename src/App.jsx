@@ -3587,10 +3587,15 @@ const Unificar = ({ onSalvo }) => {
   const [sugestoes, setSugestoes] = useState([]);
   const [busca, setBusca] = useState("");
   const [resultados, setResultados] = useState([]);
-  const [selecionados, setSelecionados] = useState([]); // [idA, idB]
-  const [preview, setPreview] = useState(null); // {a, b}
+  const [selecionados, setSelecionados] = useState([]);
+  const [preview, setPreview] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [ok, setOk] = useState("");
+  const [modoVarredura, setModoVarredura] = useState(false);
+  const [fila, setFila] = useState([]);
+  const [filaIdx, setFilaIdx] = useState(0);
+  const [filaPulados, setFilaPulados] = useState(0);
+  const [filaFeitos, setFilaFeitos] = useState(0);
 
   useEffect(() => {
     dbGetAll().then(lista => {
@@ -3666,40 +3671,80 @@ const Unificar = ({ onSalvo }) => {
     else setPreview(null);
   },[selecionados]);
 
-  const unificar = async (manter, remover) => {
+  const agir = async (acao, a, b) => {
+    // acao: "manter_a" | "manter_b" | "unificar"
     setSalvando(true);
-    // Merge: keep manter, delete remover, combine listas and notas
-    const listaA = manter.lista||"";
-    const listaB = remover.lista||"";
-    const listasMerge = [...new Set([...listaA.split(" · "),...listaB.split(" · ")].map(l=>l.trim()).filter(Boolean))].join(" · ");
-    const notasMerge = [manter.notas, remover.notas].filter(Boolean).join("\n---\n");
-    const logMerge = [...(manter.logAtividade||[]),...(remover.logAtividade||[])].sort((a,b)=>a.data>b.data?-1:1).slice(0,30);
-    const histMerge = [...(manter.historicoEtapas||[]),...(remover.historicoEtapas||[])];
-    const merged = {
-      ...manter,
-      lista: listasMerge,
-      notas: notasMerge,
-      logAtividade: logMerge,
-      historicoEtapas: histMerge,
-      email: manter.email||remover.email,
-      emailClub: manter.emailClub||remover.emailClub,
-      telefone: manter.telefone||remover.telefone,
-      customerId: manter.customerId||remover.customerId,
-      gasto: (manter.gasto||0) + (remover.gasto||0),
-      p: (manter.p||0) + (remover.p||0),
-      dataPrimeiro: [manter.dataPrimeiro,remover.dataPrimeiro].filter(Boolean).sort()[0]||"",
-      dataUltimo: [manter.dataUltimo,remover.dataUltimo].filter(Boolean).sort().reverse()[0]||"",
-    };
     try {
-      await dbSave(merged);
-      await dbDelete(remover.id);
-      setOk("✓ Perfis unificados com sucesso!");
-      setPreview(null); setSelecionados([]); setResultados([]);
-      setBusca(""); setSugestoes(prev=>prev.filter(s=>s.a.id!==remover.id&&s.b.id!==remover.id));
-      setClientes(prev=>prev.filter(c=>c.id!==remover.id).map(c=>c.id===manter.id?merged:c));
-      setTimeout(()=>{setOk(""); onSalvo&&onSalvo();},2000);
+      if (acao === "manter_a") {
+        await dbSave({...a, email:a.email||b.email, telefone:a.telefone||b.telefone, emailClub:a.emailClub||b.emailClub});
+        await dbDelete(b.id);
+      } else if (acao === "manter_b") {
+        await dbSave({...b, email:b.email||a.email, telefone:b.telefone||a.telefone, emailClub:b.emailClub||a.emailClub});
+        await dbDelete(a.id);
+      } else { // unificar
+        const listasMerge = [...new Set([...(a.lista||"").split(" · "),...(b.lista||"").split(" · ")].map(l=>l.trim()).filter(Boolean))].join(" · ");
+        const merged = {
+          ...a, lista:listasMerge,
+          notas:[a.notas,b.notas].filter(Boolean).join("\n---\n"),
+          logAtividade:[...(a.logAtividade||[]),...(b.logAtividade||[])].sort((x,y)=>x.data>y.data?-1:1).slice(0,30),
+          historicoEtapas:[...(a.historicoEtapas||[]),...(b.historicoEtapas||[])],
+          email:a.email||b.email, emailClub:a.emailClub||b.emailClub,
+          telefone:a.telefone||b.telefone, customerId:a.customerId||b.customerId,
+          gasto:(a.gasto||0)+(b.gasto||0), p:(a.p||0)+(b.p||0),
+          dataPrimeiro:[a.dataPrimeiro,b.dataPrimeiro].filter(Boolean).sort()[0]||"",
+          dataUltimo:[a.dataUltimo,b.dataUltimo].filter(Boolean).sort().reverse()[0]||"",
+        };
+        await dbSave(merged);
+        await dbDelete(b.id);
+      }
+      // Remove da lista local
+      setClientes(prev => prev.filter(c => c.id !== (acao==="manter_b"?a.id:b.id)));
+      setSugestoes(prev => prev.filter(s => s.a.id!==a.id&&s.b.id!==a.id&&s.a.id!==b.id&&s.b.id!==b.id));
     } catch(e) { setOk("Erro: "+e.message); }
     setSalvando(false);
+    return true;
+  };
+
+  const proximoPar = () => setFilaIdx(i => i+1);
+
+  const iniciarVarredura = () => {
+    // Gera fila com todos os pares suspeitos
+    const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\s+/g," ");
+    const pares = [];
+    const vistos = new Set();
+    for (let i = 0; i < clientes.length; i++) {
+      for (let j = i+1; j < clientes.length; j++) {
+        const a = clientes[i], b = clientes[j];
+        const key = [a.id,b.id].sort().join("|");
+        if (vistos.has(key)) continue;
+        // Critérios: mesmo nome, mesmo email ou mesmo telefone
+        const nA = norm(a.nome), nB = norm(b.nome);
+        const nA2 = nA.split(" ").slice(0,2).join(" "), nB2 = nB.split(" ").slice(0,2).join(" ");
+        const telA = (a.telefone||"").replace(/\D/g,"").slice(-9);
+        const telB = (b.telefone||"").replace(/\D/g,"").slice(-9);
+        const emailA = (a.email||"").toLowerCase().trim();
+        const emailB = (b.email||"").toLowerCase().trim();
+        const match = (nA === nB && nA.length > 3)
+          || (nA2 === nB2 && nA2.length > 5)
+          || (emailA && emailA === emailB)
+          || (telA.length >= 8 && telA === telB);
+        if (!match) continue;
+        vistos.add(key);
+        // Score de confiança
+        let score = 0;
+        if (nA === nB) score += 50;
+        else if (nA2 === nB2) score += 30;
+        if (emailA && emailA === emailB) score += 40;
+        if (telA.length >= 8 && telA === telB) score += 30;
+        pares.push({a, b, score});
+      }
+    }
+    pares.sort((x,y) => y.score - x.score);
+    setFila(pares);
+    setFilaIdx(0);
+    setFilaPulados(0);
+    setFilaFeitos(0);
+    setModoVarredura(true);
   };
 
   const CardCliente = ({c, selecionado, onClick}) => {
@@ -3726,6 +3771,117 @@ const Unificar = ({ onSalvo }) => {
     <div>
       {ok&&<div style={{ background:C.greenL,border:"0.5px solid "+C.green,borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:500,color:C.greenD }}>{ok}</div>}
 
+      {/* MODO VARREDURA */}
+      {modoVarredura ? (
+        <div>
+          {/* Header da varredura */}
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+            <button onClick={()=>setModoVarredura(false)}
+              style={{padding:"5px 12px",borderRadius:8,fontSize:12,cursor:"pointer",background:"none",border:"0.5px solid var(--color-border-tertiary)",color:"var(--color-text-secondary)"}}>
+              ← Sair
+            </button>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--color-text-primary)"}}>
+                🔍 Varredura — par {Math.min(filaIdx+1,fila.length)} de {fila.length}
+              </div>
+              <div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>
+                {filaFeitos} resolvidos · {filaPulados} pulados
+              </div>
+            </div>
+            {/* Barra de progresso */}
+            <div style={{width:120,height:6,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
+              <div style={{width:(filaIdx/Math.max(1,fila.length)*100)+"%",height:"100%",background:C.teal,borderRadius:3,transition:"width 0.3s"}}/>
+            </div>
+          </div>
+
+          {filaIdx >= fila.length ? (
+            <div style={{textAlign:"center",padding:"40px 0"}}>
+              <div style={{fontSize:32,marginBottom:12}}>✅</div>
+              <div style={{fontSize:14,fontWeight:500,color:C.greenD}}>Varredura concluída!</div>
+              <div style={{fontSize:12,color:"var(--color-text-tertiary)",marginTop:4}}>{filaFeitos} pares resolvidos · {filaPulados} pulados</div>
+              <button onClick={()=>setModoVarredura(false)} style={{marginTop:16,padding:"8px 20px",borderRadius:8,fontSize:12,cursor:"pointer",background:C.teal,color:"#fff",border:"none"}}>
+                Voltar
+              </button>
+            </div>
+          ) : (()=>{
+            const par = fila[filaIdx];
+            if (!par) return null;
+            const {a,b} = par;
+            const norm = s=>(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+            const motivo = norm(a.nome)===norm(b.nome)?"mesmo nome"
+              : (a.email&&a.email===b.email)?"mesmo email"
+              : (a.telefone&&b.telefone&&(a.telefone||"").replace(/\D/g,"").slice(-9)===(b.telefone||"").replace(/\D/g,"").slice(-9))?"mesmo telefone"
+              : "nome similar";
+
+            const handleAcao = async (acao) => {
+              if (acao !== "pular") {
+                await agir(acao, a, b);
+                setFilaFeitos(f=>f+1);
+              } else {
+                setFilaPulados(f=>f+1);
+              }
+              proximoPar();
+            };
+
+            return (
+              <div>
+                <div style={{background:C.amberL,border:"0.5px solid "+C.amber,borderRadius:8,padding:"6px 12px",marginBottom:12,fontSize:11,color:C.amberD,display:"inline-block"}}>
+                  ⚠ Match: {motivo}
+                </div>
+                {/* Cards A e B */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                  {[{label:"A",c:a},{label:"B",c:b}].map(({label,c})=>(
+                    <div key={c.id} style={{background:"var(--color-background-secondary)",borderRadius:10,padding:"12px 14px",border:"0.5px solid var(--color-border-tertiary)"}}>
+                      <div style={{fontSize:10,fontWeight:600,color:C.tealD,marginBottom:4}}>PERFIL {label}</div>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--color-text-primary)",marginBottom:6}}>{c.nome}</div>
+                      <div style={{fontSize:11,color:"var(--color-text-tertiary)",lineHeight:1.7}}>
+                        {c.email&&<div>📧 {c.email}</div>}
+                        {c.telefone&&<div>📱 {normalizarTelefone(c.telefone)}</div>}
+                        <div>🛒 {c.p||0} pedidos · R${(c.gasto||0).toFixed(0)}</div>
+                        <div>📋 {ETAPAS.find(e=>e.id===c.etapa)?.label||c.etapa||"Lead"}</div>
+                        {c.dataPrimeiro&&<div>📅 Desde {c.dataPrimeiro}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Resumo unificação */}
+                <div style={{background:C.purpleL,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.purpleD}}>
+                  ⊕ Se unificar: <strong>{(a.p||0)+(b.p||0)} pedidos</strong> · <strong>R${((a.gasto||0)+(b.gasto||0)).toFixed(0)}</strong> total
+                </div>
+                {/* Botões de ação */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+                  <button onClick={()=>handleAcao("manter_a")} disabled={salvando}
+                    style={{padding:"10px 6px",borderRadius:10,fontSize:12,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none",opacity:salvando?0.6:1}}>
+                    ✓ Manter A<br/><span style={{fontSize:10,opacity:0.8}}>apaga B</span>
+                  </button>
+                  <button onClick={()=>handleAcao("unificar")} disabled={salvando}
+                    style={{padding:"10px 6px",borderRadius:10,fontSize:12,fontWeight:500,cursor:"pointer",background:C.purple,color:"#fff",border:"none",opacity:salvando?0.6:1}}>
+                    ⊕ Unificar<br/><span style={{fontSize:10,opacity:0.8}}>soma tudo</span>
+                  </button>
+                  <button onClick={()=>handleAcao("manter_b")} disabled={salvando}
+                    style={{padding:"10px 6px",borderRadius:10,fontSize:12,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none",opacity:salvando?0.6:1}}>
+                    ✓ Manter B<br/><span style={{fontSize:10,opacity:0.8}}>apaga A</span>
+                  </button>
+                  <button onClick={()=>handleAcao("pular")} disabled={salvando}
+                    style={{padding:"10px 6px",borderRadius:10,fontSize:12,fontWeight:400,cursor:"pointer",background:"none",color:"var(--color-text-tertiary)",border:"0.5px solid var(--color-border-tertiary)"}}>
+                    Pular →<br/><span style={{fontSize:10}}>são diferentes</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+      <div>
+      {/* Botão de varredura */}
+      {!loading&&clientes.length>0&&(
+        <button onClick={iniciarVarredura}
+          style={{width:"100%",padding:"12px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",
+            background:C.amber,color:"#fff",border:"none",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          🔍 Varredura automática — revisar {sugestoes.length} pares suspeitos um por um
+        </button>
+      )}
+
       {/* Sugestões automáticas */}
       {sugestoes.length>0&&(
         <div style={{ background:"var(--color-background-secondary)",borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
@@ -3738,7 +3894,7 @@ const Unificar = ({ onSalvo }) => {
                 <CardCliente c={s.b} selecionado={!!selecionados.find(x=>x.id===s.b.id)} onClick={()=>{setSelecionados([s.a,s.b]);}}/>
               </div>
               <button onClick={()=>setSelecionados([s.a,s.b])} style={{ width:"100%",padding:"7px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",background:C.teal,color:"#fff",border:"none" }}>
-                Analisar e unificar →
+                Analisar →
               </button>
             </div>
           ))}
@@ -3860,13 +4016,15 @@ const Unificar = ({ onSalvo }) => {
                 <strong>Unificar</strong><br/>
                 <span style={{fontSize:10}}>Soma pedidos + gasto</span>
               </div>
-              <button onClick={()=>unificar(preview.a,preview.b)} disabled={salvando}
+              <button onClick={async()=>{ await agir("unificar",preview.a,preview.b); setOk("✓ Unificados!"); setPreview(null);setSelecionados([]);setResultados([]);setBusca(""); setTimeout(()=>{setOk("");onSalvo&&onSalvo();},2000); }} disabled={salvando}
                 style={{width:"100%",padding:"7px",borderRadius:8,fontSize:11,fontWeight:500,cursor:"pointer",background:C.purple,color:"#fff",border:"none",opacity:salvando?0.6:1}}>
                 ⊕ Unificar
               </button>
             </div>
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   );
