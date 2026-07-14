@@ -5889,10 +5889,8 @@ const FunilClub = ({ onAbrirPerfil, onUrgencia }) => {
   const baseParaFiltro = busca ? todosParaBusca : clientes;
   const listaFiltrada = baseParaFiltro.filter(c => {
     if (filtroStatus === "hoje") {
-      // Só aparece quem tem follow-up para HOJE ou vencido — sem exceção por status
-      const followUpHoje = c.proximoFollowup && c.proximoFollowup <= hoje;
-      const janelaAberta = c._diasParaProxima !== null && c._diasParaProxima !== undefined && c._diasParaProxima >= -2 && c._diasParaProxima <= 5 && !c.statusClub;
-      if (!followUpHoje && !janelaAberta) return false;
+      // Hoje = apenas follow-ups vencidos ou agendados para hoje
+      if (!c.proximoFollowup || c.proximoFollowup > hoje) return false;
     } else if (filtroStatus === "nao_abordado") {
       if (c.statusClub) return false; // qualquer status = já abordado
     } else if (filtroStatus) {
