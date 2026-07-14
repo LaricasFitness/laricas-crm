@@ -7250,6 +7250,7 @@ export default function App() {
   const [clienteId,setClienteId]=useState(null);
   const [refresh,setRefresh]=useState(0);
   const abrirClienteGlobal = (id) => { setClienteId(id); setTab("kanban"); };
+  const [showNovoLead,setShowNovoLead]=useState(false);
   // Filtros persistidos fora do Kanban para sobreviver à navegação
   const [filtroHojeApp,setFiltroHojeApp]=useState(false);
   const [filtroClubApp,setFiltroClubApp]=useState(false);
