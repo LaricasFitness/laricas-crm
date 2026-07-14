@@ -4975,6 +4975,125 @@ const AnalyticsRitsPay = ({ onAbrirPerfil }) => {
   );
 };
 
+
+const NovoLeadModal = ({ onClose, onSalvo }) => {
+  const [nome, setNome] = React.useState("");
+  const [tel, setTel] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [pedidos, setPedidos] = React.useState("0");
+  const [gasto, setGasto] = React.useState("0");
+  const [etapa, setEtapa] = React.useState("lead");
+  const [origem, setOrigem] = React.useState("");
+  const [salvando, setSalvando] = React.useState(false);
+  const [ok, setOk] = React.useState(false);
+
+  const salvar = async () => {
+    if (!nome.trim()) return;
+    setSalvando(true);
+    const p = parseInt(pedidos)||0;
+    const g = parseFloat(gasto)||0;
+    const c = {
+      id: "c_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
+      nome: nome.trim(),
+      telefone: normalizarTelefone(tel.trim()),
+      email: email.trim(),
+      p, gasto: g,
+      etapa,
+      dataCriacao: new Date().toLocaleDateString("pt-BR"),
+      lista: origem ? "Lead — "+origem : "Lead manual",
+      customerId: "", fora: null,
+      dataPrimeiro: "", dataUltimo: "",
+      datasPreenchidas: false,
+      cicloMedio: 0,
+      objetivo: p >= 2 ? "club" : "novo_cliente",
+    };
+    await dbSave(c);
+    setSalvando(false);
+    setOk(true);
+    setTimeout(() => { onSalvo && onSalvo(); onClose(); }, 1200);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}}>
+      <div style={{width:420,background:"var(--color-background-primary)",borderRadius:16,padding:"24px 28px",boxShadow:"0 8px 40px rgba(0,0,0,0.15)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+          <div style={{fontSize:20}}>➕</div>
+          <div style={{flex:1,fontSize:15,fontWeight:600,color:"var(--color-text-primary)"}}>Novo Lead</div>
+          <button onClick={onClose} style={{fontSize:18,cursor:"pointer",background:"none",border:"none",color:"var(--color-text-tertiary)"}}>✕</button>
+        </div>
+        {ok ? (
+          <div style={{textAlign:"center",padding:"20px 0"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontSize:14,color:C.greenD,fontWeight:500}}>Lead cadastrado!</div>
+            <div style={{fontSize:12,color:"var(--color-text-tertiary)",marginTop:4}}>Aparece no Kanban e no Club</div>
+          </div>
+        ) : (
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+              <div style={{gridColumn:"1/-1"}}>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Nome <span style={{color:C.coralD}}>*</span></div>
+                <input autoFocus value={nome} onChange={e=>setNome(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&salvar()}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}
+                  placeholder="Nome completo"/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>WhatsApp</div>
+                <input value={tel} onChange={e=>setTel(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}
+                  placeholder="11 9XXXX-XXXX"/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Email</div>
+                <input value={email} onChange={e=>setEmail(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}
+                  placeholder="email@exemplo.com"/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Pedidos anteriores</div>
+                <input type="number" min="0" value={pedidos} onChange={e=>setPedidos(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Gasto total (R$)</div>
+                <input type="number" min="0" value={gasto} onChange={e=>setGasto(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)",outline:"none"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Etapa inicial</div>
+                <select value={etapa} onChange={e=>setEtapa(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)"}}>
+                  <option value="lead">Lead</option>
+                  <option value="primeiro_contato">Primeiro Contato</option>
+                  <option value="em_conversa">Em Conversa</option>
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Origem</div>
+                <select value={origem} onChange={e=>setOrigem(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--color-border-tertiary)",fontSize:13,color:"var(--color-text-primary)",background:"var(--color-background-secondary)"}}>
+                  <option value="">— Selecione —</option>
+                  {["Indicação","Instagram","TikTok","WhatsApp","Evento","Presencial","Outra"].map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </div>
+            {parseInt(pedidos)>=2&&(
+              <div style={{background:C.tealL,border:"0.5px solid "+C.teal,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.tealD,marginBottom:10}}>
+                ⭐ Com {pedidos} pedidos, vai aparecer diretamente na lista do Club
+              </div>
+            )}
+            <button onClick={salvar} disabled={!nome.trim()||salvando}
+              style={{width:"100%",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",
+                background:nome.trim()?C.teal:"#ccc",color:"#fff",border:"none",marginTop:4}}>
+              {salvando?"Salvando...":"Cadastrar Lead"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ── FUNIL CLUB ─────────────────────────────────────────────────────────────
 const STATUS_CLUB = [
   { id:"",            label:"Não abordado",   cor:C.purple,  emoji:"○" },
@@ -7112,7 +7231,11 @@ export default function App() {
         <T label="📋 Kanban" active={tab==="kanban"} color={C.green} onClick={()=>{setClienteId(null);setTab("kanban");}}/>
         <T label={"🎯 Club"+(clubUrgencia>0?" ("+clubUrgencia+")":"")} active={tab==="club"} color={C.teal} onClick={()=>setTab("club")}/>
         {isAdmin&&<T label="📥 Importar" active={tab==="import"} color={C.purple} onClick={()=>setTab("import")}/>}
-        <T label="🎯 Triagem" active={tab==="triagem"} color={C.teal} onClick={()=>setTab("triagem")}/>
+        <button onClick={()=>setShowNovoLead(true)}
+          style={{padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
+            background:C.teal,color:"#fff",border:"none",display:"flex",alignItems:"center",gap:5}}>
+          ➕ Novo Lead
+        </button>
         <T label="📊 Historico" active={tab==="historico"} color={C.teal} onClick={()=>setTab("historico")}/>
         <T label="🔗 Unificar" active={tab==="unificar"} color={C.amber} onClick={()=>setTab("unificar")}/>
         <T label="📖 Guia" active={tab==="guia"} color={C.teal} onClick={()=>setTab("guia")}/>
@@ -7129,6 +7252,7 @@ export default function App() {
             filtroPedidos={filtroPedidosApp} setFiltroPedidos={setFiltroPedidosApp}
           />)}
       {tab==="import"&&isAdmin&&<ImportarLista onSalvo={onSalvo}/>}
+      {showNovoLead&&<NovoLeadModal onClose={()=>setShowNovoLead(false)} onSalvo={()=>{setShowNovoLead(false);}}/>}
       {tab==="triagem"&&(
         <div>
           <CadastroRapido onSalvo={onSalvo}/>
